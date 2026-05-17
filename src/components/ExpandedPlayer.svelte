@@ -1,5 +1,7 @@
 <script>
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+  import { slide } from 'svelte/transition';
+  import { ui } from '../stores/appState.js';
 
   export let title = '';
   export let isPlaying = false;
@@ -40,12 +42,14 @@
 
   function openExpanded() {
     expanded = true;
+    ui.miniPlayerExpanded.set(true);
     emitActivity();
     resetInactivityTimer();
   }
 
   function closeExpanded() {
     expanded = false;
+    ui.miniPlayerExpanded.set(false);
     clearInactivityTimer();
     emitActivity();
   }
@@ -100,6 +104,7 @@
   });
 
   onDestroy(() => {
+    ui.miniPlayerExpanded.set(false);
     clearInactivityTimer();
     window.removeEventListener('keydown', handleEsc);
   });
@@ -134,7 +139,7 @@
   </button>
 
   {#if expanded}
-    <div class="expanded-body">
+    <div class="expanded-body" transition:slide={{ duration: 250, easing: (t) => 1 - Math.pow(1 - t, 3) }}>
       <div class="label">NOW PLAYING</div>
       <div class="title" title={title}>{title}</div>
 
@@ -192,12 +197,13 @@
     position: relative;
     width: 100%;
     border: 1px solid rgba(212, 165, 116, 0.28);
-    border-radius: 12px;
-    background: rgba(8, 10, 12, 0.72);
-    backdrop-filter: blur(12px);
+    border-radius: 10px;
+    background: linear-gradient(180deg, rgba(10, 12, 13, 0.86), rgba(7, 9, 10, 0.8));
+    backdrop-filter: blur(14px);
+    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(232, 224, 216, 0.04);
     color: #e8e0d8;
     overflow: hidden;
-    z-index: 4;
+    z-index: 8;
   }
 
   .collapsed {
@@ -212,6 +218,20 @@
     padding: 0 14px;
     font-family: 'IBM Plex Mono', monospace;
     cursor: pointer;
+  }
+
+  .collapsed:focus:not(:focus-visible),
+  .controls button:focus:not(:focus-visible),
+  .chip-row button:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  .collapsed:focus-visible,
+  .controls button:focus-visible,
+  .chip-row button:focus-visible,
+  input[type='range']:focus-visible {
+    outline: 1px solid rgba(212, 165, 116, 0.82);
+    outline-offset: 3px;
   }
 
   .brand {
@@ -234,9 +254,9 @@
   .expanded-body {
     min-height: 180px;
     max-height: 220px;
-    padding: 10px 14px 14px;
+    padding: 12px 14px 14px;
     display: grid;
-    gap: 10px;
+    gap: 9px;
     border-top: 1px solid rgba(212, 165, 116, 0.18);
     font-family: 'IBM Plex Mono', monospace;
   }
@@ -263,13 +283,25 @@
   .controls button,
   .chip-row button {
     border: 1px solid rgba(212, 165, 116, 0.25);
-    border-radius: 8px;
-    background: rgba(12, 15, 18, 0.62);
+    border-radius: 7px;
+    background: rgba(12, 15, 18, 0.74);
     color: inherit;
     min-height: 32px;
     font-family: inherit;
     cursor: pointer;
     text-transform: lowercase;
+    transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+  }
+
+  .controls button:hover,
+  .chip-row button:hover {
+    border-color: rgba(212, 165, 116, 0.48);
+    background: rgba(212, 165, 116, 0.08);
+  }
+
+  .controls button:active,
+  .chip-row button:active {
+    transform: translateY(1px);
   }
 
   .controls button:nth-child(2) {
@@ -294,8 +326,9 @@
   }
 
   .chip-row button.active {
-    border-color: rgba(212, 165, 116, 0.52);
-    background: rgba(212, 165, 116, 0.16);
+    border-color: rgba(212, 165, 116, 0.62);
+    background: rgba(212, 165, 116, 0.18);
+    box-shadow: inset 0 0 0 1px rgba(212, 165, 116, 0.08);
   }
 
   .slider-row {

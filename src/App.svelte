@@ -30,6 +30,7 @@
   const rainMuted = rain.muted;
   const currentScene = scene.current;
   const sceneLocked = scene.locked;
+  const claudeMode = claude.mode;
   const timerActive = timer.active;
   const timerRemainingSeconds = timer.remainingSeconds;
   const shortcutVisible = ui.shortcutVisible;
@@ -204,6 +205,7 @@
   async function startExperience() {
     hasStarted.set(true);
     uiMode.set('default');
+    claude.mood.set('idle');
     setActivityState();
     await audio.initAudio(true);
   }
@@ -393,13 +395,16 @@
 
 <main class="app-shell" aria-label="LoFiClaude phase four shell">
   <section class="canvas-zone" aria-label="Canvas scene" on:mousemove={setActivityState}>
-    <AsciiBackground scene={$currentScene} rainVolume={$rainVolume} />
+    <AsciiBackground scene={$currentScene} rainVolume={$rainVolume} working={$claudeMode === 'working'} />
     <ClaudeSprite on:activate={handleClaudeActivate} />
 
     {#if !$hasStarted}
-      <button type="button" class="start-overlay" on:click={startExperience}>
-        Click to start 🎵
-      </button>
+      <div class="empty-state" aria-live="polite">
+        <p class="empty-state-text">Connect local Claude to wake me up</p>
+        <button type="button" class="start-overlay" on:click={startExperience}>
+          Click to start 🎵
+        </button>
+      </div>
     {/if}
   </section>
 
@@ -451,5 +456,28 @@
     pointer-events: none;
     left: -9999px;
     top: -9999px;
+  }
+
+  .empty-state {
+    position: absolute;
+    inset: 0;
+    z-index: 7;
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+  }
+
+  .empty-state-text {
+    margin: 0;
+    padding-bottom: 92px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: rgba(231, 219, 202, 0.82);
+    letter-spacing: 0.02em;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+
+  .start-overlay {
+    pointer-events: auto;
   }
 </style>

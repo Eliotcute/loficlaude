@@ -88,7 +88,7 @@
   class="claude-bubble"
   role="dialog"
   aria-label="Claude bubble"
-  style="left: clamp(10px, {anchor.x - 130}px, calc(100vw - 290px)); top: clamp(10px, {anchor.y - 150}px, calc(100vh - 190px));"
+  style="left: clamp(14px, {anchor.x - 132}px, calc(100vw - 304px)); top: clamp(14px, {anchor.y - 164}px, calc(100vh - 360px));"
 >
   <div class="bubble-header">
     <span>{title}</span>
@@ -118,15 +118,16 @@
 <style>
   .claude-bubble {
     position: absolute;
-    width: min(280px, calc(100vw - 32px));
-    border-radius: 14px;
-    background: rgba(232, 224, 216, 0.92);
+    width: min(290px, calc(100vw - 28px));
+    border-radius: 12px;
+    background: rgba(232, 224, 216, 0.9);
     color: #111;
     border: 1px solid rgba(17, 17, 17, 0.12);
-    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.3);
     padding: 10px 12px 12px;
-    z-index: 7;
+    z-index: 9;
     animation: bubble-in 140ms ease;
+    backdrop-filter: blur(10px);
   }
 
   .claude-bubble.passive {
@@ -180,6 +181,13 @@
     border-color: rgba(17, 17, 17, 0.45);
   }
 
+  input:focus-visible,
+  .send-btn:focus-visible,
+  .close-btn:focus-visible {
+    outline: 1px solid rgba(17, 17, 17, 0.38);
+    outline-offset: 2px;
+  }
+
   .send-btn {
     border: 1px solid rgba(17, 17, 17, 0.18);
     border-radius: 8px;
@@ -204,6 +212,12 @@
     border-right: 1px solid rgba(17, 17, 17, 0.12);
     border-bottom: 1px solid rgba(17, 17, 17, 0.12);
     transform: rotate(45deg);
+  }
+
+  @media (max-height: 760px) {
+    .claude-bubble {
+      display: none;
+    }
   }
 
   @keyframes bubble-in {

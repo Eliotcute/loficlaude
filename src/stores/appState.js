@@ -30,7 +30,7 @@ export const timer = {
 };
 
 export const claude = {
-  mood: writable('idle'), // idle | nod | talk | sleep | jump
+  mood: writable('sleep'), // idle | nod | talk | sleep | jump | thinking | working | blocked | happy
   bubbleVisible: writable(false),
   bubbleText: writable(''),
   chatOpen: writable(false),

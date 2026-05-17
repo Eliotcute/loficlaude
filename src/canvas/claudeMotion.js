@@ -22,11 +22,13 @@ export function createClaudeMotionState(viewportWidth, viewportHeight) {
 }
 
 export function getWalkBounds(width, height, playerExpanded) {
+  const playerClearance = playerExpanded ? 420 : 160;
+
   return {
     minX: 32,
     maxX: Math.max(48, width - 120),
-    minY: Math.round(height * 0.64),
-    maxY: playerExpanded ? Math.max(Math.round(height * 0.56), height - 330) : Math.round(height * 0.84)
+    minY: Math.round(height * 0.54),
+    maxY: Math.max(Math.round(height * 0.56), height - playerClearance)
   };
 }
 
@@ -41,7 +43,14 @@ export function updateClaudeMotion(claudeState, viewport, dt) {
     claudeState.frameTime = 0;
   }
 
-  if (claudeState.mode === 'sleep' || claudeState.mode === 'talk') {
+  if (
+    claudeState.mode === 'sleep' ||
+    claudeState.mode === 'talk' ||
+    claudeState.mode === 'thinking' ||
+    claudeState.mode === 'working' ||
+    claudeState.mode === 'blocked' ||
+    claudeState.mode === 'happy'
+  ) {
     return;
   }
 

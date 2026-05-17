@@ -1,6 +1,7 @@
 <script>
   import ScenePopover from './ScenePopover.svelte';
   import TimerPopover from './TimerPopover.svelte';
+  import ConnectionStatus from './ConnectionStatus.svelte';
   import { scene, timer, timerLabel, ui, uiChromeOpacity } from '../stores/appState.js';
 
   const SCENES = [
@@ -75,6 +76,8 @@
   <h1>LoFiClaude</h1>
 
   <div class="header-status" aria-label="Current scene and timer">
+    <ConnectionStatus />
+
     <div class="scene-picker">
       <button type="button" class="icon-button" aria-label="Open scene picker" on:click={toggleScenePopover}>
         {sceneIcon}
@@ -136,13 +139,32 @@
 
   .icon-button,
   .timer-button {
-    border: 1px solid rgba(212, 165, 116, 0.3);
+    border: 1px solid rgba(212, 165, 116, 0.28);
     border-radius: 8px;
-    background: rgba(8, 10, 12, 0.45);
+    background: rgba(8, 10, 12, 0.58);
     color: #e8e0d8;
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(12px);
     font-family: 'IBM Plex Mono', monospace;
     cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(232, 224, 216, 0.04);
+    transition: border-color 140ms ease, background 140ms ease;
+  }
+
+  .icon-button:hover,
+  .timer-button:hover {
+    border-color: rgba(212, 165, 116, 0.46);
+    background: rgba(12, 15, 18, 0.72);
+  }
+
+  .icon-button:focus:not(:focus-visible),
+  .timer-button:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  .icon-button:focus-visible,
+  .timer-button:focus-visible {
+    outline: 1px solid rgba(212, 165, 116, 0.82);
+    outline-offset: 3px;
   }
 
   .icon-button {

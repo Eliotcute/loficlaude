@@ -20,7 +20,7 @@ export class RainPlayer {
   async init(initialType = 'medium') {
     this.type = normalizeType(initialType);
     this.instance = this.createInstance(this.type);
-    this.instance.play();
+    this.play();
   }
 
   loadType(type) {
@@ -52,6 +52,13 @@ export class RainPlayer {
     if (this.instance) {
       this.instance.volume(clamped / 100);
     }
+  }
+
+  play() {
+    if (!this.instance) {
+      return;
+    }
+    this.instance.play();
   }
 
   fadeOut(ms = 3000) {

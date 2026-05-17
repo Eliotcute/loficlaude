@@ -21,6 +21,7 @@ export function createAudioInitializer(options = {}) {
     if (audioReady) {
       if (autoplay && youtubePlayer) {
         youtubePlayer.play();
+        rainPlayer?.play();
       }
       return { youtubePlayer, rainPlayer };
     }
@@ -51,6 +52,7 @@ export function createAudioInitializer(options = {}) {
 
       if (autoplay) {
         youtubePlayer.play();
+        rainPlayer.play();
       }
     } catch {
       onError('Failed to initialize audio.');

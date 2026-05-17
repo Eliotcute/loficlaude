@@ -43,7 +43,7 @@
     bottom: 20px;
     transform: translateX(-50%);
     width: min(820px, calc(100% - 32px));
-    z-index: 4;
+    z-index: 8;
     transition: opacity 180ms ease;
   }
 </style>

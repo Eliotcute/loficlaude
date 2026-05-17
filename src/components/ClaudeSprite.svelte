@@ -16,6 +16,7 @@
   let raf;
   let lastTime = 0;
   const pxScale = 4;
+  let hovering = false;
 
   let motionState = {
     x: 0,
@@ -47,7 +48,19 @@
       motionState.mode = 'sleep';
     } else if (mood === 'talk' || mood === 'nod') {
       motionState.mode = 'talk';
-    } else if (motionState.mode === 'sleep' || motionState.mode === 'talk') {
+    } else if (mood === 'thinking' || mood === 'working' || mood === 'blocked' || mood === 'happy') {
+      motionState.mode = mood;
+      if (mood === 'working') {
+        motionState.direction = 'right';
+      }
+    } else if (
+      motionState.mode === 'sleep' ||
+      motionState.mode === 'talk' ||
+      motionState.mode === 'thinking' ||
+      motionState.mode === 'working' ||
+      motionState.mode === 'blocked' ||
+      motionState.mode === 'happy'
+    ) {
       motionState.mode = 'idle';
     }
     syncStores();
@@ -70,11 +83,13 @@
     const dt = Math.min(0.05, (timestamp - (lastTime || timestamp)) / 1000);
     lastTime = timestamp;
 
-    updateClaudeMotion(
-      motionState,
-      { width: window.innerWidth, height: window.innerHeight, playerExpanded: $uiMiniPlayerExpanded },
-      dt
-    );
+    if (!hovering) {
+      updateClaudeMotion(
+        motionState,
+        { width: window.innerWidth, height: window.innerHeight, playerExpanded: $uiMiniPlayerExpanded },
+        dt
+      );
+    }
 
     syncStores();
     drawFrame(getFrame(motionState.mode, motionState.frameIndex));
@@ -115,22 +130,38 @@
   role="button"
   aria-label="Claude"
   tabindex="0"
-  style="transform: translate3d({$claudeX}px, {$claudeY}px, 0) scaleX({$claudeDirection === 'left' ? 1 : -1});"
+  style="transform: translate3d({$claudeX}px, {$claudeY}px, 0);"
   on:click={handleSpriteClick}
   on:keydown={handleKeyDown}
->
-  <canvas bind:this={spriteCanvas} width="24" height="24" style="width: {24 * pxScale}px; height: {24 * pxScale}px; image-rendering: pixelated;"></canvas>
+  on:mouseenter={() => { hovering = true; }}
+  on:mouseleave={() => { hovering = false; }}>
+  <canvas
+    bind:this={spriteCanvas}
+    width="24"
+    height="24"
+    style="width: {24 * pxScale}px; height: {24 * pxScale}px; image-rendering: pixelated; display: block; transform: scaleX({$claudeDirection === 'left' ? 1 : -1});"
+  ></canvas>
 </div>
 
 <style>
   .claude-sprite {
     position: absolute;
-    width: 96px;
-    height: 96px;
-    z-index: 10;
+    min-width: 96px;
+    min-height: 96px;
+    z-index: 6;
     cursor: pointer;
     transition: transform 0.22s ease-out;
     will-change: transform;
     pointer-events: auto;
+  }
+
+  .claude-sprite:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  .claude-sprite:focus-visible {
+    outline: 1px solid rgba(212, 165, 116, 0.82);
+    outline-offset: 5px;
+    box-shadow: 0 0 0 5px rgba(212, 165, 116, 0.08);
   }
 </style>
