@@ -5,8 +5,8 @@
   import ClaudeBubble from './components/ClaudeBubble.svelte';
   import ClaudeChatPanel from './components/ClaudeChatPanel.svelte';
   import KeyboardHint from './components/KeyboardHint.svelte';
-  import StaticBackground from './components/StaticBackground.svelte';
-  import CanvasEngine from './canvas/CanvasEngine.svelte';
+  import AsciiBackground from './components/AsciiBackground.svelte';
+  import ClaudeSprite from './components/ClaudeSprite.svelte';
   import { PLAYLIST } from './audio/YouTubePlayer.js';
   import { hasStarted, uiMode, player, rain, scene, timer, claude, ui } from './stores/appState.js';
   import { setupKeyboardShortcuts } from './utils/keyboard.js';
@@ -33,6 +33,7 @@
   const timerActive = timer.active;
   const timerRemainingSeconds = timer.remainingSeconds;
   const shortcutVisible = ui.shortcutVisible;
+  const claudeBubbleAnchor = claude.bubbleAnchor;
 
   let suppressPersist = false;
   let unsubscribePersist = [];
@@ -110,6 +111,12 @@
 
   function closeClaudePanel() {
     claudeOrch.closePanel();
+    refreshClaudeState();
+  }
+
+  async function handleClaudeActivate() {
+    setActivityState();
+    await claudeOrch.handleClick();
     refreshClaudeState();
   }
 
@@ -386,8 +393,8 @@
 
 <main class="app-shell" aria-label="LoFiClaude phase four shell">
   <section class="canvas-zone" aria-label="Canvas scene" on:mousemove={setActivityState}>
-    <StaticBackground />
-    <CanvasEngine started={$hasStarted} />
+    <AsciiBackground scene={$currentScene} rainVolume={$rainVolume} />
+    <ClaudeSprite on:activate={handleClaudeActivate} />
 
     {#if !$hasStarted}
       <button type="button" class="start-overlay" on:click={startExperience}>
@@ -413,6 +420,7 @@
   {#if claudeBubbleVisible}
     <ClaudeBubble
       message={claudeBubbleMessage}
+      anchor={$claudeBubbleAnchor}
       passive={claudeBubblePassive}
       loading={claudeLoading}
       on:close={closeClaudeBubble}

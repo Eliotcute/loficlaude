@@ -34,7 +34,17 @@ export const claude = {
   bubbleVisible: writable(false),
   bubbleText: writable(''),
   chatOpen: writable(false),
-  speaking: writable(false)
+  speaking: writable(false),
+  x: writable(0),
+  y: writable(0),
+  targetX: writable(0),
+  targetY: writable(0),
+  direction: writable('left'),
+  mode: writable('idle'),
+  idleTime: writable(7000),
+  frameTime: writable(0),
+  frameIndex: writable(0),
+  bubbleAnchor: writable({ x: 0, y: 0 })
 };
 
 export const ui = {

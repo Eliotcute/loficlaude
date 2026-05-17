@@ -5,6 +5,7 @@
   export let message = '今天想做点什么呢？';
   export let passive = false;
   export let loading = false;
+  export let anchor = { x: 0, y: 0 };
 
   const dispatch = createEventDispatcher();
 
@@ -81,7 +82,14 @@
   }
 </script>
 
-<div bind:this={root} class:passive class="claude-bubble" role="dialog" aria-label="Claude bubble">
+<div
+  bind:this={root}
+  class:passive
+  class="claude-bubble"
+  role="dialog"
+  aria-label="Claude bubble"
+  style="left: clamp(10px, {anchor.x - 130}px, calc(100vw - 290px)); top: clamp(10px, {anchor.y - 150}px, calc(100vh - 190px));"
+>
   <div class="bubble-header">
     <span>{title}</span>
     <button type="button" class="close-btn" aria-label="Close Claude bubble" on:click={close}>×</button>
@@ -110,8 +118,6 @@
 <style>
   .claude-bubble {
     position: absolute;
-    right: 24px;
-    bottom: 214px;
     width: min(280px, calc(100vw - 32px));
     border-radius: 14px;
     background: rgba(232, 224, 216, 0.92);
@@ -190,7 +196,7 @@
 
   .tail {
     position: absolute;
-    right: 48px;
+    left: 50%;
     bottom: -8px;
     width: 14px;
     height: 14px;
@@ -220,10 +226,4 @@
     }
   }
 
-  @media (max-width: 860px) {
-    .claude-bubble {
-      right: 12px;
-      bottom: 190px;
-    }
-  }
 </style>
