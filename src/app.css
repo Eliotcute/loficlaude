@@ -1,0 +1,79 @@
+:root {
+  --bg: #0b0d0e;
+  --text: #e8e0d8;
+  --accent: #d4a574;
+  --panel: rgba(8, 10, 12, 0.45);
+  --panel-border: rgba(212, 165, 116, 0.28);
+  --mono: 'IBM Plex Mono', monospace;
+  --display: 'Press Start 2P', monospace;
+
+  color: var(--text);
+  background: var(--bg);
+  font-family: var(--mono);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  min-height: 100dvh;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+button {
+  font: inherit;
+}
+
+.app-shell {
+  position: relative;
+  width: 100%;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: radial-gradient(circle at top right, rgba(212, 165, 116, 0.07), transparent 35%),
+    radial-gradient(circle at bottom left, rgba(55, 92, 138, 0.1), transparent 40%),
+    var(--bg);
+}
+
+.canvas-zone {
+  width: 100%;
+  min-height: 100dvh;
+  position: relative;
+  background: linear-gradient(180deg, rgba(11, 13, 14, 1) 0%, rgba(8, 10, 12, 1) 100%);
+}
+
+.canvas-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle at 65% 12%, rgba(212, 165, 116, 0.08), transparent 45%);
+}
+
+.start-overlay {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(8, 10, 12, 0.74);
+  color: var(--text);
+  font-family: var(--display);
+  font-size: clamp(14px, 2.4vw, 22px);
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.start-overlay:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -6px;
+}
