@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"/><title>idle_breathe</title>
+<style>html,body{margin:0;background:#0f0f0f;height:100%;font-family:"JetBrains Mono",monospace}.stage{width:100%;height:100%;display:grid;place-items:center;padding:8%;box-sizing:border-box}.grid{width:100%;max-width:520px}</style></head>
+<body><div class="stage"><div id="grid" class="grid"></div></div>
+<script>(function(){const B=1,E=2,C=[[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,0,0,1,1,2,1,1,1,1,1,2,1,1,0,0,0,0],[0,0,0,1,1,1,1,2,1,1,1,1,1,2,1,1,1,1,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],[0,0,0,1,0,1,1,1,1,1,1,1,1,1,1,1,0,1,0,0],[0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,0,0,1,0,0,1,0,0,0,1,0,0,1,0,0,0,0],[0,0,0,0,0,1,0,0,1,0,0,0,1,0,0,1,0,0,0,0],[0,0,0,0,0,1,0,0,1,0,0,0,1,0,0,1,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]];
+function sh(b,dr,dc){const o=Array.from({length:20},()=>new Array(20).fill(0));for(let r=0;r<20;r++)for(let c=0;c<20;c++){const nr=r+dr,nc=c+dc;if(nr>=0&&nr<20&&nc>=0&&nc<20)o[nr][nc]=b[r][c];}return o;}
+function pt(b,ops){const o=b.map(r=>r.slice());ops.forEach(([r,c,v])=>{if(r>=0&&r<20&&c>=0&&c<20)o[r][c]=v;});return o;}
+function mount(host,opts={}){const{p,color='#CD7F6A',bg='#0f0f0f',speed=1,autoplay=true}=opts;host.innerHTML='';host.style.position='relative';host.style.width='100%';host.style.aspectRatio='1/1';host.style.background=bg;host.style.display='grid';host.style.gridTemplateColumns='repeat(20,1fr)';host.style.gridTemplateRows='repeat(20,1fr)';const cel=[];for(let r=0;r<20;r++){cel.push([]);for(let c=0;c<20;c++){const d=document.createElement('div');host.appendChild(d);cel[r].push(d);}}function paint(f){for(let r=0;r<20;r++)for(let c=0;c<20;c++){const v=f[r][c],e=cel[r][c];e.style.background=v===B?color:v===E?'#0f0f0f':'transparent';e.style.boxShadow=v===B?'inset 0 0 0 1px rgba(0,0,0,0.35)':'none';}}let _p=p,_s=speed,_a=autoplay,i=0,st=performance.now(),rf;function tick(now){if(_a&&_p.frames.length>1){const e=(now-st)*_s;if(e>=_p.frames[i].hold){i=(i+1)%_p.frames.length;st=now;paint(_p.frames[i].frame||C);}}rf=requestAnimationFrame(tick);}paint(_p.frames[0].frame||C);rf=requestAnimationFrame(tick);return{destroy(){cancelAnimationFrame(rf);host.innerHTML='';}};}
+window.PixelEngine={BODY:1,EYE:2,CREATURE:C,shift:sh,patch:pt,mount};})();
+</script>
+<script>
+const{B,CREATURE:C,shift:S,patch:P}=window.PixelEngine;
+const I=S(C,-1,0);
+const H=P(C,[[6,7,B],[6,13,B]]);const F=P(C,[[6,7,B],[7,7,B],[6,13,B],[7,13,B]]);
+const IB=P(I,[[5,7,B],[6,7,B],[5,13,B],[6,13,B]]);
+const D1=P(C,[[2,1,B]]);const D2=P(C,[[1,2,B]]);const D3=P(C,[[3,18,B]]);const D4=P(C,[[2,17,B]]);
+window.PRESET={name:"idle breathe",category:"Idle",description:"Smooth breathing loop.",
+frames:[
+{hold:500,frame:null},{hold:200,frame:D1},{hold:280,frame:I},{hold:80,frame:IB},{hold:360,frame:I},{hold:200,frame:D2},{hold:320,frame:null},{hold:80,frame:H},
+{hold:700,frame:null},{hold:200,frame:D3},{hold:300,frame:I},{hold:500,frame:I},{hold:200,frame:D4},{hold:80,frame:F},{hold:80,frame:H},{hold:340,frame:null},
+]};
+window.PixelEngine.mount(document.getElementById('grid'),{preset:window.PRESET});
+</script></body></html>

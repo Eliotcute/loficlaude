@@ -1,148 +1,79 @@
 <script>
-  import { onDestroy } from 'svelte';
-  import { claude } from '../stores/appState.js';
+  import { get } from 'svelte/store';
+  import { bridgeClient } from '../bridge/bridgeClient.js';
+  import { bridgeToken, connectionStatus, lastError } from '../stores/bridgeState.js';
 
-  const WS_URL = 'ws://localhost:9120';
+  const BRIDGE_CMD = 'cd bridge && npm start';
 
-  const STATUS_TO_MOOD = {
-    connecting: 'thinking',
-    connected: 'idle',
-    thinking: 'thinking',
-    talking: 'talk',
-    working: 'working',
-    blocked: 'blocked',
-    done: 'happy',
-    disconnected: 'sleep'
-  };
-  const STATUS_TO_MODE = {
-    connecting: 'thinking',
-    connected: 'idle',
-    thinking: 'thinking',
-    talking: 'talk',
-    working: 'working',
-    blocked: 'blocked',
-    done: 'happy',
-    disconnected: 'sleep'
-  };
-
-  let socket = null;
-  let token = '';
-  let connected = false;
-  let status = 'disconnected';
-  let lastError = '';
-
-  function setStatus(next) {
-    status = next;
-    claude.mode.set(STATUS_TO_MODE[next] ?? 'idle');
-    claude.mood.set(STATUS_TO_MOOD[next] ?? 'idle');
-    if (next === 'connected' || next === 'done') {
-      lastError = '';
-    }
-  }
-
-  function sendAuth() {
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      return;
-    }
-
-    socket.send(
-      JSON.stringify({
-        type: 'auth',
-        token: token.trim()
-      })
-    );
-  }
+  let copied = false;
+  let copiedTimer = null;
 
   function connect() {
-    if (connected || (socket && socket.readyState === WebSocket.OPEN)) {
-      return;
-    }
-
-    if (!token.trim()) {
-      const fromPrompt = window.prompt('Bridge token');
-      if (!fromPrompt) {
-        return;
-      }
-      token = fromPrompt.trim();
-    }
-
-    lastError = '';
-    setStatus('connecting');
-    socket = new WebSocket(WS_URL);
-
-    socket.addEventListener('open', () => {
-      sendAuth();
-    });
-
-    socket.addEventListener('message', (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-
-        if (payload.type === 'status') {
-          setStatus(payload.value);
-          connected = payload.value !== 'disconnected';
-        } else if (payload.type === 'error') {
-          lastError = payload.message || 'Unknown bridge error';
-        }
-      } catch {
-        lastError = 'Invalid bridge payload';
-      }
-    });
-
-    socket.addEventListener('close', () => {
-      connected = false;
-      setStatus('disconnected');
-      socket = null;
-    });
-
-    socket.addEventListener('error', () => {
-      connected = false;
-      setStatus('disconnected');
-      lastError = 'Bridge connection failed';
-    });
+    lastError.set('');
+    connectionStatus.set('connecting');
+    bridgeClient.connect(get(bridgeToken));
   }
 
   function disconnect() {
-    if (!socket) {
-      setStatus('disconnected');
-      connected = false;
+    bridgeClient.disconnect();
+  }
+
+  async function copyCommand() {
+    if (!navigator?.clipboard?.writeText) {
       return;
     }
 
-    socket.close();
+    await navigator.clipboard.writeText(BRIDGE_CMD);
+    copied = true;
+    if (copiedTimer) {
+      window.clearTimeout(copiedTimer);
+    }
+    copiedTimer = window.setTimeout(() => {
+      copied = false;
+      copiedTimer = null;
+    }, 1400);
   }
 
-  function toggleConnection() {
-    if (connected) {
-      disconnect();
-    } else {
-      connect();
-    }
-  }
-
-  onDestroy(() => {
-    if (socket) {
-      socket.close();
-      socket = null;
-    }
-  });
+  $: isConnected = $connectionStatus === 'connected';
 </script>
 
 <div class="connection-status">
-  <span class="status-dot" class:online={connected} aria-hidden="true"></span>
-  <span class="status-label">{status}</span>
-  <input type="password" placeholder="token" bind:value={token} aria-label="Bridge token" />
-  <button type="button" on:click={toggleConnection}>{connected ? 'Disconnect' : 'Connect'}</button>
+  <div class="status-row">
+    <span class="status-dot" class:online={isConnected} aria-hidden="true"></span>
+    <span class="status-label">bridge {$connectionStatus}</span>
+    <input type="password" placeholder="bridge token" bind:value={$bridgeToken} aria-label="Bridge token" />
+    <button type="button" on:click={isConnected ? disconnect : connect}>{isConnected ? 'Disconnect' : 'Connect'}</button>
+  </div>
+
+  {#if !isConnected}
+    <div class="command-row">
+      <input class="cmd" type="text" readonly value={BRIDGE_CMD} aria-label="Start bridge command" />
+      <button type="button" class="copy-btn" on:click={copyCommand}>{copied ? 'Copied' : 'Copy'}</button>
+    </div>
+  {/if}
+
+  {#if $lastError}
+    <p class="error" role="status">{$lastError}</p>
+  {/if}
 </div>
-{#if lastError}
-  <p class="error" role="status">{lastError}</p>
-{/if}
 
 <style>
   .connection-status {
-    display: inline-flex;
-    align-items: center;
+    display: grid;
+    gap: 6px;
+    min-width: min(420px, calc(100vw - 48px));
+  }
+
+  .status-row,
+  .command-row {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
     gap: 8px;
+    align-items: center;
+  }
+
+  .command-row {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .status-dot {
@@ -159,11 +90,10 @@
   }
 
   .status-label {
-    min-width: 80px;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 11px;
-    text-transform: lowercase;
     color: #e8e0d8;
+    white-space: nowrap;
   }
 
   input,
@@ -178,29 +108,43 @@
   }
 
   input {
-    width: 130px;
+    width: 100%;
+    min-width: 0;
     padding: 0 8px;
+  }
+
+  .cmd {
+    color: rgba(232, 224, 216, 0.78);
   }
 
   button {
     padding: 0 10px;
     cursor: pointer;
+    white-space: nowrap;
   }
 
   .error {
-    margin: 4px 0 0;
+    margin: 0;
     color: #e19c91;
     font-size: 11px;
     text-align: right;
   }
 
   @media (max-width: 900px) {
-    .status-label {
-      min-width: auto;
+    .connection-status {
+      min-width: 0;
+      width: min(100%, 360px);
     }
 
-    input {
-      width: 100px;
+    .status-row {
+      grid-template-columns: auto auto 1fr auto;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .status-row,
+    .command-row {
+      grid-template-columns: 1fr;
     }
   }
 </style>

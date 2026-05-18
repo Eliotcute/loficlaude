@@ -44,7 +44,7 @@ export function createAudioInitializer(options = {}) {
       await youtubePlayer.init(getCurrentTrackIndex());
       youtubePlayer.setVolume(60);
 
-      await rainPlayer.init(getRainType());
+      await rainPlayer.init(getRainType(), autoplay);
       rainPlayer.setVolume(getRainMuted() ? 0 : getRainVolume());
 
       audioReady = true;

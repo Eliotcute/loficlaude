@@ -2,40 +2,40 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
-function rand(min, max) {
-  return min + Math.random() * (max - min);
-}
+const PATROL_SPEED = 34;
+const IDLE_PAUSE_MS = 1000;
 
-export function createClaudeMotionState(viewportWidth, viewportHeight) {
-  const bounds = getWalkBounds(viewportWidth, viewportHeight, false);
+export function getPatrolBounds(width, height, playerExpanded) {
+  const playerClearance = playerExpanded ? 420 : 160;
+  const y = Math.max(Math.round(height * 0.56), height - playerClearance) - 20;
+
   return {
-    x: bounds.maxX - 40,
-    y: bounds.maxY - 20,
-    direction: 'left',
-    mode: 'idle',
-    targetX: 0,
-    targetY: 0,
-    idleTime: rand(5000, 12000),
-    frameTime: 0,
-    frameIndex: 0
+    left: 32,
+    right: Math.max(48, width - 120),
+    y,
+    horizon: width / 2
   };
 }
 
-export function getWalkBounds(width, height, playerExpanded) {
-  const playerClearance = playerExpanded ? 420 : 160;
-
+export function createClaudeMotionState(viewportWidth, viewportHeight) {
+  const bounds = getPatrolBounds(viewportWidth, viewportHeight, false);
   return {
-    minX: 32,
-    maxX: Math.max(48, width - 120),
-    minY: Math.round(height * 0.54),
-    maxY: Math.max(Math.round(height * 0.56), height - playerClearance)
+    x: bounds.right,
+    y: bounds.y,
+    direction: 'left',
+    mode: 'idle',
+    patrolDir: -1,
+    idleTime: IDLE_PAUSE_MS,
+    frameTime: 0,
+    frameIndex: 0,
+    isDragging: false
   };
 }
 
 export function updateClaudeMotion(claudeState, viewport, dt) {
-  const bounds = getWalkBounds(viewport.width, viewport.height, viewport.playerExpanded);
-  claudeState.x = clamp(claudeState.x, bounds.minX, bounds.maxX);
-  claudeState.y = clamp(claudeState.y, bounds.minY, bounds.maxY);
+  const bounds = getPatrolBounds(viewport.width, viewport.height, viewport.playerExpanded);
+  claudeState.x = clamp(claudeState.x, bounds.left, bounds.right);
+  claudeState.y = bounds.y;
 
   claudeState.frameTime += dt;
   if (claudeState.frameTime > 0.42) {
@@ -54,34 +54,33 @@ export function updateClaudeMotion(claudeState, viewport, dt) {
     return;
   }
 
+  if (claudeState.isDragging) {
+    return;
+  }
+
   if (claudeState.mode === 'idle') {
     claudeState.idleTime -= dt * 1000;
     if (claudeState.idleTime <= 0) {
-      if (Math.random() < 0.5) {
-        claudeState.targetX = rand(bounds.minX, bounds.maxX);
-        claudeState.targetY = rand(bounds.minY, bounds.maxY);
-        claudeState.mode = 'walk';
-      } else {
-        claudeState.idleTime = rand(5000, 12000);
-      }
+      claudeState.patrolDir = claudeState.x < bounds.horizon ? 1 : -1;
+      claudeState.direction = claudeState.patrolDir === -1 ? 'left' : 'right';
+      claudeState.mode = 'walk';
     }
     return;
   }
 
   if (claudeState.mode === 'walk') {
-    const dx = claudeState.targetX - claudeState.x;
-    const dy = claudeState.targetY - claudeState.y;
-    const dist = Math.hypot(dx, dy);
+    claudeState.x += claudeState.patrolDir * PATROL_SPEED * dt;
+    claudeState.x = clamp(claudeState.x, bounds.left, bounds.right);
+    claudeState.y = bounds.y;
+    claudeState.direction = claudeState.patrolDir === -1 ? 'left' : 'right';
 
-    if (dist < 4) {
+    const reachedLeft = claudeState.patrolDir === -1 && claudeState.x <= bounds.left;
+    const reachedRight = claudeState.patrolDir === 1 && claudeState.x >= bounds.right;
+
+    if (reachedLeft || reachedRight) {
+      claudeState.patrolDir *= -1;
       claudeState.mode = 'idle';
-      claudeState.idleTime = rand(5000, 12000);
-      return;
+      claudeState.idleTime = IDLE_PAUSE_MS;
     }
-
-    const speed = 34 * dt;
-    claudeState.x += (dx / dist) * speed;
-    claudeState.y += (dy / dist) * speed;
-    claudeState.direction = dx > 0 ? 'right' : 'left';
   }
 }

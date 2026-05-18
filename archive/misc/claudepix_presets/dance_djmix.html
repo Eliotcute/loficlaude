@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>dance_djmix</title>
+<style>
+  html,body{margin:0;background:#0f0f0f;height:100%;font-family:monospace}
+  .stage{width:100%;height:100%;display:grid;place-items:center;padding:8%;box-sizing:border-box}
+  #grid{width:100%;max-width:520px;aspect-ratio:1;display:grid;grid-template-columns:repeat(20,1fr);grid-template-rows:repeat(20,1fr);background:#0f0f0f}
+</style>
+</head>
+<body>
+<div class="stage"><div id="grid"></div></div>
+<script>
+const PAL=['transparent','#CD7F6A','#111111','#c0d8e4','#282828','#5599dd','#606060','#ffffff','#eaf6fc','#7aaabb'];
+const E=0,B=1,Y=2,H=3,T=4,K=5,G=6,W=7,HL=8,HS=9;
+const host=document.getElementById('grid');const cells=[];
+for(let r=0;r<20;r++){cells.push([]);for(let c=0;c<20;c++){const d=document.createElement('div');host.appendChild(d);cells[r].push(d);}}
+function paint(f){for(let r=0;r<20;r++)for(let c=0;c<20;c++){const v=f[r][c],el=cells[r][c];el.style.background=PAL[v]||'transparent';el.style.boxShadow=(v&&v!==W)?'inset 0 0 0 1px rgba(0,0,0,0.3)':'none';}}
+function pt(f,ops){const o=f.map(r=>r.slice());ops.forEach(([r,c,v])=>{if(r>=0&&r<20&&c>=0&&c<20)o[r][c]=v;});return o;}
+function px(f,pts){return pt(f,pts.map(([r,c])=>[r,c,W]));}
+const BASE=[
+  [E,E,E,E,E,E,HL,HL,HL,HL,HL,HL,HL,HL,E,E,E,E,E,E],[E,E,E,E,E,HL,HS,E,E,E,E,E,E,HS,HL,E,E,E,E,E],[E,E,E,E,HL,HS,B,B,B,B,B,B,B,B,HS,HL,E,E,E,E],[E,E,E,E,HL,HS,B,B,Y,B,B,B,Y,B,HS,HL,E,E,E,E],
+  [E,E,E,E,HL,HS,B,B,B,B,B,B,B,B,HS,HL,E,E,E,E],[E,E,E,E,E,E,B,B,B,B,B,B,B,B,E,E,E,E,E,E],[E,E,E,B,B,B,B,B,B,B,B,B,B,B,B,B,B,E,E,E],[E,E,E,B,B,B,B,B,B,B,B,B,B,B,B,B,B,E,E,E],
+  [E,E,E,B,E,B,B,B,B,B,B,B,B,B,B,B,E,B,E,E],[E,E,E,E,E,B,B,B,B,B,B,B,B,B,B,B,E,E,E,E],[E,E,E,E,E,B,B,B,B,B,B,B,B,B,B,B,E,E,E,E],[E,E,E,E,E,B,B,B,B,B,B,B,B,B,B,B,E,E,E,E],
+  [E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E],[E,E,E,E,E,B,E,E,B,E,E,E,B,E,E,B,E,E,E,E],[E,E,E,E,E,B,E,E,B,E,E,E,B,E,E,B,E,E,E,E],[E,E,E,E,E,B,E,E,B,E,E,E,B,E,E,B,E,E,E,E],
+  [E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E],[E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E],[E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E],[E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E,E],
+];
+const TRW=BASE.slice(10).map(r=>r.slice());
+function bu(f){const o=f.map(r=>r.slice());for(let r=0;r<9;r++)o[r]=f[r+1].slice();o[9]=new Array(20).fill(E);for(let r=0;r<TRW.length;r++)o[r+10]=TRW[r].slice();return o;}
+function pk(f,cs){const o=f.map(r=>r.slice());cs.forEach(c=>{if(o[11][c]===K)o[11][c]=Y;if(o[12][c]===K)o[12][c]=Y;if(o[11][c]===G)o[11][c]=T;if(o[12][c]===G)o[12][c]=T;});return o;}
+const TL=pt(BASE,[[9,3,B],[9,4,B]]);const TR=pt(BASE,[[9,16,B],[9,17,B]]);
+const BOB=bu(BASE);const BL=pk(bu(TL),[3,5,7,9]);const BR=pk(bu(TR),[9,11,13,15]);const BA=pk(bu(BASE),[3,7,11,15]);
+const T1=[[0,0],[0,1],[1,0],[1,1]];const T2=[[0,18],[0,19],[1,18],[1,19]];const ML=[[6,0],[7,0],[8,0]];const MR=[[6,19],[7,19],[8,19]];
+const BLf=[[16,1],[17,2],[17,3]];const BRf=[[16,18],[17,17],[17,16]];const P1=[...T1,...T2];const P2=[...T1,...MR,...BLf];const P3=[...T2,...ML,...BRf];const P4=[...T1,...T2,...ML,...MR];
+const N1=[[1,0,W],[2,0,W],[2,1,W]];const N2=[[0,0,W],[1,0,W],[1,1,W]];
+const FRAMES=[
+  {hold:200,frame:px(BASE,P1)},{hold:100,frame:px(BL,P1)},{hold:80,frame:pt(px(BOB,P2),N1)},{hold:100,frame:px(BR,[...P2,...MR])},{hold:80,frame:px(BOB,P3)},
+  {hold:100,frame:px(BL,P3)},{hold:80,frame:pt(px(BOB,[...P3,...ML]),N2)},{hold:100,frame:px(BA,P4)},{hold:80,frame:px(BOB,P4)},{hold:100,frame:px(BR,[...P1,...BRf])},
+  {hold:80,frame:pt(px(BASE,P2),N1)},{hold:160,frame:px(BASE,[...P1,...BRf])},{hold:100,frame:px(BL,[...P2,...T1])},{hold:80,frame:px(BOB,[...P1,...MR])},{hold:100,frame:px(BR,P3)},{hold:100,frame:px(BASE,P1)},
+];
+let idx=0,st=performance.now();function tick(now){if(now-st>=FRAMES[idx].hold){idx=(idx+1)%FRAMES.length;st=now;paint(FRAMES[idx].frame);}requestAnimationFrame(tick);}
+paint(FRAMES[0].frame);requestAnimationFrame(tick);
+window.STANDALONE=true;window.FRAMES=FRAMES;window.PAL=PAL;
+</script>
+</body>
+</html>

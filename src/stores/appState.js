@@ -2,6 +2,7 @@ import { writable, derived } from 'svelte/store';
 
 export const hasStarted = writable(false);
 export const uiMode = writable('default'); // default | focus | interactive | companion | sleep
+export const claudeForm = writable(0); // 0-12, claudepix preset form index
 
 export const player = {
   isPlaying: writable(false),

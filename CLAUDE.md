@@ -1,0 +1,103 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+- `npm run dev` — Start Vite dev server
+- `npm run build` — Production build to `dist/`
+- `npm run preview` — Preview production build
+- `npm test` or `npm run test` — Run tests with Node's built-in test runner (node:test, no assertion library needed)
+- `node bridge/server.js` — Start local Claude bridge server (port 3099)
+
+## Architecture
+
+LoFiClaude is an immersive pixel-art lofi ambient room app. **Svelte 5 SPA**, no router.
+
+**Stack:** Svelte 5 (`mount()` API) + Vite + Canvas 2D + Howler.js + YouTube iframe API
+
+### State management
+
+`src/stores/appState.js` — All app state lives in Svelte writable stores, grouped:
+- `player` — YouTube playback (isPlaying, currentTrackIndex, isLoading, error)
+- `rain` — Rain sound (volume 0-100, type: light/medium/heavy, muted)
+- `scene` — Canvas scene (current: lofiNight/softRain/starDrift, locked, transitionProgress)
+- `timer` — Sleep timer (active, minutes, remainingSeconds)
+- `claude` — Companion state (mood, bubble visibility, position, direction, bubbleAnchor)
+- `ui` — Transient UI (popover open states, idleSince, shortcutVisible)
+- `uiMode` — derived from idle detection: default/focus/interactive/companion/sleep
+- `claudeForm` — Current claudepix form index (0-12)
+
+State persists to localStorage on every change of player/rain/scene state.
+
+### Canvas rendering (src/canvas/)
+
+Two separate Canvas systems that layer together:
+
+1. **`asciiRenderer.js` + `asciiScenes.js`** — Background scene. Renders dot-matrix objects (windows, desks, planets, city skylines, clouds, lamps) using seeded pseudo-random placement. Three scenes defined as data in `asciiScenes.js`. 5-layer architecture: base fill → far sky → skyline → particles → foreground. One-second crossfade between scenes.
+
+2. **`ambientParticles.js`** — Particle systems per scene (rain for softRain, stars for lofiNight, stars+meteors for starDrift). Updated in the animation loop.
+
+3. **`spriteFrames.js`** — Original 8-mode sprite system (idle/walk/talk/sleep/thinking/working/blocked/happy). 24×24 grid, 4x pixel scale. Each mode has 2 animation frames. Used for walk animation and fallback rendering.
+
+4. **`claudepixForms.js`** — Enhanced expressive form system, 13 presets with multi-frame animation. Each form has a base grid + timed frame sequence + optional custom palette. Used when Claude is not walking. `src/canvas/claudepixForms.js` contains the raw preset data (~700 lines).
+
+5. **`claudeMotion.js`** — Walk behavior controller. Claude navigates within walk bounds, alternating between idle (5-12s) and walk-to-random-target states. Speed 34px/s.
+
+### DOM Claude sprite (`src/components/ClaudeSprite.svelte`)
+
+Renders a 24×24 canvas element positioned absolutely via `translate3d`. Uses `claudeMotion.js` for walk logic and either `spriteFrames.js` (walking) or `claudepixForms.js` (stationary) for frame rendering. Supports triple-click to cycle forms. Dispatches `activate` (single/double click) and `formchange` (triple click) events.
+
+### Audio system (`src/audio/`)
+
+- **`YouTubePlayer.js`** — Wraps YouTube iframe API. 3-track playlist, auto-skips on error/end. `loadYouTubeApi()` does the global script injection + Promise-based init.
+- **`RainPlayer.js`** — Howler.js with 3 `public/rain-*.mp3` files. `loadType()` crossfades by creating a new Howl and stopping the old one. `fadeOut(ms)` for timer end.
+
+### AI companion (`src/ai/ClaudeChat.js`)
+
+Direct fetch to Anthropic API (`claude-3-5-haiku-latest`). Falls back to Chinese ambient phrases when no API key or on error. System prompt: "calm ambient companion, reply in concise Chinese." Context includes current track, scene, rain volume.
+
+### Orchestration (`src/utils/`)
+
+- **`claudeOrch.js`** — Claude chat orchestrator. Manages bubble/panel state machine (1-2 rounds = bubble, 2+ rounds = chat panel), ambient comments on track change/first open/timer ending.
+- **`session.js`** — 1-second interval controller. Tick: decrements timer, detects idle (5s threshold), rotates scene every 5 min.
+- **`audioInit.js`** — Lazy initializes YouTubePlayer + RainPlayer, returns getPlayers().
+- **`keyboard.js`** — Global keydown listener, skips when typing in input/textarea.
+
+### Local bridge (`bridge/`)
+
+Node.js server that connects local Claude Desktop to the browser companion. WebSocket protocol for real-time communication between Claude Desktop and LoFiClaude.
+
+### Components (`src/components/`)
+
+| Component | Purpose |
+|-----------|---------|
+| `AsciiBackground.svelte` | Canvas loop, scene rendering + crossfade |
+| `ClaudeSprite.svelte` | Claude pixel character + motion + form animation |
+| `ClaudeBubble.svelte` | Speech bubble (passive/active) |
+| `ClaudeChatPanel.svelte` | Multi-turn chat panel |
+| `AmbientHeader.svelte` | Top bar: logo, scene icon, timer |
+| `MiniPlayer.svelte` | Bottom music player bar |
+| `ExpandedPlayer.svelte` | Expanded player on mini player click |
+| `RainPopover.svelte` | Rain volume/type control |
+| `TimerPopover.svelte` | Sleep timer selection |
+| `ScenePopover.svelte` | Scene switcher + lock |
+| `KeyboardHint.svelte` | Keyboard shortcuts overlay |
+| `ConnectionStatus.svelte` | Local bridge connection indicator |
+
+### Design constraints
+
+- Canvas occupies ≥80% of screen
+- Default visible clickable buttons ≤6
+- Mini player height ≤10% of screen
+- Popover max width 320px, Claude bubble max 280px
+- UI opacity drops to 0.25 after 5s idle (focus mode)
+
+### Testing
+
+Tests use Node's built-in `node:test` and `node:assert`:
+```js
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+```
+No testing framework (Jest/Vitest) is installed. Run with `npm test`.

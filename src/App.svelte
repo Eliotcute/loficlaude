@@ -1,4 +1,5 @@
 <script>
+  import { get } from 'svelte/store';
   import { onMount } from 'svelte';
   import AmbientHeader from './components/AmbientHeader.svelte';
   import MiniPlayer from './components/MiniPlayer.svelte';
@@ -9,6 +10,8 @@
   import ClaudeSprite from './components/ClaudeSprite.svelte';
   import { PLAYLIST } from './audio/YouTubePlayer.js';
   import { hasStarted, uiMode, player, rain, scene, timer, claude, ui } from './stores/appState.js';
+  import { bridgeClient } from './bridge/bridgeClient.js';
+  import { connectionStatus } from './stores/bridgeState.js';
   import { setupKeyboardShortcuts } from './utils/keyboard.js';
   import { createSessionController } from './utils/session.js';
   import { createAudioInitializer } from './utils/audioInit.js';
@@ -115,6 +118,12 @@
     refreshClaudeState();
   }
 
+  function handleClaudeFormChange(event) {
+    const formName = event.detail?.name ?? '新形态';
+    claudeOrch.showTransientBubble(`切换形态：${formName}`, 2000);
+    refreshClaudeState();
+  }
+
   async function handleClaudeActivate() {
     setActivityState();
     await claudeOrch.handleClick();
@@ -205,9 +214,13 @@
   async function startExperience() {
     hasStarted.set(true);
     uiMode.set('default');
-    claude.mood.set('idle');
+    claude.mood.set(get(connectionStatus) === 'connected' ? 'idle' : 'sleep');
     setActivityState();
     await audio.initAudio(true);
+    if (get(connectionStatus) !== 'connected') {
+      claudeOrch.showTransientBubble('Start the local bridge to wake me up', 2800);
+      refreshClaudeState();
+    }
   }
 
   async function togglePlayback() {
@@ -336,6 +349,7 @@
 
   onMount(() => {
     restoreState();
+    claudeOrch.attachBridge(bridgeClient);
     refreshClaudeState();
 
     teardownKeyboard = setupKeyboardShortcuts({
@@ -378,7 +392,6 @@
       lastNonZeroRainVolume = $rainVolume;
     }
 
-    audio.initAudio(false);
     startIdleTimer();
     startSceneRotation();
 
@@ -396,13 +409,13 @@
 <main class="app-shell" aria-label="LoFiClaude phase four shell">
   <section class="canvas-zone" aria-label="Canvas scene" on:mousemove={setActivityState}>
     <AsciiBackground scene={$currentScene} rainVolume={$rainVolume} working={$claudeMode === 'working'} />
-    <ClaudeSprite on:activate={handleClaudeActivate} />
+    <ClaudeSprite on:activate={handleClaudeActivate} on:formchange={handleClaudeFormChange} />
 
     {#if !$hasStarted}
       <div class="empty-state" aria-live="polite">
-        <p class="empty-state-text">Connect local Claude to wake me up</p>
+        <p class="empty-state-text">Claude is asleep until bridge connects</p>
         <button type="button" class="start-overlay" on:click={startExperience}>
-          Click to start 🎵
+          Start room
         </button>
       </div>
     {/if}

@@ -1,165 +1,228 @@
 const W = 24;
 const H = 24;
+const PAD = 2;
 
-function createBaseFrame() {
-  const frame = Array.from({ length: H }, () => Array.from({ length: W }, () => 0));
+const CREATURE_20 = [
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 1, 1, 2, 1, 1, 1, 1, 1, 2, 1, 1, 0, 0, 0, 0],
+  [0, 0, 0, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 0, 0],
+  [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+  [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+  [0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0],
+  [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+];
 
-  for (let y = 4; y <= 18; y += 1) {
-    for (let x = 7; x <= 16; x += 1) {
-      frame[y][x] = 1;
-    }
-  }
-
-  for (let y = 2; y <= 5; y += 1) {
-    for (let x = 8; x <= 15; x += 1) {
-      frame[y][x] = 2;
-    }
-  }
-
-  frame[9][10] = 3;
-  frame[9][13] = 3;
-  frame[13][11] = 3;
-  frame[13][12] = 3;
-
-  for (let y = 19; y <= 21; y += 1) {
-    for (let x = 8; x <= 10; x += 1) frame[y][x] = 1;
-    for (let x = 13; x <= 15; x += 1) frame[y][x] = 1;
-  }
-
-  return frame;
+function createEmptyFrame() {
+  return Array.from({ length: H }, () => Array.from({ length: W }, () => 0));
 }
 
 function cloneFrame(frame) {
   return frame.map((row) => [...row]);
 }
 
-const idle1 = createBaseFrame();
-const idle2 = cloneFrame(idle1);
-idle2[9][10] = 0;
-idle2[9][13] = 0;
-idle2[10][10] = 3;
-idle2[10][13] = 3;
-
-const walk1 = cloneFrame(idle1);
-walk1[21][10] = 0;
-walk1[21][14] = 1;
-walk1[18][16] = 1;
-
-const walk2 = cloneFrame(idle1);
-walk2[21][8] = 1;
-walk2[21][15] = 0;
-walk2[18][7] = 1;
-
-const talk1 = cloneFrame(idle1);
-talk1[13][11] = 0;
-talk1[13][12] = 0;
-talk1[14][11] = 3;
-talk1[14][12] = 3;
-
-const talk2 = cloneFrame(idle1);
-
-const sleep1 = cloneFrame(idle1);
-for (let y = 16; y <= 21; y += 1) {
-  for (let x = 7; x <= 16; x += 1) sleep1[y][x] = 0;
+function patch(frame, ops) {
+  const out = cloneFrame(frame);
+  for (const [r, c, v] of ops) {
+    if (r >= 0 && r < H && c >= 0 && c < W) {
+      out[r][c] = v;
+    }
+  }
+  return out;
 }
-for (let y = 17; y <= 20; y += 1) {
-  for (let x = 8; x <= 14; x += 1) sleep1[y][x] = 1;
+
+function shift(frame, dr, dc) {
+  const out = createEmptyFrame();
+  for (let r = 0; r < H; r += 1) {
+    for (let c = 0; c < W; c += 1) {
+      const nr = r + dr;
+      const nc = c + dc;
+      if (nr >= 0 && nr < H && nc >= 0 && nc < W) {
+        out[nr][nc] = frame[r][c];
+      }
+    }
+  }
+  return out;
 }
-sleep1[10][17] = 4;
-sleep1[9][18] = 4;
 
-const sleep2 = cloneFrame(sleep1);
-sleep2[9][18] = 0;
-sleep2[8][19] = 4;
+function mapBaseCreature() {
+  const frame = createEmptyFrame();
+  for (let r = 0; r < 20; r += 1) {
+    for (let c = 0; c < 20; c += 1) {
+      const value = CREATURE_20[r][c];
+      if (value === 1) {
+        frame[r + PAD][c + PAD] = 1;
+      } else if (value === 2) {
+        frame[r + PAD][c + PAD] = 2;
+      }
+    }
+  }
 
-const thinking1 = cloneFrame(idle1);
-thinking1[8][10] = 0;
-thinking1[8][13] = 0;
-thinking1[9][9] = 3;
-thinking1[9][12] = 3;
-thinking1[13][11] = 0;
-thinking1[13][12] = 0;
-thinking1[14][11] = 3;
-thinking1[15][10] = 1;
-thinking1[16][9] = 1;
+  for (let c = 7; c <= 17; c += 1) {
+    if (frame[6][c] === 1) {
+      frame[6][c] = 3;
+    }
+  }
+  for (const [r, c] of [[5, 7], [5, 8], [5, 16], [5, 17], [4, 8], [4, 9], [4, 15], [4, 16]]) {
+    if (frame[r][c] === 1) {
+      frame[r][c] = 3;
+    }
+  }
 
-const thinking2 = cloneFrame(thinking1);
-thinking2[15][10] = 0;
-thinking2[16][9] = 0;
-thinking2[15][11] = 1;
-thinking2[16][10] = 1;
-
-const working1 = cloneFrame(idle1);
-working1[13][11] = 0;
-working1[13][12] = 0;
-working1[14][11] = 3;
-working1[14][12] = 3;
-working1[16][16] = 1;
-working1[17][17] = 1;
-working1[18][18] = 2;
-working1[19][17] = 2;
-
-const working2 = cloneFrame(working1);
-working2[16][16] = 0;
-working2[17][17] = 0;
-working2[16][17] = 1;
-working2[17][18] = 1;
-working2[18][18] = 0;
-working2[18][17] = 2;
-
-const blocked1 = cloneFrame(idle1);
-blocked1[14][9] = 1;
-blocked1[14][14] = 1;
-blocked1[15][8] = 1;
-blocked1[15][15] = 1;
-blocked1[16][7] = 1;
-blocked1[16][16] = 1;
-
-const blocked2 = cloneFrame(blocked1);
-blocked2[15][8] = 0;
-blocked2[15][15] = 0;
-blocked2[16][7] = 0;
-blocked2[16][16] = 0;
-blocked2[15][9] = 1;
-blocked2[15][14] = 1;
-blocked2[16][8] = 1;
-blocked2[16][15] = 1;
-
-const happy1 = cloneFrame(idle1);
-for (let y = 19; y <= 21; y += 1) {
-  for (let x = 8; x <= 10; x += 1) happy1[y][x] = 0;
-  for (let x = 13; x <= 15; x += 1) happy1[y][x] = 0;
+  return drawStar(frame, 'normal');
 }
-for (let y = 17; y <= 19; y += 1) {
-  for (let x = 8; x <= 10; x += 1) happy1[y][x] = 1;
-  for (let x = 13; x <= 15; x += 1) happy1[y][x] = 1;
-}
-happy1[3][6] = 4;
-happy1[4][5] = 4;
-happy1[4][6] = 4;
-happy1[2][17] = 4;
-happy1[3][17] = 4;
-happy1[3][18] = 4;
 
-const happy2 = cloneFrame(happy1);
-happy2[3][6] = 0;
-happy2[4][5] = 0;
-happy2[4][6] = 0;
-happy2[2][17] = 0;
-happy2[3][17] = 0;
-happy2[3][18] = 0;
-happy2[2][7] = 4;
-happy2[3][7] = 4;
-happy2[3][8] = 4;
-happy2[3][16] = 4;
-happy2[4][16] = 4;
-happy2[4][17] = 4;
+function drawStar(frame, variant = 'normal') {
+  const out = cloneFrame(frame);
+  const stars = {
+    normal: [[8, 20], [7, 21], [8, 21], [9, 21], [8, 22], [9, 22]],
+    twinkle: [[7, 20], [8, 20], [9, 20], [6, 21], [7, 21], [8, 21], [9, 21], [8, 22]],
+    burst: [[7, 19], [8, 19], [9, 19], [6, 20], [7, 20], [8, 20], [9, 20], [10, 20], [7, 21], [8, 21], [9, 21], [8, 22]]
+  };
+  for (const [r, c] of stars[variant] ?? stars.normal) {
+    if (r >= 0 && r < H && c >= 0 && c < W) {
+      out[r][c] = 4;
+    }
+  }
+  return out;
+}
+
+function clearFace(frame) {
+  return patch(frame, [
+    [8, 9, 1], [8, 15, 1], [9, 9, 1], [9, 15, 1],
+    [10, 11, 1], [10, 12, 1], [10, 13, 1], [11, 11, 1], [11, 12, 1], [11, 13, 1]
+  ]);
+}
+
+function setOpenEyes(frame) {
+  return patch(clearFace(frame), [
+    [8, 9, 2], [9, 9, 2], [8, 15, 2], [9, 15, 2],
+    [10, 11, 2], [10, 12, 2]
+  ]);
+}
+
+function setBlinkEyes(frame) {
+  return patch(clearFace(frame), [
+    [9, 9, 2], [9, 10, 2], [9, 15, 2], [9, 16, 2],
+    [10, 11, 2], [10, 12, 2]
+  ]);
+}
+
+function setOpenMouth(frame) {
+  return patch(clearFace(frame), [
+    [8, 9, 2], [9, 9, 2], [8, 15, 2], [9, 15, 2],
+    [10, 11, 2], [10, 12, 2], [11, 11, 2], [11, 12, 2]
+  ]);
+}
+
+function setSleepFace(frame) {
+  return patch(clearFace(frame), [
+    [9, 9, 2], [9, 10, 2], [9, 15, 2], [9, 16, 2],
+    [10, 11, 2]
+  ]);
+}
+
+function setThinkingLeft(frame) {
+  return patch(clearFace(frame), [
+    [8, 8, 2], [9, 8, 2], [8, 14, 2], [9, 14, 2],
+    [10, 11, 2], [11, 10, 1], [12, 9, 1]
+  ]);
+}
+
+function setThinkingRight(frame) {
+  return patch(clearFace(frame), [
+    [8, 10, 2], [9, 10, 2], [8, 16, 2], [9, 16, 2],
+    [10, 12, 2], [11, 13, 1], [12, 14, 1]
+  ]);
+}
+
+function setWorkingFace(frame) {
+  return patch(clearFace(frame), [
+    [9, 9, 2], [9, 10, 2], [9, 15, 2], [9, 16, 2],
+    [11, 11, 2], [11, 12, 2]
+  ]);
+}
+
+function setBlockedFace(frame) {
+  return patch(clearFace(frame), [
+    [8, 8, 2], [8, 9, 2], [8, 10, 2], [9, 8, 2], [9, 9, 2], [9, 10, 2],
+    [8, 14, 2], [8, 15, 2], [8, 16, 2], [9, 14, 2], [9, 15, 2], [9, 16, 2],
+    [10, 11, 2], [10, 12, 2], [11, 11, 2], [11, 12, 2]
+  ]);
+}
+
+function setHappyFace(frame) {
+  return patch(clearFace(frame), [
+    [8, 9, 2], [9, 10, 2], [8, 15, 2], [9, 14, 2],
+    [10, 10, 2], [11, 11, 2], [11, 12, 2], [10, 13, 2]
+  ]);
+}
+
+function setFeet(frame, leftOps, rightOps) {
+  const cleared = patch(frame, [
+    [16, 7, 0], [17, 7, 0], [18, 7, 0],
+    [16, 10, 0], [17, 10, 0], [18, 10, 0],
+    [16, 14, 0], [17, 14, 0], [18, 14, 0],
+    [16, 17, 0], [17, 17, 0], [18, 17, 0]
+  ]);
+  return patch(cleared, [...leftOps, ...rightOps]);
+}
+
+const LEFT_CENTER = [[16, 7, 1], [17, 7, 1], [18, 7, 1]];
+const LEFT_FORWARD = [[16, 8, 1], [17, 8, 1], [18, 8, 1]];
+const LEFT_BACK = [[16, 6, 1], [17, 6, 1], [18, 6, 1]];
+const LEFT_DOT = [[17, 7, 1]];
+const RIGHT_CENTER = [[16, 14, 1], [17, 14, 1], [18, 14, 1]];
+const RIGHT_FORWARD = [[16, 15, 1], [17, 15, 1], [18, 15, 1]];
+const RIGHT_BACK = [[16, 13, 1], [17, 13, 1], [18, 13, 1]];
+const RIGHT_DOT = [[17, 14, 1]];
+
+function neutral() {
+  return setFeet(setOpenEyes(mapBaseCreature()), LEFT_CENTER, RIGHT_CENTER);
+}
+
+const idle1 = neutral();
+const idle2 = setFeet(setBlinkEyes(mapBaseCreature()), LEFT_CENTER, RIGHT_CENTER);
+
+const walk1 = patch(setFeet(setOpenEyes(mapBaseCreature()), LEFT_FORWARD, RIGHT_BACK), [[15, 5, 1]]);
+const walk2 = patch(setFeet(setOpenEyes(mapBaseCreature()), LEFT_BACK, RIGHT_FORWARD), [[15, 18, 1]]);
+
+const talk1 = setFeet(setOpenMouth(mapBaseCreature()), LEFT_CENTER, RIGHT_CENTER);
+const talk2 = setFeet(setBlinkEyes(mapBaseCreature()), LEFT_CENTER, RIGHT_CENTER);
+
+let sleep1 = setFeet(setSleepFace(mapBaseCreature()), LEFT_DOT, RIGHT_DOT);
+sleep1 = patch(sleep1, [[17, 5, 0], [17, 16, 0], [16, 8, 1], [16, 9, 1], [16, 12, 1], [16, 13, 1]]);
+const sleep2 = patch(sleep1, [[6, 20, 4], [5, 21, 4], [4, 22, 4]]);
+
+const thinking1 = setFeet(setThinkingLeft(mapBaseCreature()), LEFT_CENTER, RIGHT_CENTER);
+const thinking2 = setFeet(setThinkingRight(mapBaseCreature()), LEFT_CENTER, RIGHT_CENTER);
+
+const working1 = patch(setFeet(setWorkingFace(mapBaseCreature()), LEFT_CENTER, RIGHT_CENTER), [[5, 7, 2], [5, 8, 2]]);
+const working2 = patch(setFeet(setWorkingFace(mapBaseCreature()), LEFT_CENTER, RIGHT_CENTER), [[5, 16, 2], [5, 17, 2]]);
+
+const blocked1 = setFeet(setBlockedFace(mapBaseCreature()), LEFT_CENTER, RIGHT_CENTER);
+const blocked2 = patch(blocked1, [[10, 8, 2], [10, 16, 2]]);
+
+const happy1 = drawStar(setFeet(setHappyFace(mapBaseCreature()), LEFT_CENTER, RIGHT_CENTER), 'burst');
+const happy2 = drawStar(setFeet(setHappyFace(mapBaseCreature()), LEFT_CENTER, RIGHT_CENTER), 'twinkle');
 
 export const PALETTE = {
   0: 'rgba(0,0,0,0)',
   1: '#df805f',
-  2: '#141414',
-  3: '#0a0a0a',
+  2: '#0a0a0a',
+  3: '#141414',
   4: '#f2d58e'
 };
 
@@ -182,7 +245,62 @@ export const FRAMES = {
   happy_2: happy2
 };
 
-export function getFrame(mode = 'idle', frameIndex = 0) {
+export const FORM_NAMES = [
+  '呼吸',
+  '眨眼',
+  '环顾四周',
+  '编码',
+  '思考',
+  '弹跳',
+  '摇摆',
+  'DJ弹跳',
+  'DJ摇摆',
+  '打碟',
+  '眨眼表情',
+  '惊讶',
+  '睡觉'
+];
+
+export function getFormName(index = 0) {
+  const normalized = ((Number(index) || 0) % FORM_NAMES.length + FORM_NAMES.length) % FORM_NAMES.length;
+  return FORM_NAMES[normalized];
+}
+
+function applyFormVariant(frame, formIndex = 0, frameIndex = 0) {
+  const normalized = ((Number(formIndex) || 0) % FORM_NAMES.length + FORM_NAMES.length) % FORM_NAMES.length;
+  const step = Math.abs(Number(frameIndex) || 0) % 2;
+
+  switch (normalized) {
+    case 1:
+      return patch(frame, [[7, 9, 3], [7, 15, 3]]);
+    case 2:
+      return patch(frame, step === 0 ? [[11, 5, 1], [12, 5, 1]] : [[11, 18, 1], [12, 18, 1]]);
+    case 3:
+      return patch(frame, [[5, 6, 3], [5, 7, 3], [5, 16, 3], [5, 17, 3]]);
+    case 4:
+      return patch(frame, [[12, 6, 1], [13, 6, 1], [12, 17, 1]]);
+    case 5:
+      return shift(drawStar(frame, 'normal'), step === 0 ? -1 : 0, 0);
+    case 6:
+      return shift(drawStar(frame, 'normal'), 0, step === 0 ? -1 : 1);
+    case 7:
+      return patch(shift(drawStar(frame, 'normal'), step === 0 ? -1 : 0, 0), [[4, 7, 3], [4, 17, 3]]);
+    case 8:
+      return patch(shift(drawStar(frame, 'normal'), 0, step === 0 ? -1 : 1), [[4, 7, 3], [4, 17, 3]]);
+    case 9:
+      return patch(drawStar(frame, step === 0 ? 'twinkle' : 'burst'), [[4, 6, 3], [4, 7, 3], [4, 17, 3], [4, 18, 3]]);
+    case 10:
+      return patch(frame, [[8, 6, 3], [8, 18, 3]]);
+    case 11:
+      return patch(frame, [[10, 5, 1], [10, 18, 1], [11, 5, 1], [11, 18, 1]]);
+    case 12:
+      return patch(drawStar(frame, step === 0 ? 'normal' : 'twinkle'), [[17, 21, 4], [16, 22, 4]]);
+    default:
+      return frame;
+  }
+}
+
+export function getFrame(mode = 'idle', frameIndex = 0, formIndex = 0) {
   const seq = {
     idle: ['idle_1', 'idle_2'],
     walk: ['walk_1', 'walk_2'],
@@ -194,5 +312,6 @@ export function getFrame(mode = 'idle', frameIndex = 0) {
     happy: ['happy_1', 'happy_2']
   };
   const keys = seq[mode] ?? seq.idle;
-  return FRAMES[keys[frameIndex % keys.length]];
+  const baseFrame = FRAMES[keys[frameIndex % keys.length]];
+  return applyFormVariant(baseFrame, formIndex, frameIndex);
 }

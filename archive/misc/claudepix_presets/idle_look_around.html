@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"/><title>idle_look_around</title>
+<style>html,body{margin:0;background:#0f0f0f;height:100%;font-family:"JetBrains Mono",monospace}.stage{width:100%;height:100%;display:grid;place-items:center;padding:8%;box-sizing:border-box}.grid{width:100%;max-width:520px}</style></head>
+<body><div class="stage"><div id="grid" class="grid"></div></div>
+<script>(function(){const B=1,E=2,C=[[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,0,0,1,1,2,1,1,1,1,1,2,1,1,0,0,0,0],[0,0,0,1,1,1,1,2,1,1,1,1,1,2,1,1,1,1,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],[0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],[0,0,0,1,0,1,1,1,1,1,1,1,1,1,1,1,0,1,0,0],[0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,0,0,0,1,0,0,1,0,0,0,1,0,0,1,0,0,0,0],[0,0,0,0,0,1,0,0,1,0,0,0,1,0,0,1,0,0,0,0],[0,0,0,0,0,1,0,0,1,0,0,0,1,0,0,1,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]];
+function sh(b,dr,dc){const o=Array.from({length:20},()=>new Array(20).fill(0));for(let r=0;r<20;r++)for(let c=0;c<20;c++){const nr=r+dr,nc=c+dc;if(nr>=0&&nr<20&&nc>=0&&nc<20)o[nr][nc]=b[r][c];}return o;}
+function pt(b,ops){const o=b.map(r=>r.slice());ops.forEach(([r,c,v])=>{if(r>=0&&r<20&&c>=0&&c<20)o[r][c]=v;});return o;}
+function mount(host,opts={}){const{p,color='#CD7F6A',bg='#0f0f0f',speed=1,autoplay=true}=opts;host.innerHTML='';host.style.position='relative';host.style.width='100%';host.style.aspectRatio='1/1';host.style.background=bg;host.style.display='grid';host.style.gridTemplateColumns='repeat(20,1fr)';host.style.gridTemplateRows='repeat(20,1fr)';const cel=[];for(let r=0;r<20;r++){cel.push([]);for(let c=0;c<20;c++){const d=document.createElement('div');host.appendChild(d);cel[r].push(d);}}function paint(f){for(let r=0;r<20;r++)for(let c=0;c<20;c++){const v=f[r][c],e=cel[r][c];e.style.background=v===B?color:v===E?'#0f0f0f':'transparent';e.style.boxShadow=v===B?'inset 0 0 0 1px rgba(0,0,0,0.35)':'none';}}let _p=p,_s=speed,_a=autoplay,i=0,st=performance.now(),rf;function tick(now){if(_a&&_p.frames.length>1){const e=(now-st)*_s;if(e>=_p.frames[i].hold){i=(i+1)%_p.frames.length;st=now;paint(_p.frames[i].frame||C);}}rf=requestAnimationFrame(tick);}paint(_p.frames[0].frame||C);rf=requestAnimationFrame(tick);return{destroy(){cancelAnimationFrame(rf);host.innerHTML='';}};}
+window.PixelEngine={BODY:1,EYE:2,CREATURE:C,shift:sh,patch:pt,mount};})();
+</script>
+<script>
+const{B,CREATURE:C,shift:S,patch:P}=window.PixelEngine;
+const EL=P(C,[[6,7,B],[7,7,B],[6,13,B],[7,13,B],[6,6,2],[7,6,2],[6,12,2],[7,12,2]]);
+const HL=S(C,0,-1);const HLE=P(HL,[[6,6,B],[7,6,B],[6,12,B],[7,12,B],[6,5,2],[7,5,2],[6,11,2],[7,11,2]]);
+const ER=P(C,[[6,7,B],[7,7,B],[6,13,B],[7,13,B],[6,8,2],[7,8,2],[6,14,2],[7,14,2]]);
+const HR=S(C,0,1);const HRE=P(HR,[[6,8,B],[7,8,B],[6,14,B],[7,14,B],[6,9,2],[7,9,2],[6,15,2],[7,15,2]]);
+const EU=P(C,[[6,7,B],[7,7,B],[6,13,B],[7,13,B],[5,7,2],[5,13,2]]);
+const HU=S(C,-1,0);const HUE=P(HU,[[5,7,B],[6,7,B],[5,13,B],[6,13,B],[4,7,2],[4,13,2]]);
+const CU=P(C,[[5,6,B],[5,14,B]]);
+window.PRESET={name:"idle look around",category:"Idle",description:"Eyes move first, head follows. Glance left, right, then up.",
+frames:[
+{hold:800,frame:null},{hold:200,frame:EL},{hold:500,frame:HLE},{hold:300,frame:EL},{hold:200,frame:null},{hold:400,frame:CU},{hold:400,frame:null},
+{hold:200,frame:ER},{hold:500,frame:HRE},{hold:300,frame:ER},{hold:200,frame:null},{hold:500,frame:null},{hold:200,frame:EU},{hold:400,frame:HUE},{hold:300,frame:EU},{hold:200,frame:null},{hold:700,frame:null},
+]};
+window.PixelEngine.mount(document.getElementById('grid'),{preset:window.PRESET});
+</script></body></html>

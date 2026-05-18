@@ -1,39 +1,74 @@
 # LoFiClaude
 
-一个沉浸式像素 lofi 氛围房间。
+LoFiClaude is a local ambient room with a pixel Claude companion, lofi playback, rain audio, and a WebSocket bridge to a local Claude CLI session.
 
-## 快速开始
+## What
+
+- Svelte 5 + Vite single-screen room
+- Local bridge in `bridge/` for authenticated Claude CLI streaming
+- Streaming assistant deltas and tool activity in the UI
+- User-gesture-gated audio startup for browser autoplay compliance
+
+## Run room
+
 ```bash
 npm install
 npm run dev
 ```
 
-## 快捷键
-Space 播放/暂停 | ←→ 切歌 | ↑↓ 雨声 | M 静音  
-1/2/3 切换场景 | T 定时 | H 快捷键提示 | Esc 关闭面板
+Open the Vite URL, then click `Start room`.
 
-## 音频素材
-雨声文件需要放在 `public/` 目录：
+## Run bridge
+
+In a second terminal:
+
+```bash
+cd bridge
+npm install
+npm start
+```
+
+The bridge listens on `ws://localhost:9120`.
+
+## Connect
+
+1. Start the room.
+2. Start the bridge server.
+3. Enter the bridge token in the header.
+4. Click `Connect`.
+
+When connected, chat input unlocks and Claude streams responses through the bridge.
+
+## Shortcuts
+
+- `Space`: play or pause
+- `←` / `→`: previous or next track
+- `↑` / `↓`: rain volume
+- `M`: mute rain
+- `1` / `2` / `3`: switch scene
+- `T`: timer
+- `H`: shortcut hint
+- `Esc`: close transient UI
+
+## Audio
+
+Rain files must exist in `public/`:
+
 - `rain-light.mp3`
 - `rain-medium.mp3`
 - `rain-heavy.mp3`
 
-## Pexels API（可选）
-注册 https://www.pexels.com/api/ 获取免费 API Key。  
-在项目根目录创建 `.env` 文件：
+Audio and the YouTube iframe are initialized only after a user gesture. `Start room` is the intended first gesture.
 
-```bash
-VITE_PEXELS_API_KEY=your_key_here
-```
+## Troubleshooting
 
-未配置 API Key 时，应用会优先尝试本地背景视频：
-- `public/backgrounds/lofi-room.mp4`
-- `public/backgrounds/rain-city.mp4`
-- `public/backgrounds/dotted-space.mp4`
-
-如果本地背景视频也不存在，会自动回退到纯 Canvas 背景渲染。
-
-## ⚠️ API Key 安全警告
-`VITE_ANTHROPIC_API_KEY` 会打包到前端代码中。  
-仅限本地开发使用，不要部署到公开站点。  
-无 API Key 时回退到本地预设句子。
+- Header shows `bridge disconnected`:
+  start `bridge/` with `npm start`, then reconnect.
+- Token rejected:
+  verify the token expected by the bridge server.
+- Chat input disabled:
+  the bridge is not connected yet.
+- No rain audio:
+  check that the rain files exist under `public/`.
+- No Claude API key:
+  ambient fallback text still works, but bridge mode is the primary path.

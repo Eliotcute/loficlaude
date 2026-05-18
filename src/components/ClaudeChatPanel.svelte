@@ -1,5 +1,6 @@
 <script>
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { connectionStatus, toolRunning } from '../stores/bridgeState.js';
 
   export let sceneName = 'Lofi Night';
   export let messages = [];
@@ -11,6 +12,7 @@
   let inputValue = '';
 
   $: recentMessages = messages.slice(-5);
+  $: bridgeConnected = $connectionStatus === 'connected';
 
   function close() {
     dispatch('close');
@@ -69,7 +71,7 @@
   <header class="panel-header">
     <div>
       <div class="title">LoFiClaude</div>
-      <div class="scene">{sceneName}</div>
+      <div class="scene">{sceneName} · bridge {$connectionStatus}</div>
     </div>
     <button type="button" class="close-btn" aria-label="Close chat panel" on:click={close}>×</button>
   </header>
@@ -82,14 +84,20 @@
     {#each recentMessages as item (item.id)}
       <div class="line" class:user={item.role === 'user'}>
         <span class="role">{item.role === 'user' ? 'You' : 'Claude'}</span>
-        <p>{item.text}</p>
+        <p>
+          {#if item.text}
+            {item.text}
+          {:else if loading && item.role === 'assistant'}
+            <span class="cursor-pulse">▊</span>
+          {/if}
+        </p>
       </div>
     {/each}
 
-    {#if loading}
+    {#if $toolRunning}
       <div class="line">
-        <span class="role">Claude</span>
-        <p>...</p>
+        <span class="role">Tool</span>
+        <p>Running: {$toolRunning}</p>
       </div>
     {/if}
   </div>
@@ -101,10 +109,14 @@
       value={inputValue}
       on:input={(event) => (inputValue = event.currentTarget.value)}
       aria-label="Ask Claude"
-      disabled={loading}
+      disabled={loading || !bridgeConnected}
     />
-    <button type="submit" disabled={loading || !inputValue.trim()}>{loading ? '...' : 'Send'}</button>
+    <button type="submit" disabled={loading || !bridgeConnected || !inputValue.trim()}>{loading ? '...' : 'Send'}</button>
   </form>
+
+  {#if !bridgeConnected}
+    <p class="hint">Bridge not connected. Start the local bridge, then reconnect from the header.</p>
+  {/if}
 </div>
 
 <style>
@@ -199,6 +211,13 @@
     gap: 8px;
   }
 
+  .hint {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #cda89c;
+  }
+
   input,
   button {
     border: 1px solid rgba(212, 165, 116, 0.28);
@@ -233,5 +252,19 @@
       opacity: 1;
       transform: translateY(0);
     }
+  }
+
+  @keyframes pulse-cursor {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.25;
+    }
+  }
+
+  .cursor-pulse {
+    animation: pulse-cursor 1s ease-in-out infinite;
   }
 </style>

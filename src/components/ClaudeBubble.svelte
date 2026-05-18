@@ -1,5 +1,6 @@
 <script>
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+  import { connectionStatus } from '../stores/bridgeState.js';
 
   export let title = 'LoFiClaude';
   export let message = '今天想做点什么呢？';
@@ -12,6 +13,7 @@
   let root;
   let inputValue = '';
   let autoCloseTimeout;
+  $: bridgeConnected = $connectionStatus === 'connected';
 
   function close() {
     dispatch('close');
@@ -55,7 +57,7 @@
   function handleSubmit(event) {
     event.preventDefault();
     const text = inputValue.trim();
-    if (!text || loading) {
+    if (!text || loading || !bridgeConnected) {
       return;
     }
 
@@ -97,19 +99,23 @@
 
   <div class="message">{message}</div>
 
+  {#if !bridgeConnected}
+    <div class="bridge-hint">Bridge not connected</div>
+  {/if}
+
   <form class="input-row" on:submit={handleSubmit}>
     <input
       type="text"
-      placeholder="ask something..."
+      placeholder={bridgeConnected ? 'ask something...' : 'Start the local bridge to chat'}
       value={inputValue}
       on:input={(event) => {
         inputValue = event.currentTarget.value;
         resetPassiveTimeout();
       }}
       aria-label="Ask Claude"
-      disabled={loading}
+      disabled={loading || !bridgeConnected}
     />
-    <button type="submit" class="send-btn" aria-label="Send message" disabled={loading || !inputValue.trim()}>→</button>
+    <button type="submit" class="send-btn" aria-label="Send message" disabled={loading || !bridgeConnected || !inputValue.trim()}>→</button>
   </form>
 
   <div class="tail" aria-hidden="true"></div>
@@ -158,6 +164,12 @@
     line-height: 1.35;
     min-height: 18px;
     margin-bottom: 8px;
+  }
+
+  .bridge-hint {
+    margin-bottom: 8px;
+    font-size: 11px;
+    color: rgba(17, 17, 17, 0.62);
   }
 
   .input-row {
