@@ -30,7 +30,9 @@ function createBridgeServer({ config, tokenManager }) {
         onStatus: (value) => send({ type: SERVER_TYPES.STATUS, value }),
         onDelta: (text) => send({ type: SERVER_TYPES.ASSISTANT_DELTA, text }),
         onTool: (name) => send({ type: SERVER_TYPES.TOOL_RUNNING, name }),
-        onError: (message) => send({ type: SERVER_TYPES.ERROR, message })
+        onError: (message) => send({ type: SERVER_TYPES.ERROR, message }),
+        model: config.defaultModel,
+        workspace: config.workspace
       });
 
       return claudeSession;
@@ -59,6 +61,7 @@ function createBridgeServer({ config, tokenManager }) {
 
         authenticated = true;
         clearTimeout(authTimer);
+        ensureClaudeSession();
         send({ type: SERVER_TYPES.STATUS, value: STATUS.CONNECTED });
         return;
       }
