@@ -135,10 +135,10 @@
 <style>
   .chat-panel {
     position: absolute;
-    top: 80px;
+    top: max(80px, calc(100vh - 380px));
     right: 20px;
     width: min(340px, calc(100vw - 24px));
-    max-height: 360px;
+    max-height: calc(100vh - 120px);
     border: 1px solid rgba(212, 165, 116, 0.3);
     border-radius: 10px;
     background: rgba(8, 10, 12, 0.72);
@@ -148,7 +148,7 @@
     grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 10px;
     padding: 12px;
-    z-index: 8;
+    z-index: 20;
     animation: panel-in 140ms ease;
   }
 

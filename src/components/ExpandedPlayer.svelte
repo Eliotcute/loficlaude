@@ -207,7 +207,7 @@
     box-shadow: 0 16px 44px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(232, 224, 216, 0.04);
     color: #e8e0d8;
     overflow: hidden;
-    z-index: 8;
+    z-index: 5;
   }
 
   .collapsed {

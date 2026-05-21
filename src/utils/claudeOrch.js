@@ -410,6 +410,7 @@ export function createClaudeOrchestrator(options = {}) {
   }
 
   async function handleClick() {
+    setChatPaused(true);
     closePanel();
 
     if (!hasOpenedClaude) {

@@ -121,7 +121,7 @@
     bottom: 20px;
     transform: translateX(-50%);
     width: min(820px, calc(100% - 32px));
-    z-index: 8;
+    z-index: 5;
     transition: opacity 180ms ease;
     display: grid;
     gap: 6px;

@@ -181,7 +181,7 @@
     border: 1px solid rgba(17, 17, 17, 0.12);
     box-shadow: 0 14px 30px rgba(0, 0, 0, 0.3);
     padding: 10px 12px 12px;
-    z-index: 9;
+    z-index: 19;
     animation: bubble-in 140ms ease;
     backdrop-filter: blur(10px);
   }
