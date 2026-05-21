@@ -1,13 +1,71 @@
 import { player } from '../stores/appState.js';
 
-export const PLAYLIST = [
-  { id: 'jfKfPfyJRdk', name: 'Lofi Girl - beats to relax' },
-  { id: 'YmQ7jRgf4f0', name: 'Claude FM' },
-  { id: '5yx6BWlEVcY', name: 'Chillhop Radio' }
+const CUSTOM_TRACKS_STORAGE_KEY = 'loficlaude-custom-tracks';
+
+const BASE_PLAYLIST = [
+  { id: 'jfKfPfyJRdk', name: 'Lofi Girl', genre: 'lofi' },
+  { id: '5yx6BWlEVcY', name: 'Chillhop Radio', genre: 'chill' },
+  { id: 'DWcJFNfaw9c', name: 'Chillhop Music', genre: 'chill' },
+  { id: '7NOSDKb0HlU', name: 'Homework Radio', genre: 'lofi' },
+  { id: '4xDzrJKXOOY', name: 'Synthwave Boy', genre: 'synthwave' },
+  { id: 'lTRiuFIWV54', name: 'Jazz Vibes', genre: 'jazz' },
+  { id: '36YnV9STBqc', name: 'Ambient Space', genre: 'ambient' },
+  { id: '21qNxnCS8WU', name: 'Lofi Geek', genre: 'lofi' }
 ];
+
+export const PLAYLIST = [...BASE_PLAYLIST];
 
 const API_TIMEOUT_MS = 15000;
 let youtubeApiPromise;
+
+function readCustomTracks() {
+  if (typeof window === 'undefined') {
+    return [];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(CUSTOM_TRACKS_STORAGE_KEY);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed
+      .filter((item) => item && typeof item.id === 'string' && item.id.trim().length > 0)
+      .map((item, index) => ({
+        id: item.id.trim(),
+        name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : `Custom ${index + 1}`,
+        genre: 'custom'
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function persistCustomTracks() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    const customTracks = PLAYLIST.filter((track) => track.genre === 'custom');
+    window.localStorage.setItem(CUSTOM_TRACKS_STORAGE_KEY, JSON.stringify(customTracks));
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+function hydrateCustomTracks() {
+  for (const track of readCustomTracks()) {
+    if (!PLAYLIST.some((item) => item.id === track.id)) {
+      PLAYLIST.push(track);
+    }
+  }
+}
 
 function loadYouTubeApi() {
   if (typeof window === 'undefined') {
@@ -67,6 +125,46 @@ function wrapIndex(index) {
   return ((raw % size) + size) % size;
 }
 
+export function extractYouTubeId(urlOrId) {
+  const raw = `${urlOrId ?? ''}`.trim();
+  if (!raw) {
+    return '';
+  }
+
+  if (/^[a-zA-Z0-9_-]{11}$/.test(raw)) {
+    return raw;
+  }
+
+  const match = raw.match(
+    /(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([a-zA-Z0-9_-]{11})/
+  );
+  return match?.[1] ?? '';
+}
+
+export function addCustomTrackFromUrl(url) {
+  const id = extractYouTubeId(url);
+  if (!id) {
+    return -1;
+  }
+
+  const existingIndex = PLAYLIST.findIndex((track) => track.id === id);
+  if (existingIndex >= 0) {
+    return existingIndex;
+  }
+
+  const customCount = PLAYLIST.filter((track) => track.genre === 'custom').length + 1;
+  PLAYLIST.push({
+    id,
+    name: `Custom ${customCount}`,
+    genre: 'custom'
+  });
+
+  persistCustomTracks();
+  return PLAYLIST.length - 1;
+}
+
+hydrateCustomTracks();
+
 export class YouTubePlayer {
   constructor(options = {}) {
     this.mountId = options.mountId ?? 'youtube-player-host';
@@ -74,6 +172,7 @@ export class YouTubePlayer {
     this.ready = false;
     this.currentIndex = 0;
     this.readyPromise = null;
+    this.skipCount = 0;
   }
 
   async init(initialIndex = 0) {
@@ -124,9 +223,13 @@ export class YouTubePlayer {
     return this.readyPromise;
   }
 
-  loadTrack(index) {
+  loadTrack(index, options = {}) {
     if (!this.ready || !this.instance) {
       return;
+    }
+
+    if (!options.fromFailover) {
+      this.skipCount = 0;
     }
 
     const nextIndex = wrapIndex(index);
@@ -180,15 +283,23 @@ export class YouTubePlayer {
     this.instance = null;
     this.ready = false;
     this.readyPromise = null;
+    this.skipCount = 0;
   }
 
   handleError(event) {
-    player.error.set(`YouTube playback error (${event?.data ?? 'unknown'})`);
     player.isLoading.set(false);
+    this.skipCount += 1;
 
-    window.setTimeout(() => {
-      this.nextTrack();
-    }, 250);
+    if (this.skipCount < PLAYLIST.length) {
+      player.error.set(`YouTube playback error (${event?.data ?? 'unknown'}), skipping...`);
+      window.setTimeout(() => {
+        this.loadTrack(this.currentIndex + 1, { fromFailover: true });
+      }, 250);
+      return;
+    }
+
+    this.skipCount = 0;
+    player.error.set('All streams unavailable');
   }
 
   handleStateChange(event) {
@@ -204,6 +315,7 @@ export class YouTubePlayer {
     }
 
     if (event.data === PlayerState.PLAYING) {
+      this.skipCount = 0;
       player.isPlaying.set(true);
       player.isLoading.set(false);
       player.error.set(null);

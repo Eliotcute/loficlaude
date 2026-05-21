@@ -8,7 +8,7 @@
   import KeyboardHint from './components/KeyboardHint.svelte';
   import AsciiBackground from './components/AsciiBackground.svelte';
   import ClaudeSprite from './components/ClaudeSprite.svelte';
-  import { PLAYLIST } from './audio/YouTubePlayer.js';
+  import { PLAYLIST, addCustomTrackFromUrl } from './audio/YouTubePlayer.js';
   import { hasStarted, uiMode, player, rain, scene, timer, claude, ui } from './stores/appState.js';
   import { bridgeClient } from './bridge/bridgeClient.js';
   import { connectionStatus } from './stores/bridgeState.js';
@@ -270,6 +270,16 @@
     await selectTrack($currentTrackIndex - 1);
   }
 
+  async function addCustomTrack(url) {
+    const trackIndex = addCustomTrackFromUrl(url);
+    if (trackIndex < 0) {
+      return false;
+    }
+
+    await selectTrack(trackIndex);
+    return true;
+  }
+
   function setRainVolume(nextVolume) {
     const clamped = Math.max(0, Math.min(100, Math.round(nextVolume)));
 
@@ -436,6 +446,7 @@
     onTogglePlay={togglePlayback}
     onPreviousTrack={playPreviousTrack}
     onNextTrack={playNextTrack}
+    onAddCustomUrl={addCustomTrack}
     onSetRainType={setRainType}
     onSetRainVolume={setRainVolume}
     onSelectTimer={selectTimer}

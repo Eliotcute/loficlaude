@@ -2,7 +2,7 @@ const { WebSocketServer } = require('ws');
 const { createClaudeSession } = require('./claude');
 const { CLIENT_TYPES, SERVER_TYPES, STATUS, safeParse, serialize } = require('./protocol');
 
-function createBridgeServer({ config, tokenManager }) {
+function createBridgeServer({ config, tokenManager, sessionFactory = createClaudeSession }) {
   const wss = new WebSocketServer({
     host: config.host,
     port: config.port
@@ -26,7 +26,7 @@ function createBridgeServer({ config, tokenManager }) {
         return claudeSession;
       }
 
-      claudeSession = createClaudeSession({
+      claudeSession = sessionFactory({
         onStatus: (value) => send({ type: SERVER_TYPES.STATUS, value }),
         onDelta: (text) => send({ type: SERVER_TYPES.ASSISTANT_DELTA, text }),
         onTool: (name) => send({ type: SERVER_TYPES.TOOL_RUNNING, name }),

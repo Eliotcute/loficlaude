@@ -4,6 +4,7 @@
   import { ui } from '../stores/appState.js';
 
   export let title = '';
+  export let genreColor = '#d4a574';
   export let isPlaying = false;
   export let rainType = 'medium';
   export let rainVolume = 60;
@@ -141,7 +142,10 @@
   {#if expanded}
     <div class="expanded-body" transition:slide={{ duration: 250, easing: (t) => 1 - Math.pow(1 - t, 3) }}>
       <div class="label">NOW PLAYING</div>
-      <div class="title" title={title}>{title}</div>
+      <div class="title-row">
+        <span class="genre-dot" style={`background: ${genreColor};`} aria-hidden="true"></span>
+        <div class="title" title={title}>{title}</div>
+      </div>
 
       <div class="controls">
         <button type="button" aria-label="Previous track" on:click={() => forward('previous')}>◀</button>
@@ -272,6 +276,20 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .title-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 7px;
+  }
+
+  .genre-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px rgba(212, 165, 116, 0.15);
   }
 
   .controls {
