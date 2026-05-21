@@ -99,6 +99,9 @@ export function createClaudeOrchestrator(options = {}) {
   }
 
   function restoreHistory() {
+    state.loading = false;
+    activeAssistantId = null;
+
     if (typeof window === 'undefined') {
       return;
     }
@@ -121,6 +124,7 @@ export function createClaudeOrchestrator(options = {}) {
     } catch {
       // Ignore corrupt data.
     }
+
   }
 
   function setFormById(formId) {

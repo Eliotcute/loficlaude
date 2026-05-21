@@ -1,13 +1,42 @@
-const { execFileSync } = require('node:child_process');
+const { execFile, execFileSync } = require('node:child_process');
 const { createBridgeServer } = require('./server');
 const { createClaudeSession } = require('./claude');
 const { createTokenManager } = require('./token');
 const { STATUS } = require('./protocol');
 const config = require('./config');
 
-function runTmux(args, options = {}) {
+function runTmux(args, options, callback) {
+  let nextOptions = options;
+  let nextCallback = callback;
+
+  if (typeof options === 'function') {
+    nextCallback = options;
+    nextOptions = {};
+  }
+
+  execFile(
+    'tmux',
+    args,
+    {
+      timeout: 5000,
+      ...nextOptions
+    },
+    (error, stdout) => {
+      if (error) {
+        nextCallback(error, '');
+        return;
+      }
+
+      const value = typeof stdout === 'string' ? stdout : stdout?.toString('utf8') ?? '';
+      nextCallback(null, value);
+    }
+  );
+}
+
+function runTmuxSync(args, options = {}) {
   return execFileSync('tmux', args, {
     stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 5000,
     ...options
   });
 }
@@ -26,7 +55,7 @@ function createTmuxRuntime(options = {}) {
   }
 
   try {
-    const sessionsRaw = runTmux(['list-sessions', '-F', '#{session_name}'], { encoding: 'utf8' });
+    const sessionsRaw = runTmuxSync(['list-sessions', '-F', '#{session_name}'], { encoding: 'utf8' });
     const sessions = sessionsRaw
       .split('\n')
       .map((value) => value.trim())
@@ -36,14 +65,14 @@ function createTmuxRuntime(options = {}) {
       return null;
     }
 
-    const windowsRaw = runTmux(['list-windows', '-t', options.tmuxSession, '-F', '#{window_name}'], { encoding: 'utf8' });
+    const windowsRaw = runTmuxSync(['list-windows', '-t', options.tmuxSession, '-F', '#{window_name}'], { encoding: 'utf8' });
     const windows = windowsRaw
       .split('\n')
       .map((value) => value.trim())
       .filter(Boolean);
 
     if (!windows.includes(options.tmuxWindowName)) {
-      runTmux(['new-window', '-t', options.tmuxSession, '-n', options.tmuxWindowName]);
+      runTmuxSync(['new-window', '-t', options.tmuxSession, '-n', options.tmuxWindowName]);
     }
 
     const target = `${options.tmuxSession}:${options.tmuxWindowName}`;
@@ -62,8 +91,18 @@ function createTmuxRuntime(options = {}) {
       command.push('--model', options.defaultModel);
     }
 
-    runTmux(['send-keys', '-t', target, '-l', command.join(' ')]);
-    runTmux(['send-keys', '-t', target, 'C-m']);
+    runTmux(['send-keys', '-t', target, '-l', command.join(' ')], (sendError) => {
+      if (sendError) {
+        console.warn(`tmux startup send-keys failed: ${sendError.message}`);
+        return;
+      }
+
+      runTmux(['send-keys', '-t', target, 'C-m'], (enterError) => {
+        if (enterError) {
+          console.warn(`tmux startup enter failed: ${enterError.message}`);
+        }
+      });
+    });
 
     function emitFromPayload(payload, handlers) {
       if (!payload || typeof payload !== 'object') {
@@ -73,6 +112,7 @@ function createTmuxRuntime(options = {}) {
       if (payload.type === 'stream_event') {
         const delta = payload.event?.delta;
         if (delta?.type === 'text_delta' && typeof delta.text === 'string' && delta.text.length > 0) {
+          handlers.onResponse?.();
           handlers.onDelta?.(delta.text);
           handlers.onStatus?.(STATUS.TALKING);
           return;
@@ -80,6 +120,7 @@ function createTmuxRuntime(options = {}) {
 
         const block = payload.event?.content_block;
         if (block?.type === 'tool_use' && typeof block.name === 'string') {
+          handlers.onResponse?.();
           handlers.onTool?.(block.name);
           handlers.onStatus?.(STATUS.WORKING);
         }
@@ -89,6 +130,7 @@ function createTmuxRuntime(options = {}) {
       if (payload.type === 'assistant' && Array.isArray(payload.message?.content)) {
         for (const block of payload.message.content) {
           if (block?.type === 'tool_use' && typeof block.name === 'string') {
+            handlers.onResponse?.();
             handlers.onTool?.(block.name);
             handlers.onStatus?.(STATUS.WORKING);
           }
@@ -97,6 +139,7 @@ function createTmuxRuntime(options = {}) {
       }
 
       if (payload.type === 'result') {
+        handlers.onResponse?.();
         if (payload.is_error) {
           handlers.onStatus?.(STATUS.BLOCKED);
           handlers.onError?.(payload.result || 'Claude run ended with error');
@@ -112,14 +155,43 @@ function createTmuxRuntime(options = {}) {
       createSession({ onStatus, onDelta, onTool, onError }) {
         let closed = false;
         let lastLineCount = 0;
+        let pendingResponseTimer = null;
+        let polling = false;
+
+        function clearPendingResponseTimer() {
+          if (pendingResponseTimer) {
+            clearTimeout(pendingResponseTimer);
+            pendingResponseTimer = null;
+          }
+        }
+
+        function armPendingResponseTimeout() {
+          clearPendingResponseTimer();
+          pendingResponseTimer = setTimeout(() => {
+            pendingResponseTimer = null;
+            onError?.('tmux bridge timeout: no response within 60s');
+            onStatus?.(STATUS.BLOCKED);
+          }, 60000);
+        }
 
         const pollTimer = setInterval(() => {
-          if (closed) {
+          if (closed || polling) {
             return;
           }
 
-          try {
-            const output = runTmux(['capture-pane', '-t', target, '-p', '-S', '-400'], { encoding: 'utf8' });
+          polling = true;
+          runTmux(['capture-pane', '-t', target, '-p', '-S', '-400'], { encoding: 'utf8' }, (captureError, output) => {
+            polling = false;
+
+            if (closed) {
+              return;
+            }
+
+            if (captureError) {
+              onError?.(`tmux capture-pane failed: ${captureError.message}`);
+              return;
+            }
+
             const lines = output.split('\n');
             const normalizedLastLine = Math.min(lastLineCount, lines.length);
             const nextLines = lines.slice(normalizedLastLine);
@@ -136,11 +208,15 @@ function createTmuxRuntime(options = {}) {
                 continue;
               }
 
-              emitFromPayload(payload, { onStatus, onDelta, onTool, onError });
+              emitFromPayload(payload, {
+                onStatus,
+                onDelta,
+                onTool,
+                onError,
+                onResponse: clearPendingResponseTimer
+              });
             }
-          } catch (error) {
-            onError?.(`tmux capture-pane failed: ${error.message}`);
-          }
+          });
         }, 1000);
 
         return {
@@ -163,13 +239,22 @@ function createTmuxRuntime(options = {}) {
             });
 
             onStatus?.(STATUS.THINKING);
+            armPendingResponseTimeout();
 
-            try {
-              runTmux(['send-keys', '-t', target, '-l', payload]);
-              runTmux(['send-keys', '-t', target, 'C-m']);
-            } catch (error) {
-              onError?.(`tmux send-keys failed: ${error.message}`);
-            }
+            runTmux(['send-keys', '-t', target, '-l', payload], (sendError) => {
+              if (sendError) {
+                clearPendingResponseTimer();
+                onError?.(`tmux send-keys failed: ${sendError.message}`);
+                return;
+              }
+
+              runTmux(['send-keys', '-t', target, 'C-m'], (enterError) => {
+                if (enterError) {
+                  clearPendingResponseTimer();
+                  onError?.(`tmux send-keys Enter failed: ${enterError.message}`);
+                }
+              });
+            });
           },
           close() {
             if (closed) {
@@ -178,6 +263,7 @@ function createTmuxRuntime(options = {}) {
 
             closed = true;
             clearInterval(pollTimer);
+            clearPendingResponseTimer();
             onStatus?.(STATUS.DISCONNECTED);
           }
         };
