@@ -5,6 +5,7 @@
   export let sceneName = 'Lofi Night';
   export let messages = [];
   export let loading = false;
+  export let canReconnect = false;
 
   const dispatch = createEventDispatcher();
 
@@ -47,6 +48,10 @@
 
     dispatch('send', { text });
     inputValue = '';
+  }
+
+  function handleReconnect() {
+    dispatch('reconnect');
   }
 
   onMount(() => {
@@ -115,7 +120,12 @@
   </form>
 
   {#if !bridgeConnected}
-    <p class="hint">Bridge not connected. Start the local bridge, then reconnect from the header.</p>
+    <div class="hint-row">
+      <p class="hint">Bridge not connected. Start the local bridge, then reconnect.</p>
+      {#if canReconnect}
+        <button type="button" class="reconnect-btn" on:click={handleReconnect}>Reconnect</button>
+      {/if}
+    </div>
   {/if}
 </div>
 
@@ -216,6 +226,19 @@
     font-size: 11px;
     line-height: 1.4;
     color: #cda89c;
+  }
+
+  .hint-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .reconnect-btn {
+    height: 28px;
+    font-size: 11px;
+    white-space: nowrap;
   }
 
   input,

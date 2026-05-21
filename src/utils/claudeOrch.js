@@ -1,6 +1,8 @@
 import { get } from 'svelte/store';
 import { ClaudeChat } from '../ai/ClaudeChat.js';
 import { bridgeClient as sharedBridgeClient } from '../bridge/bridgeClient.js';
+import { FORMS } from '../canvas/claudepixForms.js';
+import { claudeForm } from '../stores/appState.js';
 import {
   claudeStatus,
   connectionStatus,
@@ -10,16 +12,25 @@ import {
   toolRunning
 } from '../stores/bridgeState.js';
 
-const STATUS_TO_MOOD = {
-  connecting: 'thinking',
-  connected: 'idle',
-  thinking: 'thinking',
-  talking: 'talk',
-  working: 'working',
-  blocked: 'blocked',
-  done: 'happy',
-  disconnected: 'sleep'
+const FORM_INDEX_BY_ID = FORMS.reduce((map, form, index) => {
+  map[form.id] = index;
+  return map;
+}, {});
+
+const STATUS_VISUALS = {
+  connecting: { mood: 'thinking', formId: 'work_think' },
+  connected: { mood: 'idle', formId: 'idle_breathe' },
+  thinking: { mood: 'thinking', formId: 'work_think' },
+  talking: { mood: 'talk', formId: 'expression_surprise' },
+  delta: { mood: 'talk', formId: 'expression_surprise' },
+  working: { mood: 'working', formId: 'work_coding' },
+  blocked: { mood: 'blocked', formId: 'expression_surprise' },
+  done: { mood: 'happy', formId: 'expression_wink' },
+  disconnected: { mood: 'sleep', formId: 'expression_sleep' },
+  error: { mood: 'sleep', formId: 'expression_sleep' }
 };
+
+const DONE_TO_IDLE_DELAY_MS = 900;
 
 export function createClaudeOrchestrator(options = {}) {
   const {
@@ -40,17 +51,26 @@ export function createClaudeOrchestrator(options = {}) {
     bubbleMessage: '今天想做点什么呢？',
     panelOpen: false,
     loading: false,
+    canReconnect: false,
     history: []
   };
   let hasOpenedClaude = false;
   let messageId = 0;
   let transientBubbleTimer = null;
+  let doneVisualTimer = null;
   let activeAssistantId = null;
 
   function clearTransientBubbleTimer() {
     if (transientBubbleTimer) {
       window.clearTimeout(transientBubbleTimer);
       transientBubbleTimer = null;
+    }
+  }
+
+  function clearDoneVisualTimer() {
+    if (doneVisualTimer) {
+      window.clearTimeout(doneVisualTimer);
+      doneVisualTimer = null;
     }
   }
 
@@ -61,8 +81,32 @@ export function createClaudeOrchestrator(options = {}) {
     return state;
   }
 
-  function setMoodFromStatus(status) {
-    onMood(STATUS_TO_MOOD[status] ?? 'idle');
+  function setFormById(formId) {
+    const nextFormIndex = FORM_INDEX_BY_ID[formId];
+    if (Number.isInteger(nextFormIndex)) {
+      claudeForm.set(nextFormIndex);
+    }
+  }
+
+  function setVisualState(key) {
+    const visual = STATUS_VISUALS[key] ?? STATUS_VISUALS.connected;
+
+    if (key !== 'done') {
+      clearDoneVisualTimer();
+    }
+
+    onMood(visual.mood);
+    setFormById(visual.formId);
+
+    if (key === 'done') {
+      clearDoneVisualTimer();
+      doneVisualTimer = window.setTimeout(() => {
+        doneVisualTimer = null;
+        if (get(connectionStatus) === 'connected') {
+          setVisualState('connected');
+        }
+      }, DONE_TO_IDLE_DELAY_MS);
+    }
   }
 
   function getDefaultPrompt() {
@@ -110,11 +154,12 @@ export function createClaudeOrchestrator(options = {}) {
       toolRunning.set(null);
       sync({
         loading: false,
+        canReconnect: false,
         bubbleMessage: getLastAssistantText() || getDefaultPrompt()
       });
     }
 
-    setMoodFromStatus(status);
+    setVisualState(status);
   }
 
   function handleBridgeDelta(text) {
@@ -124,6 +169,7 @@ export function createClaudeOrchestrator(options = {}) {
 
     connectionStatus.set('connected');
     streamingText.update((value) => value + text);
+    toolRunning.set(null);
 
     if (!activeAssistantId) {
       activeAssistantId = pushMessage('assistant', '');
@@ -133,14 +179,28 @@ export function createClaudeOrchestrator(options = {}) {
     sync({
       history: state.history,
       loading: true,
+      canReconnect: false,
       bubbleMessage: getLastAssistantText() || text,
       bubbleVisible: !state.panelOpen,
       bubblePassive: false
     });
+
+    setVisualState('delta');
   }
 
   function handleBridgeTool(name) {
-    toolRunning.set(name || null);
+    const toolName = `${name ?? ''}`.trim();
+    if (!toolName) {
+      return;
+    }
+
+    toolRunning.set(toolName);
+    sync({
+      bubbleMessage: `Running ${toolName}`,
+      bubbleVisible: !state.panelOpen,
+      bubblePassive: true
+    });
+    setVisualState('working');
   }
 
   function handleBridgeError(message) {
@@ -148,8 +208,8 @@ export function createClaudeOrchestrator(options = {}) {
     toolRunning.set(null);
     streamingText.set('');
     activeAssistantId = null;
-    sync({ loading: false });
-    onMood('blocked');
+    sync({ loading: false, canReconnect: true });
+    setVisualState('error');
   }
 
   function handleBridgeDisconnect() {
@@ -166,9 +226,10 @@ export function createClaudeOrchestrator(options = {}) {
     sync({
       history: state.history,
       loading: false,
+      canReconnect: true,
       bubbleMessage: 'Reconnect to continue'
     });
-    onMood('sleep');
+    setVisualState('disconnected');
   }
 
   function attachBridge(client = sharedBridgeClient) {
@@ -202,8 +263,8 @@ export function createClaudeOrchestrator(options = {}) {
     }
 
     pushMessage('user', clean);
-    sync({ history: state.history, loading: true });
-    onMood('talk');
+    sync({ history: state.history, loading: true, canReconnect: false });
+    setVisualState('talking');
 
     if (get(connectionStatus) === 'connected') {
       streamingText.set('');
@@ -230,6 +291,18 @@ export function createClaudeOrchestrator(options = {}) {
     }
 
     return state;
+  }
+
+  function reconnectBridge() {
+    if (get(connectionStatus) === 'connected') {
+      return true;
+    }
+
+    lastError.set('');
+    connectionStatus.set('connecting');
+    sync({ loading: false, canReconnect: false });
+    setVisualState('connecting');
+    return bridgeClient.connect();
   }
 
   function showTransientBubble(text, duration = 2000) {
@@ -290,6 +363,7 @@ export function createClaudeOrchestrator(options = {}) {
     getState,
     closeBubble,
     closePanel,
+    reconnectBridge,
     showAmbientComment,
     showTransientBubble,
     sendMessage,

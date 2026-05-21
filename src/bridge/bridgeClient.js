@@ -12,7 +12,8 @@ export class BridgeClient {
   }
 
   connect(token) {
-    const clean = `${token ?? ''}`.trim();
+    const candidate = token ?? this.token;
+    const clean = `${candidate ?? ''}`.trim();
     if (!clean) {
       this.onError('Bridge token required');
       return false;

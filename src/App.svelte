@@ -50,6 +50,7 @@
   let claudeBubbleMessage = '今天想做点什么呢？';
   let claudePanelOpen = false;
   let claudeLoading = false;
+  let claudeCanReconnect = false;
   let claudeHistory = [];
 
   const audio = createAudioInitializer({
@@ -101,6 +102,7 @@
     claudeBubbleMessage = state.bubbleMessage;
     claudePanelOpen = state.panelOpen;
     claudeLoading = state.loading;
+    claudeCanReconnect = state.canReconnect;
     claudeHistory = state.history;
   }
 
@@ -339,6 +341,11 @@
     refreshClaudeState();
   }
 
+  function reconnectClaudeBridge() {
+    claudeOrch.reconnectBridge();
+    refreshClaudeState();
+  }
+
   function startIdleTimer() {
     session.start();
   }
@@ -451,8 +458,10 @@
       sceneName={getSceneName($currentScene)}
       messages={claudeHistory}
       loading={claudeLoading}
+      canReconnect={claudeCanReconnect}
       on:close={closeClaudePanel}
       on:send={(event) => sendClaudeMessage(event.detail.text)}
+      on:reconnect={reconnectClaudeBridge}
     />
   {/if}
 
