@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run build` — Production build to `dist/`
 - `npm run preview` — Preview production build
 - `npm test` or `npm run test` — Run tests with Node's built-in test runner (node:test, no assertion library needed)
-- `node bridge/server.js` — Start local Claude bridge server (port 3099)
+- `node bridge/index.js` — Start local Claude bridge server (port 9120, token printed at startup)
 
 ## Architecture
 
@@ -66,7 +66,11 @@ Direct fetch to Anthropic API (`claude-3-5-haiku-latest`). Falls back to Chinese
 
 ### Local bridge (`bridge/`)
 
-Node.js server that connects local Claude Desktop to the browser companion. WebSocket protocol for real-time communication between Claude Desktop and LoFiClaude.
+Node.js WebSocket bridge that connects local Claude Code CLI to the browser companion.
+
+- `bridge/index.js` bootstraps token auth and lifecycle handling.
+- `bridge/server.js` manages socket auth, `user_message` routing, and `status/assistant_delta/tool_running/error` events.
+- `bridge/claude.js` runs Claude in `--input-format stream-json --output-format stream-json` mode, streaming assistant deltas and tool activity back to the UI.
 
 ### Components (`src/components/`)
 
