@@ -4,6 +4,11 @@ function clamp(value, min, max) {
 
 const PATROL_SPEED = 34;
 const IDLE_PAUSE_MS = 1000;
+export let chatPaused = false;
+
+export function setChatPaused(value) {
+  chatPaused = Boolean(value);
+}
 
 export function getPatrolBounds(width, height, playerExpanded) {
   const playerClearance = playerExpanded ? 420 : 160;
@@ -59,6 +64,10 @@ export function updateClaudeMotion(claudeState, viewport, dt) {
   }
 
   if (claudeState.mode === 'idle') {
+    if (chatPaused || claudeState.mode !== 'idle') {
+      return;
+    }
+
     claudeState.idleTime -= dt * 1000;
     if (claudeState.idleTime <= 0) {
       claudeState.patrolDir = claudeState.x < bounds.horizon ? 1 : -1;

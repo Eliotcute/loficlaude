@@ -51,6 +51,7 @@
   let claudePanelOpen = false;
   let claudeLoading = false;
   let claudeCanReconnect = false;
+  let claudeActiveAssistantId = null;
   let claudeHistory = [];
 
   const audio = createAudioInitializer({
@@ -103,6 +104,7 @@
     claudePanelOpen = state.panelOpen;
     claudeLoading = state.loading;
     claudeCanReconnect = state.canReconnect;
+    claudeActiveAssistantId = state.activeAssistantId;
     claudeHistory = state.history;
   }
 
@@ -445,6 +447,8 @@
   {#if claudeBubbleVisible}
     <ClaudeBubble
       message={claudeBubbleMessage}
+      messages={claudeHistory}
+      activeAssistantId={claudeActiveAssistantId}
       anchor={$claudeBubbleAnchor}
       passive={claudeBubblePassive}
       loading={claudeLoading}
@@ -457,6 +461,7 @@
     <ClaudeChatPanel
       sceneName={getSceneName($currentScene)}
       messages={claudeHistory}
+      activeAssistantId={claudeActiveAssistantId}
       loading={claudeLoading}
       canReconnect={claudeCanReconnect}
       on:close={closeClaudePanel}

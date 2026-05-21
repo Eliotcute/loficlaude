@@ -4,6 +4,8 @@
 
   export let title = 'LoFiClaude';
   export let message = '今天想做点什么呢？';
+  export let messages = [];
+  export let activeAssistantId = null;
   export let passive = false;
   export let loading = false;
   export let anchor = { x: 0, y: 0 };
@@ -13,6 +15,10 @@
   let root;
   let inputValue = '';
   let autoCloseTimeout;
+  let errorHint = '';
+  let shakeError = false;
+  let shakeTimer;
+
   $: bridgeConnected = $connectionStatus === 'connected';
 
   function close() {
@@ -32,6 +38,20 @@
     autoCloseTimeout = setTimeout(() => {
       close();
     }, 8000);
+  }
+
+  function triggerDisconnectedError() {
+    errorHint = 'Bridge not connected — run `node bridge/index.js`';
+    shakeError = true;
+
+    if (shakeTimer) {
+      window.clearTimeout(shakeTimer);
+    }
+
+    shakeTimer = window.setTimeout(() => {
+      shakeError = false;
+      shakeTimer = null;
+    }, 500);
   }
 
   function handleDocumentPointerDown(event) {
@@ -57,10 +77,16 @@
   function handleSubmit(event) {
     event.preventDefault();
     const text = inputValue.trim();
-    if (!text || loading || !bridgeConnected) {
+    if (!text || loading) {
       return;
     }
 
+    if (!bridgeConnected) {
+      triggerDisconnectedError();
+      return;
+    }
+
+    errorHint = '';
     dispatch('send', { text });
     inputValue = '';
   }
@@ -75,6 +101,9 @@
     if (autoCloseTimeout) {
       clearTimeout(autoCloseTimeout);
     }
+    if (shakeTimer) {
+      clearTimeout(shakeTimer);
+    }
     window.removeEventListener('pointerdown', handleDocumentPointerDown);
     window.removeEventListener('keydown', handleDocumentKeydown);
   });
@@ -87,6 +116,7 @@
 <div
   bind:this={root}
   class:passive
+  class:shake-error={shakeError}
   class="claude-bubble"
   role="dialog"
   aria-label="Claude bubble"
@@ -97,9 +127,26 @@
     <button type="button" class="close-btn" aria-label="Close Claude bubble" on:click={close}>×</button>
   </div>
 
-  <div class="message">{message}</div>
+  <div class="message-list" aria-live="polite">
+    {#if messages.length === 0}
+      <div class="message">{message}</div>
+    {:else}
+      {#each messages as item (item.id)}
+        <div class="line" class:user={item.role === 'user'}>
+          <span class="role">{item.role === 'user' ? 'You' : 'Claude'}</span>
+          {#if loading && item.role === 'assistant' && item.id === activeAssistantId}
+            <p class="streaming-text">{item.text}</p>
+          {:else}
+            <p>{item.text}</p>
+          {/if}
+        </div>
+      {/each}
+    {/if}
+  </div>
 
-  {#if !bridgeConnected}
+  {#if errorHint}
+    <div class="bridge-hint error" role="status">{errorHint}</div>
+  {:else if !bridgeConnected}
     <div class="bridge-hint">Bridge not connected</div>
   {/if}
 
@@ -110,12 +157,15 @@
       value={inputValue}
       on:input={(event) => {
         inputValue = event.currentTarget.value;
+        if (errorHint) {
+          errorHint = '';
+        }
         resetPassiveTimeout();
       }}
       aria-label="Ask Claude"
-      disabled={loading || !bridgeConnected}
+      disabled={loading}
     />
-    <button type="submit" class="send-btn" aria-label="Send message" disabled={loading || !bridgeConnected || !inputValue.trim()}>→</button>
+    <button type="submit" class="send-btn" aria-label="Send message" disabled={loading || !inputValue.trim()}>→</button>
   </form>
 
   <div class="tail" aria-hidden="true"></div>
@@ -140,6 +190,12 @@
     animation: bubble-in 140ms ease, bubble-fade 320ms ease 7.68s forwards;
   }
 
+  .claude-bubble.shake-error {
+    animation: bubble-in 140ms ease, bubble-shake 500ms ease;
+    border-color: rgba(185, 70, 70, 0.72);
+    box-shadow: 0 0 0 2px rgba(185, 70, 70, 0.22), 0 14px 30px rgba(0, 0, 0, 0.3);
+  }
+
   .bubble-header {
     display: flex;
     align-items: center;
@@ -159,17 +215,65 @@
     padding: 0;
   }
 
+  .message-list {
+    display: grid;
+    gap: 6px;
+    max-height: 200px;
+    overflow-y: auto;
+    margin-bottom: 8px;
+    padding-right: 2px;
+  }
+
   .message {
     font-size: 13px;
     line-height: 1.35;
     min-height: 18px;
-    margin-bottom: 8px;
+  }
+
+  .line {
+    border: 1px solid rgba(17, 17, 17, 0.14);
+    border-radius: 8px;
+    background: rgba(17, 17, 17, 0.05);
+    padding: 6px 7px;
+  }
+
+  .line.user {
+    background: rgba(17, 17, 17, 0.09);
+  }
+
+  .role {
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    opacity: 0.72;
+    display: block;
+    margin-bottom: 3px;
+  }
+
+  p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .streaming-text::after {
+    content: '';
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: #d4a574;
+    vertical-align: text-bottom;
+    margin-left: 1px;
+    animation: pixel-blink 500ms steps(1) infinite;
   }
 
   .bridge-hint {
     margin-bottom: 8px;
     font-size: 11px;
     color: rgba(17, 17, 17, 0.62);
+  }
+
+  .bridge-hint.error {
+    color: #8f3b3b;
   }
 
   .input-row {
@@ -243,6 +347,25 @@
     }
   }
 
+  @keyframes bubble-shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    20% {
+      transform: translateX(-4px);
+    }
+    40% {
+      transform: translateX(4px);
+    }
+    60% {
+      transform: translateX(-3px);
+    }
+    80% {
+      transform: translateX(3px);
+    }
+  }
+
   @keyframes bubble-fade {
     from {
       opacity: 1;
@@ -252,4 +375,14 @@
     }
   }
 
+  @keyframes pixel-blink {
+    0%,
+    65% {
+      opacity: 1;
+    }
+    66%,
+    100% {
+      opacity: 0;
+    }
+  }
 </style>

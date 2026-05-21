@@ -2,6 +2,7 @@ import { get } from 'svelte/store';
 import { ClaudeChat } from '../ai/ClaudeChat.js';
 import { bridgeClient as sharedBridgeClient } from '../bridge/bridgeClient.js';
 import { FORMS } from '../canvas/claudepixForms.js';
+import { setChatPaused } from '../canvas/claudeMotion.js';
 import { claudeForm } from '../stores/appState.js';
 import {
   claudeStatus,
@@ -31,6 +32,8 @@ const STATUS_VISUALS = {
 };
 
 const DONE_TO_IDLE_DELAY_MS = 900;
+const CHAT_HISTORY_STORAGE_KEY = 'loficlaude-chat-history';
+const CHAT_HISTORY_MAX = 50;
 
 export function createClaudeOrchestrator(options = {}) {
   const {
@@ -52,6 +55,7 @@ export function createClaudeOrchestrator(options = {}) {
     panelOpen: false,
     loading: false,
     canReconnect: false,
+    activeAssistantId: null,
     history: []
   };
   let hasOpenedClaude = false;
@@ -75,10 +79,48 @@ export function createClaudeOrchestrator(options = {}) {
   }
 
   function sync(next) {
-    state = { ...state, ...next };
+    state = { ...state, ...next, activeAssistantId };
     onBubbleVisible(state.bubbleVisible);
     onPanelVisible(state.panelOpen);
     return state;
+  }
+
+  function persistHistory() {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const subset = state.history.slice(-CHAT_HISTORY_MAX);
+      window.localStorage.setItem(CHAT_HISTORY_STORAGE_KEY, JSON.stringify(subset));
+    } catch {
+      // Ignore storage failures.
+    }
+  }
+
+  function restoreHistory() {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(CHAT_HISTORY_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+
+      state.history = parsed
+        .slice(-CHAT_HISTORY_MAX)
+        .filter((item) => item && typeof item.id === 'number' && typeof item.role === 'string')
+        .map((item) => ({ id: item.id, role: item.role, text: typeof item.text === 'string' ? item.text : '' }));
+    } catch {
+      // Ignore corrupt data.
+    }
   }
 
   function setFormById(formId) {
@@ -125,12 +167,14 @@ export function createClaudeOrchestrator(options = {}) {
   function pushMessage(role, text) {
     messageId += 1;
     const entry = { id: messageId, role, text };
-    state.history = [...state.history, entry];
+    state.history = [...state.history, entry].slice(-CHAT_HISTORY_MAX);
+    persistHistory();
     return entry.id;
   }
 
   function updateMessage(id, updater) {
     state.history = state.history.map((item) => (item.id === id ? { ...item, text: updater(item.text) } : item));
+    persistHistory();
   }
 
   function getLastAssistantText() {
@@ -157,6 +201,14 @@ export function createClaudeOrchestrator(options = {}) {
         canReconnect: false,
         bubbleMessage: getLastAssistantText() || getDefaultPrompt()
       });
+    }
+
+    if (status === 'done') {
+      if (typeof window !== 'undefined') {
+        window.setTimeout(() => {
+          setChatPaused(false);
+        }, 15000);
+      }
     }
 
     setVisualState(status);
@@ -209,6 +261,7 @@ export function createClaudeOrchestrator(options = {}) {
     streamingText.set('');
     activeAssistantId = null;
     sync({ loading: false, canReconnect: true });
+    setChatPaused(false);
     setVisualState('error');
   }
 
@@ -229,6 +282,7 @@ export function createClaudeOrchestrator(options = {}) {
       canReconnect: true,
       bubbleMessage: 'Reconnect to continue'
     });
+    setChatPaused(false);
     setVisualState('disconnected');
   }
 
@@ -262,9 +316,31 @@ export function createClaudeOrchestrator(options = {}) {
       return state;
     }
 
+    const userRounds = state.history.filter((item) => item.role === 'user').length;
     pushMessage('user', clean);
-    sync({ history: state.history, loading: true, canReconnect: false });
+
+    if (userRounds === 0) {
+      sync({
+        history: state.history,
+        loading: true,
+        canReconnect: false,
+        panelOpen: false,
+        bubbleVisible: true,
+        bubblePassive: false
+      });
+    } else {
+      sync({
+        history: state.history,
+        loading: true,
+        canReconnect: false,
+        panelOpen: true,
+        bubbleVisible: false,
+        bubblePassive: false
+      });
+    }
+
     setVisualState('talking');
+    setChatPaused(true);
 
     if (get(connectionStatus) === 'connected') {
       streamingText.set('');
@@ -284,10 +360,10 @@ export function createClaudeOrchestrator(options = {}) {
     pushMessage('assistant', reply);
     sync({ history: state.history, bubbleMessage: reply, loading: false });
     onMood('nod');
-
-    const rounds = state.history.filter((item) => item.role === 'user').length;
-    if (rounds >= 2) {
-      sync({ bubbleVisible: false, panelOpen: true, bubblePassive: false });
+    if (typeof window !== 'undefined') {
+      window.setTimeout(() => {
+        setChatPaused(false);
+      }, 15000);
     }
 
     return state;
@@ -352,6 +428,13 @@ export function createClaudeOrchestrator(options = {}) {
 
   function getState() {
     return state;
+  }
+
+  restoreHistory();
+  messageId = state.history.reduce((max, item) => Math.max(max, item.id), 0);
+  state.activeAssistantId = activeAssistantId;
+  if (state.history.length > 0) {
+    state.bubbleMessage = getLastAssistantText() || getDefaultPrompt();
   }
 
   if (!bridgeAttached) {

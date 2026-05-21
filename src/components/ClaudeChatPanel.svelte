@@ -6,13 +6,14 @@
   export let messages = [];
   export let loading = false;
   export let canReconnect = false;
+  export let activeAssistantId = null;
 
   const dispatch = createEventDispatcher();
 
   let root;
   let inputValue = '';
 
-  $: recentMessages = messages.slice(-5);
+  $: recentMessages = messages;
   $: bridgeConnected = $connectionStatus === 'connected';
 
   function close() {
@@ -90,7 +91,9 @@
       <div class="line" class:user={item.role === 'user'}>
         <span class="role">{item.role === 'user' ? 'You' : 'Claude'}</span>
         <p>
-          {#if item.text}
+          {#if loading && item.role === 'assistant' && item.id === activeAssistantId}
+            <span class="streaming-text">{item.text}</span>
+          {:else if item.text}
             {item.text}
           {:else if loading && item.role === 'assistant'}
             <span class="cursor-pulse">▊</span>
@@ -289,5 +292,27 @@
 
   .cursor-pulse {
     animation: pulse-cursor 1s ease-in-out infinite;
+  }
+
+  .streaming-text::after {
+    content: '';
+    display: inline-block;
+    width: 2px;
+    height: 1em;
+    background: #d4a574;
+    vertical-align: text-bottom;
+    margin-left: 1px;
+    animation: pixel-blink 500ms steps(1) infinite;
+  }
+
+  @keyframes pixel-blink {
+    0%,
+    65% {
+      opacity: 1;
+    }
+    66%,
+    100% {
+      opacity: 0;
+    }
   }
 </style>
