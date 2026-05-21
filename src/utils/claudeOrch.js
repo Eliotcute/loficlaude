@@ -22,11 +22,11 @@ const STATUS_VISUALS = {
   connecting: { mood: 'thinking', formId: 'work_think' },
   connected: { mood: 'idle', formId: 'idle_breathe' },
   thinking: { mood: 'thinking', formId: 'work_think' },
-  talking: { mood: 'talk', formId: 'expression_surprise' },
-  delta: { mood: 'talk', formId: 'expression_surprise' },
+  talking: { mood: 'talk', formId: 'journal' },
+  delta: { mood: 'talk', formId: 'journal' },
   working: { mood: 'working', formId: 'work_coding' },
-  blocked: { mood: 'blocked', formId: 'expression_surprise' },
-  done: { mood: 'happy', formId: 'expression_wink' },
+  blocked: { mood: 'blocked', formId: 'work_think' },
+  done: { mood: 'happy', formId: 'dance_djmix' },
   disconnected: { mood: 'sleep', formId: 'expression_sleep' },
   error: { mood: 'sleep', formId: 'expression_sleep' }
 };
