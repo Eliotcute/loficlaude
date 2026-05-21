@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+
+set -eu
+
+SOCKET_PATH="${LOFICLAUDE_SOCKET_PATH:-/tmp/loficlaude-claude.sock}"
+
+if ! command -v socat >/dev/null 2>&1; then
+  echo "socat is required. Install it first (e.g. brew install socat)." >&2
+  exit 1
+fi
+
+if [ ! -S "$SOCKET_PATH" ]; then
+  echo "Socket not found at $SOCKET_PATH" >&2
+  echo "Start bridge first: node bridge/index.js" >&2
+  exit 1
+fi
+
+echo "Connecting to $SOCKET_PATH"
+exec socat - UNIX-CONNECT:"$SOCKET_PATH"
