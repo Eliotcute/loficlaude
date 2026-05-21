@@ -82,12 +82,17 @@ function createSocketServer({ socketPath, onClientData = () => {} }) {
     }
 
     const payload = `${text}`;
+    const deadClients = [];
     for (const client of clients) {
       if (client.destroyed) {
-        clients.delete(client);
+        deadClients.push(client);
         continue;
       }
       client.write(payload);
+    }
+
+    for (const client of deadClients) {
+      clients.delete(client);
     }
   }
 
