@@ -296,7 +296,7 @@
     position: absolute;
     min-width: 96px;
     min-height: 96px;
-    z-index: 6;
+    z-index: 15;
     cursor: pointer;
     transition: transform 0.22s ease-out;
     will-change: transform;

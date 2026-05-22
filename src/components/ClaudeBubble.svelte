@@ -20,6 +20,10 @@
   let shakeTimer;
 
   $: bridgeConnected = $connectionStatus === 'connected';
+  $: fallbackWidth = typeof window === 'undefined' ? 1024 : window.innerWidth;
+  $: fallbackHeight = typeof window === 'undefined' ? 768 : window.innerHeight;
+  $: anchorX = Number.isFinite(anchor?.x) && anchor.x > 0 ? anchor.x : Math.round(fallbackWidth / 2);
+  $: anchorY = Number.isFinite(anchor?.y) && anchor.y > 0 ? anchor.y : Math.round(fallbackHeight * 0.58);
 
   function close() {
     dispatch('close');
@@ -120,7 +124,7 @@
   class="claude-bubble"
   role="dialog"
   aria-label="Claude bubble"
-  style="left: clamp(14px, {anchor.x - 132}px, calc(100vw - 304px)); top: clamp(14px, {anchor.y - 164}px, calc(100vh - 360px));"
+  style="left: clamp(14px, {anchorX - 132}px, calc(100vw - 304px)); top: clamp(14px, {anchorY - 164}px, calc(100vh - 360px));"
 >
   <div class="bubble-header">
     <span>{title}</span>
@@ -332,7 +336,13 @@
 
   @media (max-height: 760px) {
     .claude-bubble {
-      display: none;
+      top: 14px !important;
+      max-height: calc(100vh - 28px);
+      overflow: hidden;
+    }
+
+    .message-list {
+      max-height: min(160px, calc(100vh - 178px));
     }
   }
 

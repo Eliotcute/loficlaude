@@ -124,6 +124,7 @@
 
   function handleClaudeFormChange(event) {
     const formName = event.detail?.name ?? '新形态';
+    claudeOrch.closePanel();
     claudeOrch.showTransientBubble(`切换形态：${formName}`, 2000);
     refreshClaudeState();
   }
