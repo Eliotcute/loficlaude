@@ -1,12 +1,15 @@
 <script>
   import { createEventDispatcher, onMount, onDestroy } from 'svelte';
-  import { connectionStatus, toolRunning } from '../stores/bridgeState.js';
+  import { connectionStatus, toolRunning as bridgeToolRunning } from '../stores/bridgeState.js';
 
   export let sceneName = 'Lofi Night';
   export let messages = [];
   export let loading = false;
   export let canReconnect = false;
   export let activeAssistantId = null;
+  export let sessionStatus = 'disconnected';
+  export let bridgeStatus = 'disconnected';
+  export let lastError = '';
 
   const dispatch = createEventDispatcher();
 
@@ -15,6 +18,17 @@
 
   $: recentMessages = messages;
   $: bridgeConnected = $connectionStatus === 'connected';
+  $: currentStatus = sessionStatus || $connectionStatus;
+  $: statusLabel =
+    currentStatus === 'connected'
+      ? 'awake'
+      : currentStatus === 'working'
+        ? 'working'
+        : currentStatus === 'connecting'
+          ? 'waking'
+          : currentStatus === 'blocked'
+            ? 'stuck'
+            : 'asleep';
 
   function close() {
     dispatch('close');
@@ -77,7 +91,10 @@
   <header class="panel-header">
     <div>
       <div class="title">LoFiClaude</div>
-      <div class="scene">{sceneName} · bridge {$connectionStatus}</div>
+      <div class="scene">{sceneName} · Claude {statusLabel}</div>
+    </div>
+    <div class="status-chip" class:connected={currentStatus === 'connected'} class:working={currentStatus === 'working'}>
+      {bridgeStatus}
     </div>
     <button type="button" class="close-btn" aria-label="Close chat panel" on:click={close}>×</button>
   </header>
@@ -89,7 +106,7 @@
 
     {#each recentMessages as item (item.id)}
       <div class="line" class:user={item.role === 'user'}>
-        <span class="role">{item.role === 'user' ? 'You' : 'Claude'}</span>
+        <span class="role">{item.role === 'user' && item.source === 'terminal' ? 'Terminal' : item.role === 'user' ? 'You' : 'Claude'}</span>
         <p>
           {#if loading && item.role === 'assistant' && item.id === activeAssistantId}
             <span class="streaming-text">{item.text}</span>
@@ -102,10 +119,17 @@
       </div>
     {/each}
 
-    {#if $toolRunning}
+    {#if $bridgeToolRunning}
       <div class="line">
         <span class="role">Tool</span>
-        <p>Running: {$toolRunning}</p>
+        <p>Running: {$bridgeToolRunning}</p>
+      </div>
+    {/if}
+
+    {#if lastError}
+      <div class="line">
+        <span class="role">Error</span>
+        <p class="error-line">{lastError}</p>
       </div>
     {/if}
   </div>
@@ -124,7 +148,7 @@
 
   {#if !bridgeConnected}
     <div class="hint-row">
-      <p class="hint">Bridge not connected. Start the local bridge, then reconnect.</p>
+      <p class="hint">Start the local bridge to wake Claude.</p>
       {#if canReconnect}
         <button type="button" class="reconnect-btn" on:click={handleReconnect}>Reconnect</button>
       {/if}
@@ -137,7 +161,7 @@
     position: absolute;
     top: max(80px, calc(100vh - 380px));
     right: 20px;
-    width: min(340px, calc(100vw - 24px));
+    width: min(400px, calc(100vw - 24px));
     max-height: calc(100vh - 120px);
     border: 1px solid rgba(212, 165, 116, 0.3);
     border-radius: 10px;
@@ -156,6 +180,28 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 10px;
+  }
+
+  .status-chip {
+    border: 1px solid rgba(212, 165, 116, 0.22);
+    border-radius: 999px;
+    padding: 4px 7px;
+    font-size: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    color: rgba(232, 224, 216, 0.72);
+    background: rgba(10, 12, 15, 0.5);
+    white-space: nowrap;
+  }
+
+  .status-chip.connected {
+    color: #a8d8b2;
+    border-color: rgba(103, 191, 122, 0.34);
+  }
+
+  .status-chip.working {
+    color: #e4c189;
+    border-color: rgba(212, 165, 116, 0.42);
   }
 
   .title {
@@ -176,6 +222,8 @@
     font-size: 18px;
     line-height: 1;
     cursor: pointer;
+    width: 32px;
+    height: 32px;
     padding: 0;
   }
 
@@ -196,7 +244,7 @@
     background: rgba(232, 224, 216, 0.09);
     border: 1px solid rgba(212, 165, 116, 0.2);
     border-radius: 8px;
-    padding: 7px 8px;
+    padding: 8px 9px;
   }
 
   .line.user {
@@ -212,10 +260,14 @@
     margin-bottom: 3px;
   }
 
+  .error-line {
+    color: #e19c91;
+  }
+
   p {
     margin: 0;
-    font-size: 12px;
-    line-height: 1.4;
+    font-size: 13px;
+    line-height: 1.5;
   }
 
   .input-row {
@@ -239,7 +291,7 @@
   }
 
   .reconnect-btn {
-    height: 28px;
+    height: 36px;
     font-size: 11px;
     white-space: nowrap;
   }
@@ -250,18 +302,24 @@
     border-radius: 7px;
     background: rgba(10, 12, 15, 0.82);
     color: #e8e0d8;
-    height: 32px;
+    height: 38px;
     font-size: 12px;
   }
 
   input {
-    padding: 0 9px;
+    padding: 0 10px;
     outline: none;
   }
 
   button {
-    padding: 0 10px;
+    padding: 0 12px;
     cursor: pointer;
+  }
+
+  input:focus-visible,
+  button:focus-visible {
+    outline: 2px solid rgba(212, 165, 116, 0.72);
+    outline-offset: 2px;
   }
 
   button:disabled {
@@ -313,6 +371,24 @@
     66%,
     100% {
       opacity: 0;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .chat-panel {
+      top: 72px;
+      right: 12px;
+      left: 12px;
+      width: auto;
+      max-height: calc(100vh - 104px);
+    }
+
+    .panel-header {
+      align-items: flex-start;
+    }
+
+    .status-chip {
+      display: none;
     }
   }
 </style>

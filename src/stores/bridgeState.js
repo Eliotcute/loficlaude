@@ -17,6 +17,38 @@ export const toolRunning = writable(null);
 export const lastError = writable('');
 export const bridgeToken = writable(readStoredToken());
 
+export function normalizeBridgeStatus(status) {
+  const value = `${status ?? ''}`.trim();
+
+  switch (value) {
+    case 'thinking':
+    case 'talking':
+      return 'working';
+    case 'error':
+      return 'blocked';
+    case 'connecting':
+    case 'connected':
+    case 'working':
+    case 'blocked':
+    case 'done':
+    case 'disconnected':
+      return value;
+    default:
+      return 'disconnected';
+  }
+}
+
+export function getSessionStatus(connection, claude) {
+  const connectionState = normalizeBridgeStatus(connection);
+  const claudeState = normalizeBridgeStatus(claude);
+
+  if (connectionState !== 'connected') {
+    return connectionState;
+  }
+
+  return claudeState === 'connected' ? 'connected' : claudeState;
+}
+
 bridgeToken.subscribe((value) => {
   if (typeof window === 'undefined') {
     return;

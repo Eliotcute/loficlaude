@@ -16,14 +16,15 @@
   import { createSessionController } from './utils/session.js';
   import { createAudioInitializer } from './utils/audioInit.js';
   import { createClaudeOrchestrator } from './utils/claudeOrch.js';
-
-  const PERSIST_KEY = 'lofi-claude-phase4-state';
-  const SCENE_NAME_MAP = {
-    lofiNight: 'Lofi Night',
-    softRain: 'Soft Rain',
-    starDrift: 'Star Drift'
-  };
-  const SCENE_ORDER = ['lofiNight', 'softRain', 'starDrift'];
+  import {
+    PERSIST_KEY,
+    SCENE_ORDER,
+    createPersistedSnapshot,
+    getSceneName,
+    normalizeTrackIndex,
+    normalizeTrackTitle,
+    parsePersistedSnapshot
+  } from './utils/appPersistence.js';
 
   const currentTrackIndex = player.currentTrackIndex;
   const currentTrackTitle = player.currentTrackTitle;
@@ -53,6 +54,10 @@
   let claudeCanReconnect = false;
   let claudeActiveAssistantId = null;
   let claudeHistory = [];
+  let claudeSessionStatus = 'disconnected';
+  let claudeBridgeStatus = 'disconnected';
+  let claudeToolRunning = null;
+  let claudeLastError = '';
 
   const audio = createAudioInitializer({
     mountId: 'youtube-player-host',
@@ -106,6 +111,10 @@
     claudeCanReconnect = state.canReconnect;
     claudeActiveAssistantId = state.activeAssistantId;
     claudeHistory = state.history;
+    claudeSessionStatus = state.sessionStatus ?? 'disconnected';
+    claudeBridgeStatus = state.bridgeStatus ?? 'disconnected';
+    claudeToolRunning = state.toolRunning ?? null;
+    claudeLastError = state.lastError ?? '';
   }
 
   function setActivityState() {
@@ -144,36 +153,18 @@
     closeClaudePanel();
   }
 
-  function getStoreValue(store) {
-    let value;
-    const unsubscribe = store.subscribe((nextValue) => {
-      value = nextValue;
-    });
-    unsubscribe();
-    return value;
-  }
-
-  function normalizeTrackTitle(index) {
-    const track = PLAYLIST[((index % PLAYLIST.length) + PLAYLIST.length) % PLAYLIST.length];
-    return track?.name ?? 'lofi hip hop radio - beats';
-  }
-
-  function normalizeTrackIndex(index) {
-    return ((index % PLAYLIST.length) + PLAYLIST.length) % PLAYLIST.length;
-  }
-
   function persistState() {
     if (suppressPersist || typeof window === 'undefined') {
       return;
     }
 
-    const snapshot = {
-      lastTrackIndex: getStoreValue(player.currentTrackIndex),
-      rainVolume: getStoreValue(rain.volume),
-      rainType: getStoreValue(rain.type),
-      currentScene: getStoreValue(scene.current),
-      sceneLocked: getStoreValue(scene.locked)
-    };
+    const snapshot = createPersistedSnapshot({
+      lastTrackIndex: get(player.currentTrackIndex),
+      rainVolume: get(rain.volume),
+      rainType: get(rain.type),
+      currentScene: get(scene.current),
+      sceneLocked: get(scene.locked)
+    });
 
     window.localStorage.setItem(PERSIST_KEY, JSON.stringify(snapshot));
   }
@@ -188,25 +179,20 @@
     const stored = window.localStorage.getItem(PERSIST_KEY);
     if (stored) {
       try {
-        const parsed = JSON.parse(stored);
+        const restored = parsePersistedSnapshot(stored, PLAYLIST);
 
-        const restoredTrackIndex = normalizeTrackIndex(Number(parsed.lastTrackIndex ?? 0));
-        const restoredRainVolume = Math.max(0, Math.min(100, Number(parsed.rainVolume ?? 60)));
-        const restoredRainType = ['light', 'medium', 'heavy'].includes(parsed.rainType) ? parsed.rainType : 'medium';
-        const restoredScene = ['lofiNight', 'softRain', 'starDrift'].includes(parsed.currentScene)
-          ? parsed.currentScene
-          : 'lofiNight';
+        if (restored) {
+          player.currentTrackIndex.set(restored.trackIndex);
+          player.currentTrackTitle.set(restored.trackTitle);
+          rain.volume.set(restored.rainVolume);
+          rain.muted.set(restored.rainMuted);
+          rain.type.set(restored.rainType);
+          scene.current.set(restored.currentScene);
+          scene.locked.set(restored.sceneLocked);
 
-        player.currentTrackIndex.set(restoredTrackIndex);
-        player.currentTrackTitle.set(normalizeTrackTitle(restoredTrackIndex));
-        rain.volume.set(restoredRainVolume);
-        rain.muted.set(restoredRainVolume === 0);
-        rain.type.set(restoredRainType);
-        scene.current.set(restoredScene);
-        scene.locked.set(Boolean(parsed.sceneLocked));
-
-        if (restoredRainVolume > 0) {
-          lastNonZeroRainVolume = restoredRainVolume;
+          if (restored.lastNonZeroRainVolume) {
+            lastNonZeroRainVolume = restored.lastNonZeroRainVolume;
+          }
         }
       } catch {
         // Ignore invalid stored JSON and continue with defaults.
@@ -308,10 +294,6 @@
 
     lastNonZeroRainVolume = $rainVolume;
     setRainVolume(0);
-  }
-
-  function getSceneName(key) {
-    return SCENE_NAME_MAP[key] ?? 'Lofi Night';
   }
 
   function rotateScene() {
@@ -476,6 +458,10 @@
       activeAssistantId={claudeActiveAssistantId}
       loading={claudeLoading}
       canReconnect={claudeCanReconnect}
+      sessionStatus={claudeSessionStatus}
+      bridgeStatus={claudeBridgeStatus}
+      toolRunning={claudeToolRunning}
+      lastError={claudeLastError}
       on:close={closeClaudePanel}
       on:send={(event) => sendClaudeMessage(event.detail.text)}
       on:reconnect={reconnectClaudeBridge}

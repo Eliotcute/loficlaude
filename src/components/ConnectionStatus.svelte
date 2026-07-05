@@ -1,7 +1,7 @@
 <script>
   import { get } from 'svelte/store';
   import { bridgeClient } from '../bridge/bridgeClient.js';
-  import { bridgeToken, connectionStatus, lastError } from '../stores/bridgeState.js';
+  import { bridgeToken, connectionStatus, claudeStatus, getSessionStatus, lastError } from '../stores/bridgeState.js';
 
   const BRIDGE_CMD = 'cd bridge && npm start';
 
@@ -35,12 +35,25 @@
   }
 
   $: isConnected = $connectionStatus === 'connected';
+  $: sessionStatus = getSessionStatus($connectionStatus, $claudeStatus);
+  $: statusLabel =
+    sessionStatus === 'connected'
+      ? 'Claude awake'
+      : sessionStatus === 'working'
+        ? 'Claude working'
+        : sessionStatus === 'connecting'
+          ? 'Waking Claude'
+          : sessionStatus === 'blocked'
+            ? 'Needs attention'
+            : 'Claude asleep';
+  $: statusDetail = isConnected ? `bridge ready · ${$claudeStatus}` : 'bridge offline';
 </script>
 
 <div class="connection-status">
   <div class="status-row">
     <span class="status-dot" class:online={isConnected} aria-hidden="true"></span>
-    <span class="status-label">bridge {$connectionStatus}</span>
+    <span class="status-label">{statusLabel}</span>
+    <span class="status-sub">{statusDetail}</span>
     <input type="password" placeholder="bridge token" bind:value={$bridgeToken} aria-label="Bridge token" />
     <button type="button" on:click={isConnected ? disconnect : connect}>{isConnected ? 'Disconnect' : 'Connect'}</button>
   </div>
@@ -67,7 +80,7 @@
   .status-row,
   .command-row {
     display: grid;
-    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    grid-template-columns: auto auto auto minmax(0, 1fr) auto;
     gap: 8px;
     align-items: center;
   }
@@ -94,6 +107,14 @@
     font-size: 11px;
     color: #e8e0d8;
     white-space: nowrap;
+    min-width: 0;
+  }
+
+  .status-sub {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: rgba(232, 224, 216, 0.64);
+    white-space: nowrap;
   }
 
   input,
@@ -102,7 +123,7 @@
     border-radius: 8px;
     background: rgba(8, 10, 12, 0.58);
     color: #e8e0d8;
-    height: 32px;
+    height: 38px;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 11px;
   }
@@ -118,9 +139,15 @@
   }
 
   button {
-    padding: 0 10px;
+    padding: 0 12px;
     cursor: pointer;
     white-space: nowrap;
+  }
+
+  input:focus-visible,
+  button:focus-visible {
+    outline: 2px solid rgba(212, 165, 116, 0.72);
+    outline-offset: 2px;
   }
 
   .error {
@@ -137,7 +164,11 @@
     }
 
     .status-row {
-      grid-template-columns: auto auto 1fr auto;
+      grid-template-columns: auto auto minmax(0, 1fr) auto;
+    }
+
+    .status-sub {
+      grid-column: 2 / -1;
     }
   }
 
@@ -145,6 +176,10 @@
     .status-row,
     .command-row {
       grid-template-columns: 1fr;
+    }
+
+    .status-sub {
+      white-space: normal;
     }
   }
 </style>

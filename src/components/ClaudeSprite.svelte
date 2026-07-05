@@ -52,7 +52,7 @@
     claude.idleTime.set(motionState.idleTime);
     claude.frameTime.set(motionState.frameTime);
     claude.frameIndex.set(motionState.frameIndex);
-    claude.bubbleAnchor.set({ x: motionState.x + 48, y: motionState.y - 8 });
+    claude.bubbleAnchor.set({ x: motionState.x + 48, y: motionState.y - 12 });
   }
 
   function setModeFromMood(mood) {

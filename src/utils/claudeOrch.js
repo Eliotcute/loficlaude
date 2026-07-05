@@ -8,6 +8,7 @@ import {
   claudeStatus,
   connectionStatus,
   lastError,
+  getSessionStatus,
   resetBridgeState,
   streamingText,
   toolRunning
@@ -22,8 +23,8 @@ const STATUS_VISUALS = {
   connecting: { mood: 'thinking', formId: 'work_think' },
   connected: { mood: 'idle', formId: 'idle_breathe' },
   thinking: { mood: 'thinking', formId: 'work_think' },
-  talking: { mood: 'talk', formId: 'journal' },
-  delta: { mood: 'talk', formId: 'journal' },
+  talking: { mood: 'talk', formId: 'expression_wink' },
+  delta: { mood: 'talk', formId: 'expression_wink' },
   working: { mood: 'working', formId: 'work_coding' },
   blocked: { mood: 'blocked', formId: 'work_think' },
   done: { mood: 'happy', formId: 'dance_djmix' },
@@ -120,7 +121,12 @@ export function createClaudeOrchestrator(options = {}) {
       state.history = parsed
         .slice(-CHAT_HISTORY_MAX)
         .filter((item) => item && typeof item.id === 'number' && typeof item.role === 'string')
-        .map((item) => ({ id: item.id, role: item.role, text: typeof item.text === 'string' ? item.text : '' }));
+        .map((item) => ({
+          id: item.id,
+          role: item.role,
+          text: typeof item.text === 'string' ? item.text : '',
+          source: typeof item.source === 'string' ? item.source : 'browser'
+        }));
     } catch {
       // Ignore corrupt data.
     }
@@ -168,9 +174,9 @@ export function createClaudeOrchestrator(options = {}) {
     return sync({ panelOpen: false });
   }
 
-  function pushMessage(role, text) {
+  function pushMessage(role, text, source = role === 'user' ? 'browser' : 'assistant') {
     messageId += 1;
-    const entry = { id: messageId, role, text };
+    const entry = { id: messageId, role, text, source };
     state.history = [...state.history, entry].slice(-CHAT_HISTORY_MAX);
     persistHistory();
     return entry.id;
@@ -189,17 +195,12 @@ export function createClaudeOrchestrator(options = {}) {
     claudeStatus.set(status);
     lastError.set('');
 
-    if (status === 'connecting') {
-      connectionStatus.set('connecting');
-    } else if (status === 'disconnected') {
-      connectionStatus.set('disconnected');
-    } else {
-      connectionStatus.set('connected');
-    }
+    connectionStatus.set(status === 'connecting' ? 'connecting' : status === 'disconnected' ? 'disconnected' : 'connected');
 
     if (status === 'done' || status === 'blocked' || status === 'connected') {
       activeAssistantId = null;
       toolRunning.set(null);
+      streamingText.set('');
       sync({
         loading: false,
         canReconnect: false,
@@ -216,6 +217,19 @@ export function createClaudeOrchestrator(options = {}) {
     }
 
     setVisualState(status);
+  }
+
+  function handleBridgeUser(text, source = 'unknown') {
+    const clean = `${text ?? ''}`.trim();
+    if (!clean) {
+      return;
+    }
+
+    const last = [...state.history].reverse().find((item) => item.role === 'user');
+    if (!last || last.text !== clean || last.source !== source) {
+      pushMessage('user', clean, source);
+      sync({ history: state.history });
+    }
   }
 
   function handleBridgeDelta(text) {
@@ -264,7 +278,7 @@ export function createClaudeOrchestrator(options = {}) {
     toolRunning.set(null);
     streamingText.set('');
     activeAssistantId = null;
-    sync({ loading: false, canReconnect: true });
+    sync({ loading: false, canReconnect: true, bubbleMessage: message || 'Bridge error' });
     setChatPaused(false);
     setVisualState('error');
   }
@@ -295,6 +309,7 @@ export function createClaudeOrchestrator(options = {}) {
     bridgeClient.onStatus = handleBridgeStatus;
     bridgeClient.onDelta = handleBridgeDelta;
     bridgeClient.onTool = handleBridgeTool;
+    bridgeClient.onUser = handleBridgeUser;
     bridgeClient.onError = handleBridgeError;
     bridgeClient.onDisconnect = handleBridgeDisconnect;
     bridgeAttached = true;
@@ -321,7 +336,7 @@ export function createClaudeOrchestrator(options = {}) {
     }
 
     const userRounds = state.history.filter((item) => item.role === 'user').length;
-    pushMessage('user', clean);
+    pushMessage('user', clean, 'browser');
 
     if (userRounds === 0) {
       sync({
@@ -432,7 +447,15 @@ export function createClaudeOrchestrator(options = {}) {
   }
 
   function getState() {
-    return state;
+    return {
+      ...state,
+      sessionStatus: getSessionStatus(get(connectionStatus), get(claudeStatus)),
+      bridgeStatus: get(connectionStatus),
+      claudeStatus: get(claudeStatus),
+      streamingText: get(streamingText),
+      toolRunning: get(toolRunning),
+      lastError: get(lastError)
+    };
   }
 
   restoreHistory();

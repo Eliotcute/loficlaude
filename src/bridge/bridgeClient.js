@@ -7,6 +7,7 @@ export class BridgeClient {
     this.onStatus = () => {};
     this.onDelta = () => {};
     this.onTool = () => {};
+    this.onUser = () => {};
     this.onError = () => {};
     this.onDisconnect = () => {};
   }
@@ -56,6 +57,11 @@ export class BridgeClient {
 
       if (payload.type === 'assistant_delta') {
         this.onDelta(payload.text ?? '');
+        return;
+      }
+
+      if (payload.type === 'user_message') {
+        this.onUser(payload.text ?? '', payload.source ?? 'unknown');
         return;
       }
 
