@@ -1,6 +1,6 @@
 # LoFiClaude v1.0 — Terminal Companion Implementation
 
-Read PRD_v1.0_Terminal_Companion.md for full context.
+Read `archive/prd/PRD_v1.0_Terminal_Companion.md` for full context.
 
 ## Build Order
 
