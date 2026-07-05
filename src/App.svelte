@@ -230,9 +230,9 @@
   }
 
   async function selectTrack(index) {
-    const normalizedIndex = normalizeTrackIndex(index);
+    const normalizedIndex = normalizeTrackIndex(index, PLAYLIST.length);
     player.currentTrackIndex.set(normalizedIndex);
-    player.currentTrackTitle.set(normalizeTrackTitle(normalizedIndex));
+    player.currentTrackTitle.set(normalizeTrackTitle(normalizedIndex, PLAYLIST));
 
     if (!$hasStarted) {
       await startExperience();
