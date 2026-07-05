@@ -11,8 +11,13 @@ export function setChatPaused(value) {
 }
 
 export function getPatrolBounds(width, height, playerExpanded) {
-  const playerClearance = playerExpanded ? 420 : 160;
-  const y = Math.max(Math.round(height * 0.56), height - playerClearance) - 20;
+  const collapsedPlayerHeight = 72;
+  const expandedPlayerHeight = 320;
+  const playerBottomGap = 20;
+  const spriteHeight = 96;
+  const playerHeight = playerExpanded ? expandedPlayerHeight : collapsedPlayerHeight;
+  const playerTop = height - playerHeight - playerBottomGap;
+  const y = Math.max(120, playerTop - spriteHeight + (playerExpanded ? 8 : 0));
 
   return {
     left: 32,

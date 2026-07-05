@@ -3,14 +3,11 @@ import { player } from '../stores/appState.js';
 const CUSTOM_TRACKS_STORAGE_KEY = 'loficlaude-custom-tracks';
 
 const BASE_PLAYLIST = [
-  { id: 'jfKfPfyJRdk', name: 'Lofi Girl', genre: 'lofi' },
-  { id: '5yx6BWlEVcY', name: 'Chillhop Radio', genre: 'chill' },
-  { id: 'DWcJFNfaw9c', name: 'Chillhop Music', genre: 'chill' },
-  { id: '7NOSDKb0HlU', name: 'Homework Radio', genre: 'lofi' },
-  { id: '4xDzrJKXOOY', name: 'Synthwave Boy', genre: 'synthwave' },
-  { id: 'lTRiuFIWV54', name: 'Jazz Vibes', genre: 'jazz' },
-  { id: '36YnV9STBqc', name: 'Ambient Space', genre: 'ambient' },
-  { id: '21qNxnCS8WU', name: 'Lofi Geek', genre: 'lofi' }
+  { id: 'jfKfPfyJRdk', name: 'Lofi Girl Radio', genre: 'lofi' },
+  { id: '5yx6BWlEVcY', name: 'Chillhop Lofi Radio', genre: 'lofi' },
+  { id: '7NOSDKb0HlU', name: 'Homework Lofi Radio', genre: 'lofi' },
+  { id: '21qNxnCS8WU', name: 'Lofi Geek Radio', genre: 'lofi' },
+  { id: 'DWcJFNfaw9c', name: 'Chillhop Beats', genre: 'lofi' }
 ];
 
 export const PLAYLIST = [...BASE_PLAYLIST];
