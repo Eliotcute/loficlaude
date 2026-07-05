@@ -5,6 +5,7 @@ const CLIENT_TYPES = {
 
 const SERVER_TYPES = {
   STATUS: 'status',
+  USER_MESSAGE: 'user_message',
   ASSISTANT_DELTA: 'assistant_delta',
   TOOL_RUNNING: 'tool_running',
   ERROR: 'error'

@@ -1,7 +1,7 @@
 const { spawn } = require('node:child_process');
 const { STATUS } = require('./protocol');
 
-function createClaudeSession({ onStatus, onDelta, onTool, onError, model, workspace }) {
+function createClaudeSession({ onStatus, onDelta, onTool, onUser, onError, model, workspace }) {
   const args = [
     '-p',
     '--input-format',
@@ -240,7 +240,7 @@ function createClaudeSession({ onStatus, onDelta, onTool, onError, model, worksp
   });
 
   return {
-    sendUserMessage(text) {
+    sendUserMessage(text, source = 'terminal') {
       const clean = `${text ?? ''}`.trim();
       if (closed || !clean || !child.stdin.writable) {
         return;
@@ -249,6 +249,9 @@ function createClaudeSession({ onStatus, onDelta, onTool, onError, model, worksp
       sawStreamDelta = false;
       sawToolThisTurn = false;
       emitStatus(STATUS.THINKING);
+      if (typeof onUser === 'function') {
+        onUser(clean, source);
+      }
 
       const payload = {
         type: 'user',

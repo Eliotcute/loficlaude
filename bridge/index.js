@@ -2,7 +2,7 @@ const { createBridgeServer } = require('./server');
 const { createClaudeSession } = require('./claude');
 const { createTokenManager } = require('./token');
 const { createSocketServer } = require('./socketServer');
-const { STATUS } = require('./protocol');
+const { SERVER_TYPES, STATUS } = require('./protocol');
 const fs = require('node:fs');
 const config = require('./config');
 
@@ -28,7 +28,7 @@ const socketServer = createSocketServer({
       return;
     }
 
-    activeSession.sendUserMessage(line);
+    activeSession.sendUserMessage(line, 'terminal');
   }
 });
 
@@ -36,6 +36,8 @@ function statusToText(status) {
   switch (status) {
     case STATUS.THINKING:
       return '[Thinking...]\n';
+    case STATUS.TALKING:
+      return '[Working...]\n';
     case STATUS.WORKING:
       return '[Working...]\n';
     case STATUS.BLOCKED:
@@ -75,6 +77,9 @@ try {
         onDelta: (text) => {
           onDelta(text);
           socketServer.broadcast(text);
+        },
+        onUser: (text, source) => {
+          bridgeServer.broadcast({ type: SERVER_TYPES.USER_MESSAGE, text, source });
         },
         onTool: (name) => {
           onTool(name);

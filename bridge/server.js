@@ -2,8 +2,9 @@ const { WebSocketServer } = require('ws');
 const { createClaudeSession } = require('./claude');
 const { CLIENT_TYPES, SERVER_TYPES, STATUS, safeParse, serialize } = require('./protocol');
 
-function createBridgeServer({ config, tokenManager, sessionFactory = createClaudeSession }) {
-  const wss = new WebSocketServer({
+function createBridgeServer({ config, tokenManager, sessionFactory = createClaudeSession, WebSocketServerImpl = WebSocketServer }) {
+  const authenticatedClients = new Set();
+  const wss = new WebSocketServerImpl({
     host: config.host,
     port: config.port
   });
@@ -30,6 +31,7 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
         onStatus: (value) => send({ type: SERVER_TYPES.STATUS, value }),
         onDelta: (text) => send({ type: SERVER_TYPES.ASSISTANT_DELTA, text }),
         onTool: (name) => send({ type: SERVER_TYPES.TOOL_RUNNING, name }),
+        onUser: (text, source) => send({ type: SERVER_TYPES.USER_MESSAGE, text, source }),
         onError: (message) => send({ type: SERVER_TYPES.ERROR, message }),
         model: config.defaultModel,
         workspace: config.workspace
@@ -60,6 +62,7 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
         }
 
         authenticated = true;
+        authenticatedClients.add(socket);
         clearTimeout(authTimer);
         ensureClaudeSession();
         send({ type: SERVER_TYPES.STATUS, value: STATUS.CONNECTED });
@@ -67,22 +70,33 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
       }
 
       if (data.type === CLIENT_TYPES.USER_MESSAGE) {
-        ensureClaudeSession().sendUserMessage(data.text);
+        ensureClaudeSession().sendUserMessage(data.text, 'browser');
       }
     });
 
     socket.on('close', () => {
       clearTimeout(authTimer);
+      authenticatedClients.delete(socket);
       claudeSession?.close();
     });
 
     socket.on('error', () => {
       clearTimeout(authTimer);
+      authenticatedClients.delete(socket);
       claudeSession?.close();
     });
   });
 
-  return wss;
+  function broadcast(payload) {
+    const serialized = serialize(payload);
+    for (const client of authenticatedClients) {
+      if (client.readyState === client.OPEN) {
+        client.send(serialized);
+      }
+    }
+  }
+
+  return Object.assign(wss, { broadcast });
 }
 
 module.exports = {
