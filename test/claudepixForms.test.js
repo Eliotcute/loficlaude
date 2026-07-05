@@ -12,42 +12,48 @@ import {
   getPaletteForForm
 } from '../src/canvas/claudepixForms.js';
 
-test('exports all 8 preset forms in the expected order', () => {
-  assert.equal(FORMS.length, 8);
+test('exports archive preset forms in the expected order', () => {
+  assert.equal(FORMS.length, 13);
   assert.deepEqual(
     FORMS.map((form) => form.id),
-    ['idle_breathe', 'idle_look_around', 'work_coding', 'work_think', 'nap', 'journal', 'dance_djmix', 'expression_sleep']
+    [
+      'idle_blink',
+      'idle_breathe',
+      'idle_look_around',
+      'work_coding',
+      'work_think',
+      'expression_sleep',
+      'expression_wink',
+      'expression_surprise',
+      'dance_sway',
+      'dance_bounce',
+      'dance_djmix',
+      'dance_sway_dj',
+      'dance_bounce_dj'
+    ]
   );
-  assert.deepEqual(FORM_NAMES, ['呼吸', '环顾四周', '编码', '思考', '小憩', '手账', '打碟', '睡觉']);
 });
 
-test('nap and journal have unique non-standing base grids with 4+ frames', () => {
-  const nap = getForm(4);
-  const journal = getForm(5);
-
-  assert.equal(nap.id, 'nap');
-  assert.equal(journal.id, 'journal');
-  assert.ok(nap.frames.length >= 4);
-  assert.ok(journal.frames.length >= 4);
-
-  assert.equal(nap.baseGrid.length, 20);
-  assert.equal(nap.baseGrid[10][3], 2);
-
-  assert.equal(journal.baseGrid.length, 20);
-  assert.equal(journal.baseGrid[11][5], 3);
-
-  const journalPalette = getPaletteForForm(5);
-  assert.equal(journalPalette[3], '#d4c9a8');
+test('forms have stable labels and accessible frames', () => {
+  assert.deepEqual(
+    FORM_NAMES,
+    ['眨眼', '呼吸', '环顾四周', '编码', '思考', '睡觉', '眨眼', '惊讶', '摇摆', '弹跳', '打碟', 'DJ 摇摆', 'DJ 弹跳']
+  );
+  assert.equal(getFormName(0), '眨眼');
+  assert.equal(getFormName(13), '眨眼');
+  assert.equal(getForm(-1).id, 'dance_bounce_dj');
+  assert.ok(getFormFrame(3, 0).hold > 0);
+  assert.ok(getFormFrame(10, 0).hold > 0);
 });
 
-test('normalizes form and frame lookup helpers', () => {
-  assert.equal(getFormName(8), '呼吸');
-  assert.equal(getForm(-1).id, 'expression_sleep');
-  assert.equal(getFormFrame(2, 4).hold, getFormFrame(2, 0).hold);
+test('preserves palette defaults and special palette flags', () => {
   assert.deepEqual(DEFAULT_PALETTE, {
     0: 'rgba(0,0,0,0)',
     1: '#CD7F6A',
     2: '#0f0f0f'
   });
-  assert.deepEqual(new Set(SPECIAL_PALETTE_FORM_IDS), new Set(['journal']));
+  assert.ok(Array.isArray(SPECIAL_PALETTE_FORM_IDS));
+  assert.deepEqual(SPECIAL_PALETTE_FORM_IDS, ['work_coding', 'dance_djmix', 'dance_sway_dj', 'dance_bounce_dj']);
+  assert.equal(getPaletteForForm(2)[1], '#CD7F6A');
+  assert.equal(getPaletteForForm(10)[1], '#CD7F6A');
 });
