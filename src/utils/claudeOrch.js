@@ -4,6 +4,7 @@ import { bridgeClient as sharedBridgeClient } from '../bridge/bridgeClient.js';
 import { FORMS } from '../canvas/claudepixForms.js';
 import { setChatPaused } from '../canvas/claudeMotion.js';
 import { claudeForm } from '../stores/appState.js';
+import { getCompanionStatusCopy } from './rituals.js';
 import {
   claudeStatus,
   connectionStatus,
@@ -35,6 +36,7 @@ const STATUS_VISUALS = {
 const DONE_TO_IDLE_DELAY_MS = 900;
 const CHAT_HISTORY_STORAGE_KEY = 'loficlaude-chat-history';
 const CHAT_HISTORY_MAX = 50;
+const IDLE_ACTIVITY_DELAY_MS = 1200;
 
 export function createClaudeOrchestrator(options = {}) {
   const {
@@ -63,6 +65,7 @@ export function createClaudeOrchestrator(options = {}) {
   let messageId = 0;
   let transientBubbleTimer = null;
   let doneVisualTimer = null;
+  let typingVisualTimer = null;
   let activeAssistantId = null;
 
   function clearTransientBubbleTimer() {
@@ -76,6 +79,13 @@ export function createClaudeOrchestrator(options = {}) {
     if (doneVisualTimer) {
       window.clearTimeout(doneVisualTimer);
       doneVisualTimer = null;
+    }
+  }
+
+  function clearTypingVisualTimer() {
+    if (typingVisualTimer) {
+      window.clearTimeout(typingVisualTimer);
+      typingVisualTimer = null;
     }
   }
 
@@ -172,6 +182,53 @@ export function createClaudeOrchestrator(options = {}) {
 
   function closePanel() {
     return sync({ panelOpen: false });
+  }
+
+  function openPanel() {
+    closeBubble();
+    return sync({ panelOpen: true });
+  }
+
+  function markUserTyping() {
+    clearTypingVisualTimer();
+    setVisualState('talking');
+    sync({ bubbleMessage: getCompanionStatusCopy('typing') });
+
+    if (typeof window === 'undefined') {
+      return state;
+    }
+
+    typingVisualTimer = window.setTimeout(() => {
+      typingVisualTimer = null;
+      if (!state.loading && get(connectionStatus) === 'connected') {
+        setVisualState('connected');
+      }
+    }, IDLE_ACTIVITY_DELAY_MS);
+
+    return state;
+  }
+
+  function markListening() {
+    if (!state.loading) {
+      setVisualState('talking');
+      sync({ bubbleMessage: getCompanionStatusCopy('listening') });
+    }
+    return state;
+  }
+
+  function markResting() {
+    if (!state.loading) {
+      setVisualState('disconnected');
+      sync({ bubbleMessage: getCompanionStatusCopy('resting'), bubbleVisible: !state.panelOpen, bubblePassive: true });
+    }
+    return state;
+  }
+
+  function markActive() {
+    if (!state.loading) {
+      setVisualState(get(connectionStatus) === 'connected' ? 'connected' : 'disconnected');
+    }
+    return state;
   }
 
   function pushMessage(role, text, source = role === 'user' ? 'browser' : 'assistant') {
@@ -335,30 +392,21 @@ export function createClaudeOrchestrator(options = {}) {
       return state;
     }
 
-    const userRounds = state.history.filter((item) => item.role === 'user').length;
     pushMessage('user', clean, 'browser');
 
-    if (userRounds === 0) {
-      sync({
-        history: state.history,
-        loading: true,
-        canReconnect: false,
-        panelOpen: false,
-        bubbleVisible: true,
-        bubblePassive: false
-      });
-    } else {
-      sync({
-        history: state.history,
-        loading: true,
-        canReconnect: false,
-        panelOpen: true,
-        bubbleVisible: false,
-        bubblePassive: false
-      });
-    }
+    clearTypingVisualTimer();
+    sync({
+      history: state.history,
+      loading: true,
+      canReconnect: false,
+      panelOpen: false,
+      bubbleVisible: true,
+      bubblePassive: false,
+      bubbleMessage: clean
+    });
 
-    setVisualState('talking');
+    setVisualState('thinking');
+    sync({ bubbleMessage: getCompanionStatusCopy('thinking') });
     setChatPaused(true);
 
     if (get(connectionStatus) === 'connected') {
@@ -478,6 +526,11 @@ export function createClaudeOrchestrator(options = {}) {
     showAmbientComment,
     showTransientBubble,
     sendMessage,
-    handleClick
+    handleClick,
+    openPanel,
+    markUserTyping,
+    markListening,
+    markResting,
+    markActive
   };
 }

@@ -13,6 +13,7 @@ const BASE_PLAYLIST = [
 export const PLAYLIST = [...BASE_PLAYLIST];
 
 const API_TIMEOUT_MS = 15000;
+const PLAYER_READY_TIMEOUT_MS = 9000;
 let youtubeApiPromise;
 
 function readCustomTracks() {
@@ -105,6 +106,7 @@ function loadYouTubeApi() {
     }
 
     timeoutId = window.setTimeout(() => {
+      youtubeApiPromise = null;
       reject(new Error('Timed out while loading YouTube iframe API.'));
     }, API_TIMEOUT_MS);
   });
@@ -182,14 +184,19 @@ export class YouTubePlayer {
     player.currentTrackIndex.set(this.currentIndex);
     player.currentTrackTitle.set(initialTrack.name);
 
-    this.readyPromise = loadYouTubeApi().then(
-      () =>
-        new Promise((resolve, reject) => {
+    this.readyPromise = loadYouTubeApi()
+      .then(
+        () =>
+          new Promise((resolve, reject) => {
           const mountNode = document.getElementById(this.mountId);
           if (!mountNode) {
             reject(new Error(`Missing YouTube player mount node: #${this.mountId}`));
             return;
           }
+
+          let readyTimeoutId = window.setTimeout(() => {
+            reject(new Error('Timed out while preparing YouTube player.'));
+          }, PLAYER_READY_TIMEOUT_MS);
 
           this.instance = new window.YT.Player(this.mountId, {
             width: '1',
@@ -205,6 +212,8 @@ export class YouTubePlayer {
             },
             events: {
               onReady: () => {
+                window.clearTimeout(readyTimeoutId);
+                readyTimeoutId = null;
                 this.ready = true;
                 player.error.set(null);
                 player.isLoading.set(false);
@@ -215,16 +224,17 @@ export class YouTubePlayer {
             }
           });
         })
-    );
+      )
+      .catch((error) => {
+        this.readyPromise = null;
+        this.handleError({ data: error?.message ?? 'init_failed' });
+        return undefined;
+      });
 
     return this.readyPromise;
   }
 
   loadTrack(index, options = {}) {
-    if (!this.ready || !this.instance) {
-      return;
-    }
-
     if (!options.fromFailover) {
       this.skipCount = 0;
     }
@@ -237,6 +247,10 @@ export class YouTubePlayer {
     player.currentTrackTitle.set(nextTrack.name);
     player.isLoading.set(true);
     player.error.set(null);
+
+    if (!this.ready || !this.instance) {
+      return;
+    }
 
     this.instance.loadVideoById(nextTrack.id);
   }
@@ -291,6 +305,9 @@ export class YouTubePlayer {
       player.error.set(`YouTube playback error (${event?.data ?? 'unknown'}), skipping...`);
       window.setTimeout(() => {
         this.loadTrack(this.currentIndex + 1, { fromFailover: true });
+        if (!this.ready) {
+          this.init(this.currentIndex);
+        }
       }, 250);
       return;
     }

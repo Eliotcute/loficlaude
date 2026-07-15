@@ -15,7 +15,8 @@ export const player = {
 export const rain = {
   volume: writable(60), // 0-100
   type: writable('medium'), // light | medium | heavy
-  muted: writable(false)
+  muted: writable(false),
+  sourceStatus: writable('idle') // idle | rainy-mood | fallback
 };
 
 export const scene = {
@@ -28,6 +29,13 @@ export const timer = {
   active: writable(false),
   minutes: writable(45),
   remainingSeconds: writable(2700)
+};
+
+export const focus = {
+  todayMinutes: writable(0),
+  streakDays: writable(0),
+  sessionCount: writable(0),
+  lastSummary: writable('')
 };
 
 export const claude = {

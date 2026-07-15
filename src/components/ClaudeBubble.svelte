@@ -15,15 +15,19 @@
   let root;
   let inputValue = '';
   let autoCloseTimeout;
-  let errorHint = '';
-  let shakeError = false;
-  let shakeTimer;
 
   $: bridgeConnected = $connectionStatus === 'connected';
   $: fallbackWidth = typeof window === 'undefined' ? 1024 : window.innerWidth;
   $: fallbackHeight = typeof window === 'undefined' ? 768 : window.innerHeight;
   $: anchorX = Number.isFinite(anchor?.x) && anchor.x > 0 ? anchor.x : Math.round(fallbackWidth / 2);
   $: anchorY = Number.isFinite(anchor?.y) && anchor.y > 0 ? anchor.y : Math.round(fallbackHeight * 0.58);
+  $: latestAssistant = [...messages].reverse().find((item) => item.role === 'assistant');
+  $: latestUser = [...messages].reverse().find((item) => item.role === 'user');
+  $: activeAssistant = activeAssistantId
+    ? messages.find((item) => item.id === activeAssistantId && item.role === 'assistant')
+    : null;
+  $: bubbleText = activeAssistant?.text || (loading ? message : latestAssistant?.text || message);
+  $: userPreview = latestUser?.text ?? '';
 
   function close() {
     dispatch('close');
@@ -42,20 +46,6 @@
     autoCloseTimeout = setTimeout(() => {
       close();
     }, 8000);
-  }
-
-  function triggerDisconnectedError() {
-    errorHint = 'Bridge not connected — run `node bridge/index.js`';
-    shakeError = true;
-
-    if (shakeTimer) {
-      window.clearTimeout(shakeTimer);
-    }
-
-    shakeTimer = window.setTimeout(() => {
-      shakeError = false;
-      shakeTimer = null;
-    }, 500);
   }
 
   function handleDocumentPointerDown(event) {
@@ -85,14 +75,12 @@
       return;
     }
 
-    if (!bridgeConnected) {
-      triggerDisconnectedError();
-      return;
-    }
-
-    errorHint = '';
     dispatch('send', { text });
     inputValue = '';
+  }
+
+  function handleOpenHistory() {
+    dispatch('history');
   }
 
   onMount(() => {
@@ -104,9 +92,6 @@
   onDestroy(() => {
     if (autoCloseTimeout) {
       clearTimeout(autoCloseTimeout);
-    }
-    if (shakeTimer) {
-      clearTimeout(shakeTimer);
     }
     window.removeEventListener('pointerdown', handleDocumentPointerDown);
     window.removeEventListener('keydown', handleDocumentKeydown);
@@ -120,7 +105,6 @@
 <div
   bind:this={root}
   class:passive
-  class:shake-error={shakeError}
   class="claude-bubble"
   role="dialog"
   aria-label="Claude bubble"
@@ -128,42 +112,42 @@
 >
   <div class="bubble-header">
     <span>{title}</span>
-    <button type="button" class="close-btn" aria-label="Close Claude bubble" on:click={close}>×</button>
+    <div class="bubble-actions">
+      {#if messages.length > 0}
+        <button type="button" class="icon-btn" aria-label="Open Claude history" on:click={handleOpenHistory}>≡</button>
+      {/if}
+      <button type="button" class="close-btn" aria-label="Close Claude bubble" on:click={close}>×</button>
+    </div>
   </div>
 
   <div class="message-list" aria-live="polite">
-    {#if messages.length === 0}
-      <div class="message">{message}</div>
-    {:else}
-      {#each messages as item (item.id)}
-        <div class="line" class:user={item.role === 'user'}>
-          <span class="role">{item.role === 'user' ? 'You' : 'Claude'}</span>
-          {#if loading && item.role === 'assistant' && item.id === activeAssistantId}
-            <p class="streaming-text">{item.text}</p>
-          {:else}
-            <p>{item.text}</p>
-          {/if}
-        </div>
-      {/each}
+    {#if userPreview && loading}
+      <div class="line user">
+        <span class="role">You</span>
+        <p>{userPreview}</p>
+      </div>
     {/if}
+    <div class="message" class:streaming-text={loading && activeAssistantId}>{bubbleText}</div>
   </div>
 
-  {#if errorHint}
-    <div class="bridge-hint error" role="status">{errorHint}</div>
-  {:else if !bridgeConnected}
-    <div class="bridge-hint">Bridge not connected</div>
+  {#if !bridgeConnected}
+    <div class="bridge-hint">Local companion mode</div>
   {/if}
 
   <form class="input-row" on:submit={handleSubmit}>
     <input
       type="text"
-      placeholder={bridgeConnected ? 'ask something...' : 'Start the local bridge to chat'}
+      placeholder={bridgeConnected ? 'ask something...' : 'ask locally...'}
       value={inputValue}
       on:input={(event) => {
         inputValue = event.currentTarget.value;
-        if (errorHint) {
-          errorHint = '';
+        if (inputValue.trim()) {
+          dispatch('typing');
         }
+        resetPassiveTimeout();
+      }}
+      on:focus={() => {
+        dispatch('listening');
         resetPassiveTimeout();
       }}
       aria-label="Ask Claude"
@@ -194,12 +178,6 @@
     animation: bubble-in 140ms ease, bubble-fade 320ms ease 7.68s forwards;
   }
 
-  .claude-bubble.shake-error {
-    animation: bubble-in 140ms ease, bubble-shake 500ms ease;
-    border-color: rgba(185, 70, 70, 0.72);
-    box-shadow: 0 0 0 2px rgba(185, 70, 70, 0.22), 0 14px 30px rgba(0, 0, 0, 0.3);
-  }
-
   .bubble-header {
     display: flex;
     align-items: center;
@@ -209,6 +187,13 @@
     font-weight: 600;
   }
 
+  .bubble-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .icon-btn,
   .close-btn {
     border: 0;
     background: transparent;
@@ -219,19 +204,27 @@
     padding: 0;
   }
 
+  .icon-btn {
+    font-size: 14px;
+    width: 20px;
+    height: 20px;
+  }
+
   .message-list {
     display: grid;
     gap: 6px;
-    max-height: 200px;
-    overflow-y: auto;
     margin-bottom: 8px;
-    padding-right: 2px;
+    overflow: hidden;
   }
 
   .message {
     font-size: 13px;
     line-height: 1.35;
     min-height: 18px;
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
   .line {
@@ -276,10 +269,6 @@
     color: rgba(17, 17, 17, 0.62);
   }
 
-  .bridge-hint.error {
-    color: #8f3b3b;
-  }
-
   .input-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -303,7 +292,8 @@
 
   input:focus-visible,
   .send-btn:focus-visible,
-  .close-btn:focus-visible {
+  .close-btn:focus-visible,
+  .icon-btn:focus-visible {
     outline: 1px solid rgba(17, 17, 17, 0.38);
     outline-offset: 2px;
   }
@@ -354,25 +344,6 @@
     to {
       opacity: 1;
       transform: translateY(0);
-    }
-  }
-
-  @keyframes bubble-shake {
-    0%,
-    100% {
-      transform: translateX(0);
-    }
-    20% {
-      transform: translateX(-4px);
-    }
-    40% {
-      transform: translateX(4px);
-    }
-    60% {
-      transform: translateX(-3px);
-    }
-    80% {
-      transform: translateX(3px);
     }
   }
 

@@ -15,8 +15,11 @@
   const trackTitle = player.currentTrackTitle;
   const playerIsPlaying = player.isPlaying;
   const currentTrackIndex = player.currentTrackIndex;
+  const playerIsLoading = player.isLoading;
+  const playerError = player.error;
   const rainType = rain.type;
   const rainVolume = rain.volume;
+  const rainSourceStatus = rain.sourceStatus;
   const timerMinutes = timer.minutes;
   const timerActive = timer.active;
 
@@ -60,6 +63,8 @@
     title={$trackTitle}
     genreColor={genreColor}
     isPlaying={$playerIsPlaying}
+    isLoading={$playerIsLoading}
+    error={$playerError}
     rainType={$rainType}
     rainVolume={$rainVolume}
     timerMinutes={$timerMinutes}
@@ -112,15 +117,24 @@
   {#if customError}
     <p class="custom-error" role="status">{customError}</p>
   {/if}
+
+  {#if $playerError}
+    <p class="player-status error" role="status">{$playerError}</p>
+  {:else if $playerIsLoading}
+    <p class="player-status" role="status">loading audio...</p>
+  {:else if $rainSourceStatus === 'fallback'}
+    <p class="player-status" role="status">rain fallback active</p>
+  {/if}
 </div>
 
 <style>
   .player-shell {
-    position: absolute;
-    left: 50%;
+    position: fixed;
+    left: 0;
+    right: 0;
     bottom: 20px;
-    transform: translateX(-50%);
     width: min(820px, calc(100% - 32px));
+    margin-inline: auto;
     z-index: 5;
     transition: opacity 180ms ease;
     display: grid;
@@ -128,6 +142,9 @@
   }
 
   .custom-row {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 8px);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -166,8 +183,49 @@
 
   .custom-error {
     margin: 0;
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 42px);
     text-align: right;
     color: #e19c91;
     font-size: 11px;
+  }
+
+  .player-status {
+    margin: 0;
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 8px);
+    max-width: min(420px, calc(100vw - 32px));
+    color: rgba(232, 224, 216, 0.74);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+  }
+
+  .player-status.error {
+    color: #e19c91;
+  }
+
+  @media (max-width: 520px) {
+    .player-shell {
+      bottom: 14px;
+      width: min(calc(100% - 24px), 420px);
+    }
+
+    .custom-row {
+      left: 0;
+      justify-content: center;
+    }
+
+    .player-status {
+      right: 0;
+      bottom: calc(100% + 42px);
+      text-align: center;
+      margin-inline: auto;
+    }
+
+    .custom-form input {
+      width: min(220px, calc(100vw - 118px));
+    }
   }
 </style>

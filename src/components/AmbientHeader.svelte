@@ -2,7 +2,7 @@
   import ScenePopover from './ScenePopover.svelte';
   import TimerPopover from './TimerPopover.svelte';
   import ConnectionStatus from './ConnectionStatus.svelte';
-  import { scene, timer, timerLabel, ui, uiChromeOpacity } from '../stores/appState.js';
+  import { focus, scene, timer, timerLabel, ui, uiChromeOpacity } from '../stores/appState.js';
 
   const SCENES = [
     { key: 'lofiNight', icon: '🌙' },
@@ -11,6 +11,9 @@
   ];
   const currentScene = scene.current;
   const sceneLocked = scene.locked;
+  const focusTodayMinutes = focus.todayMinutes;
+  const focusStreakDays = focus.streakDays;
+  const focusLastSummary = focus.lastSummary;
   const scenePopoverOpen = ui.scenePopoverOpen;
   const timerPopoverOpen = ui.timerPopoverOpen;
 
@@ -78,6 +81,12 @@
   <div class="header-status" aria-label="Current scene and timer">
     <ConnectionStatus />
 
+    {#if $focusTodayMinutes > 0 || $focusStreakDays > 1}
+      <div class="focus-chip" aria-label="Today focus minutes" title={$focusLastSummary}>
+        {$focusTodayMinutes}m{#if $focusStreakDays > 1}<span>{$focusStreakDays}d</span>{/if}
+      </div>
+    {/if}
+
     <div class="scene-picker">
       <button type="button" class="icon-button" aria-label="Open scene picker" on:click={toggleScenePopover}>
         {sceneIcon}
@@ -137,6 +146,27 @@
     position: relative;
   }
 
+  .focus-chip {
+    height: 36px;
+    min-width: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1px solid rgba(116, 143, 212, 0.28);
+    border-radius: 8px;
+    background: rgba(8, 10, 12, 0.58);
+    color: rgba(232, 224, 216, 0.82);
+    backdrop-filter: blur(12px);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+  }
+
+  .focus-chip span {
+    color: rgba(232, 224, 216, 0.56);
+    font-size: 10px;
+  }
+
   .icon-button,
   .timer-button {
     border: 1px solid rgba(212, 165, 116, 0.28);
@@ -179,5 +209,36 @@
     height: 36px;
     padding: 0 10px;
     font-size: 14px;
+  }
+
+  @media (max-width: 560px) {
+    .ambient-header {
+      padding: 14px 12px;
+      align-items: flex-start;
+    }
+
+    h1 {
+      max-width: 112px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    .header-status {
+      gap: 6px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      max-width: calc(100vw - 132px);
+    }
+
+    .focus-chip,
+    .icon-button,
+    .timer-button {
+      height: 32px;
+    }
+
+    .timer-button {
+      min-width: 70px;
+      font-size: 12px;
+    }
   }
 </style>

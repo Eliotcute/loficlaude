@@ -4,6 +4,12 @@ const PRESETS = {
   heavy: { cutoff: 2200, gain: 0.5 }
 };
 
+export const RAINY_MOOD_SOURCES = [
+  { src: 'https://media.rainymood.com/0.m4a', type: 'audio/mp4' },
+  { src: 'https://media.rainymood.com/0.ogg', type: 'audio/ogg' },
+  { src: 'https://media.rainymood.com/0.mp3', type: 'audio/mpeg' }
+];
+
 let sharedCtx = null;
 let sharedNoiseBuffer = null;
 
@@ -13,7 +19,8 @@ function normalizeType(type) {
 
 function getContext() {
   if (!sharedCtx) {
-    const AudioContextImpl = window.AudioContext || window.webkitAudioContext;
+    const runtime = typeof window === 'undefined' ? globalThis : window;
+    const AudioContextImpl = runtime.AudioContext || runtime.webkitAudioContext;
     sharedCtx = new AudioContextImpl();
   }
   return sharedCtx;
@@ -55,7 +62,11 @@ function getNoiseBuffer(ctx) {
 }
 
 export class RainPlayer {
-  constructor() {
+  constructor(options = {}) {
+    this.AudioElement = options.AudioElement ?? globalThis.Audio;
+    this.sources = options.sources ?? RAINY_MOOD_SOURCES;
+    this.onStatus = options.onStatus ?? (() => {});
+    this.audio = null;
     this.ctx = null;
     this.source = null;
     this.gain = null;
@@ -63,12 +74,65 @@ export class RainPlayer {
     this.type = 'medium';
     this.volume = 60;
     this.started = false;
+    this.shouldPlay = false;
+    this.usingFallback = false;
+    this.fadeTimer = null;
     this.presetGain = PRESETS.medium.gain;
   }
 
   async init(initialType = 'medium', autoplay = false) {
-    this.ctx = getContext();
     this.type = normalizeType(initialType);
+    this.presetGain = PRESETS[this.type].gain;
+
+    if (!this.audio && this.AudioElement) {
+      this.audio = new this.AudioElement();
+      this.audio.loop = true;
+      this.audio.preload = 'none';
+      this.audio.crossOrigin = 'anonymous';
+      this.audio.addEventListener?.('error', () => {
+        if (this.started && !this.usingFallback) {
+          this.startFallback(true);
+        }
+      });
+      this.loadRainyMoodSources();
+      this.setVolume(this.volume);
+      this.onStatus('rainy-mood');
+    } else if (!this.audio) {
+      this.startFallback(false);
+    }
+
+    if (autoplay) {
+      await this.play();
+    }
+  }
+
+  loadRainyMoodSources() {
+    if (!this.audio || this.sources.length === 0) {
+      return;
+    }
+
+    const doc = typeof document === 'undefined' ? null : document;
+    if (!doc || !this.audio.appendChild) {
+      this.audio.src = this.sources[0].src;
+      return;
+    }
+
+    for (const sourceConfig of this.sources) {
+      const sourceNode = doc.createElement('source');
+      sourceNode.src = sourceConfig.src;
+      sourceNode.type = sourceConfig.type;
+      this.audio.appendChild(sourceNode);
+    }
+  }
+
+  startFallback(autoplay = false) {
+    if (this.usingFallback) {
+      return;
+    }
+
+    this.usingFallback = true;
+    this.onStatus('fallback');
+    this.ctx = getContext();
     this.source = this.ctx.createBufferSource();
     this.source.buffer = getNoiseBuffer(this.ctx);
     this.source.loop = true;
@@ -86,7 +150,7 @@ export class RainPlayer {
     this.setVolume(this.volume);
 
     if (autoplay) {
-      await this.play();
+      this.playFallback();
     }
   }
 
@@ -107,7 +171,7 @@ export class RainPlayer {
   }
 
   loadType(type) {
-    if (this.started) {
+    if (this.usingFallback && this.started) {
       this.applyPreset(type);
       return;
     }
@@ -122,14 +186,45 @@ export class RainPlayer {
 
     if (this.gain && this.ctx) {
       this.gain.gain.setValueAtTime((clamped / 100) * this.presetGain, this.ctx.currentTime);
+      if (clamped === 0 && this.ctx.state === 'running') {
+        this.ctx.suspend?.();
+      } else if (clamped > 0 && this.shouldPlay && this.ctx.state === 'suspended') {
+        this.ctx.resume?.();
+      }
+    }
+
+    if (this.audio) {
+      this.audio.volume = clamped / 100;
+      if (clamped === 0) {
+        this.audio.pause?.();
+      } else if (this.shouldPlay && !this.usingFallback) {
+        this.audio.play?.().catch?.(() => {});
+      }
     }
   }
 
   async play() {
+    this.shouldPlay = true;
+    if (this.audio && !this.usingFallback) {
+      try {
+        this.audio.volume = this.volume / 100;
+        await this.audio.play();
+        this.started = true;
+        return;
+      } catch {
+        this.startFallback(false);
+      }
+    }
+
+    await this.playFallback();
+  }
+
+  async playFallback() {
     if (!this.ctx || !this.source || this.started) {
       if (this.ctx?.state === 'suspended') {
         await this.ctx.resume();
       }
+      this.setVolume(this.volume);
       return;
     }
 
@@ -142,6 +237,22 @@ export class RainPlayer {
   }
 
   fadeOut(ms = 3000) {
+    this.shouldPlay = false;
+    if (this.audio && !this.usingFallback) {
+      this.clearFadeTimer();
+      const startVolume = this.audio.volume;
+      const startedAt = Date.now();
+      this.fadeTimer = setInterval(() => {
+        const progress = Math.min(1, (Date.now() - startedAt) / ms);
+        this.audio.volume = startVolume * (1 - progress);
+        if (progress >= 1) {
+          this.clearFadeTimer();
+          this.audio.pause?.();
+        }
+      }, 100);
+      return;
+    }
+
     if (!this.gain || !this.ctx) {
       return;
     }
@@ -152,7 +263,22 @@ export class RainPlayer {
     this.gain.gain.linearRampToValueAtTime(0, now + ms / 1000);
   }
 
+  clearFadeTimer() {
+    if (this.fadeTimer) {
+      clearInterval(this.fadeTimer);
+      this.fadeTimer = null;
+    }
+  }
+
   destroy() {
+    this.clearFadeTimer();
+    this.shouldPlay = false;
+    if (this.audio) {
+      this.audio.pause?.();
+      this.audio.removeAttribute?.('src');
+      this.audio.load?.();
+    }
+
     if (this.source) {
       try {
         if (this.started) {
@@ -171,6 +297,8 @@ export class RainPlayer {
     this.gain = null;
     this.filter = null;
     this.ctx = null;
+    this.audio = null;
     this.started = false;
+    this.usingFallback = false;
   }
 }

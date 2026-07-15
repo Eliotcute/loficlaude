@@ -6,6 +6,8 @@
   export let title = '';
   export let genreColor = '#d4a574';
   export let isPlaying = false;
+  export let isLoading = false;
+  export let error = null;
   export let rainType = 'medium';
   export let rainVolume = 60;
   export let timerMinutes = 45;
@@ -134,23 +136,23 @@
   >
     <span class="brand">Claude FM</span>
     <span class="actions">
-      <span class="pause">{isPlaying ? '❚❚' : '▶'}</span>
+      <span class="pause">{isLoading ? '...' : isPlaying ? '❚❚' : '▶'}</span>
       <span>🌧{rainVolume}</span>
     </span>
   </button>
 
   {#if expanded}
     <div class="expanded-body" transition:slide={{ duration: 250, easing: (t) => 1 - Math.pow(1 - t, 3) }}>
-      <div class="label">NOW PLAYING</div>
+      <div class="label">{error ? 'AUDIO NOTICE' : isLoading ? 'LOADING AUDIO' : 'NOW PLAYING'}</div>
       <div class="title-row">
         <span class="genre-dot" style={`background: ${genreColor};`} aria-hidden="true"></span>
-        <div class="title" title={title}>{title}</div>
+        <div class="title" title={error || title}>{error || title}</div>
       </div>
 
       <div class="controls">
         <button type="button" aria-label="Previous track" on:click={() => forward('previous')}>◀</button>
         <button type="button" aria-label={isPlaying ? 'Pause track' : 'Play track'} on:click={() => forward('toggleplay')}>
-          {isPlaying ? '❚❚' : '▶'}
+          {isLoading ? '...' : isPlaying ? '❚❚' : '▶'}
         </button>
         <button type="button" aria-label="Next track" on:click={() => forward('next')}>▶</button>
       </div>

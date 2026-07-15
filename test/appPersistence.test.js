@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { normalizeTrackIndex, normalizeTrackTitle, parsePersistedSnapshot } from '../src/utils/appPersistence.js';
+import {
+  createFocusSnapshot,
+  createStartedFocusSnapshot,
+  normalizeTrackIndex,
+  normalizeTrackTitle,
+  parseFocusSnapshot,
+  parsePersistedSnapshot
+} from '../src/utils/appPersistence.js';
 
 const playlist = [
   { name: 'First track' },
@@ -37,4 +44,39 @@ test('parses persisted snapshots with playlist-aware track data', () => {
   assert.equal(restored.rainType, 'medium');
   assert.equal(restored.currentScene, 'lofiNight');
   assert.equal(restored.sceneLocked, true);
+});
+
+test('parses daily focus snapshots for the current day only', () => {
+  const today = new Date('2026-07-15T08:00:00.000Z');
+  const yesterday = new Date('2026-07-14T08:00:00.000Z');
+
+  const current = parseFocusSnapshot(JSON.stringify(createFocusSnapshot({ todayMinutes: 42 }, today)), today);
+  assert.equal(current.todayMinutes, 42);
+
+  const stale = parseFocusSnapshot(JSON.stringify(createFocusSnapshot({ todayMinutes: 42 }, yesterday)), today);
+  assert.equal(stale.todayMinutes, 0);
+  assert.equal(stale.date, '2026-07-14');
+});
+
+test('normalizes invalid focus minutes to zero', () => {
+  const today = new Date('2026-07-15T08:00:00.000Z');
+  const parsed = parseFocusSnapshot(JSON.stringify({ date: '2026-07-15', todayMinutes: 'not-a-number' }), today);
+
+  assert.equal(parsed.todayMinutes, 0);
+});
+
+test('advances focus streak and session count when a room starts', () => {
+  const today = new Date('2026-07-15T08:00:00.000Z');
+  const yesterday = new Date('2026-07-14T08:00:00.000Z');
+  const previous = createFocusSnapshot({ todayMinutes: 12, streakDays: 2, sessionCount: 3 }, yesterday);
+
+  const started = createStartedFocusSnapshot(previous, today);
+
+  assert.equal(started.todayMinutes, 0);
+  assert.equal(started.streakDays, 3);
+  assert.equal(started.sessionCount, 1);
+
+  const secondStart = createStartedFocusSnapshot(started, today);
+  assert.equal(secondStart.streakDays, 3);
+  assert.equal(secondStart.sessionCount, 2);
 });

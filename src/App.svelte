@@ -9,7 +9,7 @@
   import AsciiBackground from './components/AsciiBackground.svelte';
   import ClaudeSprite from './components/ClaudeSprite.svelte';
   import { PLAYLIST, addCustomTrackFromUrl } from './audio/YouTubePlayer.js';
-  import { hasStarted, uiMode, player, rain, scene, timer, claude, ui } from './stores/appState.js';
+  import { hasStarted, uiMode, player, rain, scene, timer, claude, ui, focus } from './stores/appState.js';
   import { bridgeClient } from './bridge/bridgeClient.js';
   import { connectionStatus } from './stores/bridgeState.js';
   import { setupKeyboardShortcuts } from './utils/keyboard.js';
@@ -18,13 +18,18 @@
   import { createClaudeOrchestrator } from './utils/claudeOrch.js';
   import {
     PERSIST_KEY,
+    FOCUS_KEY,
     SCENE_ORDER,
+    createFocusSnapshot,
+    createStartedFocusSnapshot,
     createPersistedSnapshot,
     getSceneName,
     normalizeTrackIndex,
     normalizeTrackTitle,
+    parseFocusSnapshot,
     parsePersistedSnapshot
   } from './utils/appPersistence.js';
+  import { createSessionSummary, getStartRitualCopy } from './utils/rituals.js';
 
   const currentTrackIndex = player.currentTrackIndex;
   const currentTrackTitle = player.currentTrackTitle;
@@ -44,6 +49,8 @@
   let unsubscribePersist = [];
   let unsubscribeScene;
   let teardownKeyboard = () => {};
+  let focusInterval;
+  let restoredFocusSnapshot = null;
   let lastNonZeroRainVolume = 60;
 
   let claudeBubbleVisible = false;
@@ -66,7 +73,8 @@
     getRainMuted: () => $rainMuted,
     getRainVolume: () => $rainVolume,
     onLoading: (loading) => player.isLoading.set(loading),
-    onError: (error) => player.error.set(error)
+    onError: (error) => player.error.set(error),
+    onRainStatus: (status) => rain.sourceStatus.set(status)
   });
 
   const claudeOrch = createClaudeOrchestrator({
@@ -90,12 +98,16 @@
     onIdleStart: (idleSince) => {
       ui.idleSince.set(idleSince);
       uiMode.set('focus');
+      claudeOrch.markResting();
+      refreshClaudeState();
     },
     onIdleEnd: () => {
       ui.idleSince.set(null);
       if ($hasStarted) {
         uiMode.set('default');
       }
+      claudeOrch.markActive();
+      refreshClaudeState();
     },
     isSceneLocked: () => $sceneLocked,
     onSceneRotate: rotateScene
@@ -128,6 +140,24 @@
 
   function closeClaudePanel() {
     claudeOrch.closePanel();
+    refreshClaudeState();
+  }
+
+  function openClaudeHistory() {
+    setActivityState();
+    claudeOrch.openPanel();
+    refreshClaudeState();
+  }
+
+  function markClaudeTyping() {
+    setActivityState();
+    claudeOrch.markUserTyping();
+    refreshClaudeState();
+  }
+
+  function markClaudeListening() {
+    setActivityState();
+    claudeOrch.markListening();
     refreshClaudeState();
   }
 
@@ -169,6 +199,30 @@
     window.localStorage.setItem(PERSIST_KEY, JSON.stringify(snapshot));
   }
 
+  function applyFocusSnapshot(snapshot) {
+    focus.todayMinutes.set(snapshot.todayMinutes);
+    focus.streakDays.set(snapshot.streakDays);
+    focus.sessionCount.set(snapshot.sessionCount);
+    focus.lastSummary.set(snapshot.lastSummary);
+  }
+
+  function getCurrentFocusSnapshot() {
+    return createFocusSnapshot({
+      todayMinutes: get(focus.todayMinutes),
+      streakDays: get(focus.streakDays),
+      sessionCount: get(focus.sessionCount),
+      lastSummary: get(focus.lastSummary)
+    });
+  }
+
+  function persistFocusSnapshot(snapshot = getCurrentFocusSnapshot()) {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(FOCUS_KEY, JSON.stringify(snapshot));
+  }
+
   function restoreState() {
     if (typeof window === 'undefined') {
       return;
@@ -199,19 +253,43 @@
       }
     }
 
+    const storedFocus = window.localStorage.getItem(FOCUS_KEY);
+    try {
+      restoredFocusSnapshot = parseFocusSnapshot(storedFocus);
+      applyFocusSnapshot(restoredFocusSnapshot);
+    } catch {
+      restoredFocusSnapshot = createFocusSnapshot({});
+      applyFocusSnapshot(restoredFocusSnapshot);
+    }
+
     suppressPersist = false;
   }
 
   async function startExperience() {
+    const wasStarted = get(hasStarted);
     hasStarted.set(true);
     uiMode.set('default');
     claude.mood.set(get(connectionStatus) === 'connected' ? 'idle' : 'sleep');
     setActivityState();
-    await audio.initAudio(true);
-    if (get(connectionStatus) !== 'connected') {
-      claudeOrch.showTransientBubble('Start the local bridge to wake me up', 2800);
-      refreshClaudeState();
+
+    if (!wasStarted) {
+      const startedFocus = createStartedFocusSnapshot(restoredFocusSnapshot ?? getCurrentFocusSnapshot());
+      restoredFocusSnapshot = startedFocus;
+      applyFocusSnapshot(startedFocus);
+      persistFocusSnapshot(startedFocus);
     }
+
+    await audio.initAudio(true);
+    claudeOrch.showTransientBubble(
+      getStartRitualCopy({
+        sceneName: getSceneName($currentScene),
+        trackName: $currentTrackTitle,
+        rainVolume: $rainVolume,
+        streakDays: get(focus.streakDays)
+      }),
+      4200
+    );
+    refreshClaudeState();
   }
 
   async function togglePlayback() {
@@ -324,6 +402,15 @@
     timer.remainingSeconds.set(0);
     claude.mood.set('sleep');
 
+    const summary = createSessionSummary({
+      minutes: get(timer.minutes),
+      sceneName: getSceneName($currentScene)
+    });
+    if (summary) {
+      focus.lastSummary.set(summary);
+      persistFocusSnapshot(createFocusSnapshot({ ...getCurrentFocusSnapshot(), lastSummary: summary }));
+    }
+
     const { youtubePlayer, rainPlayer } = audio.getPlayers();
     youtubePlayer?.pause();
     rainPlayer?.fadeOut(4000);
@@ -333,6 +420,12 @@
 
   async function sendClaudeMessage(text) {
     await claudeOrch.sendMessage(text);
+    refreshClaudeState();
+  }
+
+  async function sendClaudePanelMessage(text) {
+    await claudeOrch.sendMessage(text);
+    claudeOrch.openPanel();
     refreshClaudeState();
   }
 
@@ -347,6 +440,24 @@
 
   function startSceneRotation() {
     session.resetSceneRotation();
+  }
+
+  function startFocusTracking() {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    focusInterval = window.setInterval(() => {
+      if (!get(hasStarted)) {
+        return;
+      }
+
+      focus.todayMinutes.update((minutes) => {
+        const nextMinutes = minutes + 1;
+        persistFocusSnapshot(createFocusSnapshot({ ...getCurrentFocusSnapshot(), todayMinutes: nextMinutes }));
+        return nextMinutes;
+      });
+    }, 60000);
   }
 
   onMount(() => {
@@ -396,10 +507,14 @@
 
     startIdleTimer();
     startSceneRotation();
+    startFocusTracking();
 
     return () => {
       session.stop();
       teardownKeyboard();
+      if (focusInterval) {
+        window.clearInterval(focusInterval);
+      }
       unsubscribePersist.forEach((unsubscribe) => unsubscribe());
       unsubscribePersist = [];
       unsubscribeScene?.();
@@ -415,7 +530,11 @@
 
     {#if !$hasStarted}
       <div class="empty-state" aria-live="polite">
-        <p class="empty-state-text">Claude is asleep until bridge connects</p>
+        <div class="empty-state-copy">
+          <p class="empty-state-title">LoFiClaude</p>
+          <p class="empty-state-text">会陪你工作的 AI 桌面房间</p>
+          <p class="empty-state-hint">可先进入本地陪伴模式，稍后再连接 Claude</p>
+        </div>
         <button type="button" class="start-overlay" on:click={startExperience}>
           Start room
         </button>
@@ -448,6 +567,9 @@
       loading={claudeLoading}
       on:close={closeClaudeBubble}
       on:send={(event) => sendClaudeMessage(event.detail.text)}
+      on:history={openClaudeHistory}
+      on:typing={markClaudeTyping}
+      on:listening={markClaudeListening}
     />
   {/if}
 
@@ -463,7 +585,7 @@
       toolRunning={claudeToolRunning}
       lastError={claudeLastError}
       on:close={closeClaudePanel}
-      on:send={(event) => sendClaudeMessage(event.detail.text)}
+      on:send={(event) => sendClaudePanelMessage(event.detail.text)}
       on:reconnect={reconnectClaudeBridge}
     />
   {/if}
@@ -487,14 +609,35 @@
     position: absolute;
     inset: 0;
     z-index: 7;
-    display: grid;
-    place-items: center;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: max(160px, 24vh);
     pointer-events: none;
   }
 
-  .empty-state-text {
+  .empty-state-copy {
     margin: 0;
-    padding-bottom: 92px;
+    display: grid;
+    gap: 8px;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+  }
+
+  .empty-state-title,
+  .empty-state-text,
+  .empty-state-hint {
+    margin: 0;
+  }
+
+  .empty-state-title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 14px;
+    color: rgba(231, 219, 202, 0.92);
+  }
+
+  .empty-state-text {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 12px;
     color: rgba(231, 219, 202, 0.82);
@@ -502,7 +645,27 @@
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   }
 
+  .empty-state-hint {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: rgba(231, 219, 202, 0.58);
+  }
+
   .start-overlay {
     pointer-events: auto;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: max(108px, 16vh);
+  }
+
+  @media (max-height: 760px) {
+    .empty-state {
+      padding-bottom: 150px;
+    }
+
+    .start-overlay {
+      padding-bottom: 96px;
+    }
   }
 </style>

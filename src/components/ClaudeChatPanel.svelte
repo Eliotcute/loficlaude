@@ -141,14 +141,14 @@
       value={inputValue}
       on:input={(event) => (inputValue = event.currentTarget.value)}
       aria-label="Ask Claude"
-      disabled={loading || !bridgeConnected}
+      disabled={loading}
     />
-    <button type="submit" disabled={loading || !bridgeConnected || !inputValue.trim()}>{loading ? '...' : 'Send'}</button>
+    <button type="submit" disabled={loading || !inputValue.trim()}>{loading ? '...' : 'Send'}</button>
   </form>
 
   {#if !bridgeConnected}
     <div class="hint-row">
-      <p class="hint">Start the local bridge to wake Claude.</p>
+      <p class="hint">Local companion mode. Connect bridge for Claude CLI.</p>
       {#if canReconnect}
         <button type="button" class="reconnect-btn" on:click={handleReconnect}>Reconnect</button>
       {/if}

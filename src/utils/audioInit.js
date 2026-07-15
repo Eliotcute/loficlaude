@@ -9,7 +9,8 @@ export function createAudioInitializer(options = {}) {
     getRainMuted = () => false,
     getRainVolume = () => 60,
     onLoading = () => {},
-    onError = () => {}
+    onError = () => {},
+    onRainStatus = () => {}
   } = options;
 
   let youtubePlayer;
@@ -38,7 +39,7 @@ export function createAudioInitializer(options = {}) {
         youtubePlayer = new YouTubePlayer({ mountId });
       }
       if (!rainPlayer) {
-        rainPlayer = new RainPlayer();
+        rainPlayer = new RainPlayer({ onStatus: onRainStatus });
       }
 
       await youtubePlayer.init(getCurrentTrackIndex());
