@@ -14,6 +14,23 @@ export const SCENE_NAME_MAP = {
 };
 export const SCENE_ORDER = ['lofiNight', 'softRain', 'starDrift'];
 
+export function readStorageValue(storage, key) {
+  try {
+    return storage?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeStorageValue(storage, key, value) {
+  try {
+    storage?.setItem(key, value);
+    return Boolean(storage);
+  } catch {
+    return false;
+  }
+}
+
 export function getSceneName(key) {
   return SCENE_NAME_MAP[key] ?? DEFAULT_SCENE_NAME;
 }
@@ -95,7 +112,7 @@ export function createStartedFocusSnapshot(snapshot, date = new Date()) {
   const sameDay = snapshot?.date === today;
   const continuedStreak = sameDay || snapshot?.date === yesterday;
   const streakDays = sameDay
-    ? snapshot.streakDays
+    ? Math.max(1, normalizeNonNegativeInteger(snapshot?.streakDays))
     : continuedStreak
       ? normalizeNonNegativeInteger(snapshot?.streakDays) + 1
       : 1;
@@ -109,6 +126,15 @@ export function createStartedFocusSnapshot(snapshot, date = new Date()) {
     },
     date
   );
+}
+
+export function incrementActiveFocusMinute(snapshot, date = new Date()) {
+  const today = getFocusDateKey(date);
+  const current = snapshot?.date === today
+    ? createFocusSnapshot(snapshot, date)
+    : createStartedFocusSnapshot(snapshot, date);
+
+  return createFocusSnapshot({ ...current, todayMinutes: current.todayMinutes + 1 }, date);
 }
 
 export function parsePersistedSnapshot(raw, playlist) {

@@ -2,6 +2,8 @@
 
 LoFiClaude is a local ambient room with a pixel Claude companion, lofi playback, rain audio, and a WebSocket bridge to a local Claude CLI session.
 
+Current product and implementation documents are indexed in [`docs/README.md`](docs/README.md). The system diagram is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 ## What
 
 - Svelte 5 + Vite single-screen room
@@ -34,10 +36,11 @@ The bridge listens on `ws://localhost:9120`.
 
 1. Start the room.
 2. Start the bridge server.
-3. Enter the bridge token in the header.
-4. Click `Connect`.
+3. Open the bridge settings button in the header.
+4. Enter the bridge token.
+5. Click `Connect`.
 
-When connected, chat input unlocks and Claude streams responses through the bridge.
+When connected, Claude streams responses through the bridge. Without the bridge, the room and local companion chat remain available.
 
 ## Shortcuts
 
@@ -52,13 +55,9 @@ When connected, chat input unlocks and Claude streams responses through the brid
 
 ## Audio
 
-Rain files must exist in `public/`:
+The room initializes YouTube lofi playback and local Web Audio rain only after a user gesture. `Start room` is the intended first gesture.
 
-- `rain-light.mp3`
-- `rain-medium.mp3`
-- `rain-heavy.mp3`
-
-Audio and the YouTube iframe are initialized only after a user gesture. `Start room` is the intended first gesture.
+Local generated rain is the V1.1 default because authorization for the remote source is not confirmed. `RainPlayer` retains an explicit remote mode with automatic local fallback for testing and future authorized use. Rain intensity changes the effective gain and filter shape.
 
 ## Troubleshooting
 
@@ -66,9 +65,9 @@ Audio and the YouTube iframe are initialized only after a user gesture. `Start r
   start `bridge/` with `npm start`, then reconnect.
 - Token rejected:
   verify the token expected by the bridge server.
-- Chat input disabled:
-  the bridge is not connected yet.
+- Bridge chat unavailable:
+  local companion chat still works; start `bridge/` and reconnect for Claude CLI streaming.
 - No rain audio:
-  check that the rain files exist under `public/`.
+  set rain volume above 0, then retry Start room; the local Web Audio source requires a user gesture.
 - No Claude API key:
-  ambient fallback text still works, but bridge mode is the primary path.
+  ambient fallback text still works; the Bridge remains an optional enhancement for Claude CLI streaming.

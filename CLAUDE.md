@@ -14,7 +14,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 LoFiClaude is an immersive pixel-art lofi ambient room app. **Svelte 5 SPA**, no router.
 
-**Stack:** Svelte 5 (`mount()` API) + Vite + Canvas 2D + Howler.js + YouTube iframe API
+**Stack:** Svelte 5 (`mount()` API) + Vite + Canvas 2D + Web Audio API + YouTube iframe API
+
+Current document authority is `docs/LoFiClaude_PRODUCT_DIRECTION.md` -> `docs/LoFiClaude_PRD_V1.1.0.md` -> `docs/ARCHITECTURE.md` -> root `HANDOFF.md`. Files under `archive/` are historical.
 
 ### State management
 
@@ -28,7 +30,7 @@ LoFiClaude is an immersive pixel-art lofi ambient room app. **Svelte 5 SPA**, no
 - `uiMode` — derived from idle detection: default/focus/interactive/companion/sleep
 - `claudeForm` — Current claudepix form index (0-12)
 
-State persists to localStorage on every change of player/rain/scene state.
+Room, rain, scene, focus, and bounded chat history persist to LocalStorage. The Bridge token persists only for the current browser session in SessionStorage.
 
 ### Canvas rendering (src/canvas/)
 
@@ -50,8 +52,8 @@ Renders a 24×24 canvas element positioned absolutely via `translate3d`. Uses `c
 
 ### Audio system (`src/audio/`)
 
-- **`YouTubePlayer.js`** — Wraps YouTube iframe API. 3-track playlist, auto-skips on error/end. `loadYouTubeApi()` does the global script injection + Promise-based init.
-- **`RainPlayer.js`** — Howler.js with 3 `public/rain-*.mp3` files. `loadType()` crossfades by creating a new Howl and stopping the old one. `fadeOut(ms)` for timer end.
+- **`YouTubePlayer.js`** — Wraps YouTube iframe API. 5-track base playlist plus local custom tracks, auto-skips on error/end. `loadYouTubeApi()` does the global script injection + Promise-based init.
+- **`RainPlayer.js`** — Web Audio pink-noise rain with light/medium/heavy filter and gain presets. The app defaults to this local source; an explicit remote mode retains automatic fallback. `fadeOut(ms)` suspends output after timer end and can resume the existing source.
 
 ### AI companion (`src/ai/ClaudeChat.js`)
 
@@ -59,7 +61,7 @@ Direct fetch to Anthropic API (`claude-3-5-haiku-latest`). Falls back to Chinese
 
 ### Orchestration (`src/utils/`)
 
-- **`claudeOrch.js`** — Claude chat orchestrator. Manages bubble/panel state machine (1-2 rounds = bubble, 2+ rounds = chat panel), ambient comments on track change/first open/timer ending.
+- **`claudeOrch.js`** — Claude chat orchestrator. Manages bubble/panel state, Bridge status, seven companion states, ambient comments, and 7-day/50-entry local history with a public clear action.
 - **`session.js`** — 1-second interval controller. Tick: decrements timer, detects idle (5s threshold), rotates scene every 5 min.
 - **`audioInit.js`** — Lazy initializes YouTubePlayer + RainPlayer, returns getPlayers().
 - **`keyboard.js`** — Global keydown listener, skips when typing in input/textarea.

@@ -81,9 +81,9 @@
   <div class="header-status" aria-label="Current scene and timer">
     <ConnectionStatus />
 
-    {#if $focusTodayMinutes > 0 || $focusStreakDays > 1}
+    {#if $focusTodayMinutes > 0 || $focusStreakDays > 0}
       <div class="focus-chip" aria-label="Today focus minutes" title={$focusLastSummary}>
-        {$focusTodayMinutes}m{#if $focusStreakDays > 1}<span>{$focusStreakDays}d</span>{/if}
+        {$focusTodayMinutes}m{#if $focusStreakDays > 0}<span>{$focusStreakDays}d</span>{/if}
       </div>
     {/if}
 
@@ -218,16 +218,16 @@
     }
 
     h1 {
-      max-width: 112px;
+      font-size: 11px;
       line-height: 1.5;
-      overflow-wrap: anywhere;
+      white-space: nowrap;
     }
 
     .header-status {
       gap: 6px;
       justify-content: flex-end;
       flex-wrap: wrap;
-      max-width: calc(100vw - 132px);
+      max-width: calc(100vw - 116px);
     }
 
     .focus-chip,

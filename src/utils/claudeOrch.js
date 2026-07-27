@@ -21,21 +21,34 @@ const FORM_INDEX_BY_ID = FORMS.reduce((map, form, index) => {
 }, {});
 
 const STATUS_VISUALS = {
-  connecting: { mood: 'thinking', formId: 'work_think' },
-  connected: { mood: 'idle', formId: 'idle_breathe' },
+  idle: { mood: 'idle', formId: 'idle_breathe' },
+  listening: { mood: 'talk', formId: 'expression_wink' },
+  typing: { mood: 'talk', formId: 'expression_surprise' },
   thinking: { mood: 'thinking', formId: 'work_think' },
-  talking: { mood: 'talk', formId: 'expression_wink' },
-  delta: { mood: 'talk', formId: 'expression_wink' },
+  speaking: { mood: 'talk', formId: 'expression_wink' },
+  resting: { mood: 'sleep', formId: 'expression_sleep' },
+  error: { mood: 'blocked', formId: 'expression_surprise' },
   working: { mood: 'working', formId: 'work_coding' },
-  blocked: { mood: 'blocked', formId: 'work_think' },
-  done: { mood: 'happy', formId: 'dance_djmix' },
-  disconnected: { mood: 'sleep', formId: 'expression_sleep' },
-  error: { mood: 'sleep', formId: 'expression_sleep' }
+  done: { mood: 'happy', formId: 'dance_djmix' }
+};
+
+const BRIDGE_STATUS_STATE = {
+  connecting: 'thinking',
+  connected: 'idle',
+  thinking: 'thinking',
+  talking: 'speaking',
+  delta: 'speaking',
+  working: 'thinking',
+  blocked: 'error',
+  done: 'idle',
+  disconnected: 'resting',
+  error: 'error'
 };
 
 const DONE_TO_IDLE_DELAY_MS = 900;
 const CHAT_HISTORY_STORAGE_KEY = 'loficlaude-chat-history';
 const CHAT_HISTORY_MAX = 50;
+const CHAT_HISTORY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const IDLE_ACTIVITY_DELAY_MS = 1200;
 
 export function createClaudeOrchestrator(options = {}) {
@@ -59,7 +72,9 @@ export function createClaudeOrchestrator(options = {}) {
     loading: false,
     canReconnect: false,
     activeAssistantId: null,
-    history: []
+    history: [],
+    companionState: 'resting',
+    stateReason: 'initial'
   };
   let hasOpenedClaude = false;
   let messageId = 0;
@@ -128,15 +143,23 @@ export function createClaudeOrchestrator(options = {}) {
         return;
       }
 
+      const restoredAt = Date.now();
+      let migratedLegacyEntry = false;
       state.history = parsed
         .slice(-CHAT_HISTORY_MAX)
         .filter((item) => item && typeof item.id === 'number' && typeof item.role === 'string')
+        .filter((item) => !Number.isFinite(item.createdAt) || item.createdAt >= restoredAt - CHAT_HISTORY_MAX_AGE_MS)
         .map((item) => ({
           id: item.id,
           role: item.role,
           text: typeof item.text === 'string' ? item.text : '',
-          source: typeof item.source === 'string' ? item.source : 'browser'
+          source: typeof item.source === 'string' ? item.source : 'browser',
+          createdAt: Number.isFinite(item.createdAt) ? item.createdAt : (migratedLegacyEntry = true, restoredAt)
         }));
+
+      if (migratedLegacyEntry) {
+        persistHistory();
+      }
     } catch {
       // Ignore corrupt data.
     }
@@ -150,25 +173,48 @@ export function createClaudeOrchestrator(options = {}) {
     }
   }
 
-  function setVisualState(key) {
-    const visual = STATUS_VISUALS[key] ?? STATUS_VISUALS.connected;
+  function setVisualState(key, reason = key) {
+    const companionState = BRIDGE_STATUS_STATE[key] ?? key;
+    const visual = STATUS_VISUALS[key] ?? STATUS_VISUALS[companionState] ?? STATUS_VISUALS.idle;
 
     if (key !== 'done') {
       clearDoneVisualTimer();
     }
 
+    sync({ companionState, stateReason: reason });
     onMood(visual.mood);
     setFormById(visual.formId);
 
     if (key === 'done') {
       clearDoneVisualTimer();
+      if (typeof window === 'undefined') {
+        setVisualState('connected', 'done_return_idle');
+        return;
+      }
+
       doneVisualTimer = window.setTimeout(() => {
         doneVisualTimer = null;
         if (get(connectionStatus) === 'connected') {
-          setVisualState('connected');
+          setVisualState('connected', 'done_return_idle');
         }
       }, DONE_TO_IDLE_DELAY_MS);
     }
+  }
+
+  function completeLocalReply() {
+    setVisualState('speaking', 'local_reply');
+
+    if (typeof window === 'undefined') {
+      setVisualState('idle', 'local_reply_complete');
+      return;
+    }
+
+    doneVisualTimer = window.setTimeout(() => {
+      doneVisualTimer = null;
+      if (!state.loading) {
+        setVisualState('idle', 'local_reply_complete');
+      }
+    }, DONE_TO_IDLE_DELAY_MS);
   }
 
   function getDefaultPrompt() {
@@ -184,6 +230,18 @@ export function createClaudeOrchestrator(options = {}) {
     return sync({ panelOpen: false });
   }
 
+  function clearHistory() {
+    activeAssistantId = null;
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.removeItem(CHAT_HISTORY_STORAGE_KEY);
+      } catch {
+        // Ignore storage failures.
+      }
+    }
+    return sync({ history: [], bubbleMessage: getDefaultPrompt() });
+  }
+
   function openPanel() {
     closeBubble();
     return sync({ panelOpen: true });
@@ -191,7 +249,7 @@ export function createClaudeOrchestrator(options = {}) {
 
   function markUserTyping() {
     clearTypingVisualTimer();
-    setVisualState('talking');
+    setVisualState('typing', 'user_input');
     sync({ bubbleMessage: getCompanionStatusCopy('typing') });
 
     if (typeof window === 'undefined') {
@@ -200,8 +258,13 @@ export function createClaudeOrchestrator(options = {}) {
 
     typingVisualTimer = window.setTimeout(() => {
       typingVisualTimer = null;
-      if (!state.loading && get(connectionStatus) === 'connected') {
-        setVisualState('connected');
+      if (!state.loading) {
+        if (get(connectionStatus) === 'connected') {
+          setVisualState('connected', 'typing_idle');
+        } else {
+          setVisualState('resting', 'typing_resting');
+          sync({ bubbleMessage: getCompanionStatusCopy('resting') });
+        }
       }
     }, IDLE_ACTIVITY_DELAY_MS);
 
@@ -210,7 +273,7 @@ export function createClaudeOrchestrator(options = {}) {
 
   function markListening() {
     if (!state.loading) {
-      setVisualState('talking');
+      setVisualState('listening', 'input_focus');
       sync({ bubbleMessage: getCompanionStatusCopy('listening') });
     }
     return state;
@@ -218,7 +281,7 @@ export function createClaudeOrchestrator(options = {}) {
 
   function markResting() {
     if (!state.loading) {
-      setVisualState('disconnected');
+      setVisualState('resting', 'idle_timeout');
       sync({ bubbleMessage: getCompanionStatusCopy('resting'), bubbleVisible: !state.panelOpen, bubblePassive: true });
     }
     return state;
@@ -226,14 +289,14 @@ export function createClaudeOrchestrator(options = {}) {
 
   function markActive() {
     if (!state.loading) {
-      setVisualState(get(connectionStatus) === 'connected' ? 'connected' : 'disconnected');
+      setVisualState(get(connectionStatus) === 'connected' ? 'connected' : 'disconnected', 'activity');
     }
     return state;
   }
 
   function pushMessage(role, text, source = role === 'user' ? 'browser' : 'assistant') {
     messageId += 1;
-    const entry = { id: messageId, role, text, source };
+    const entry = { id: messageId, role, text, source, createdAt: Date.now() };
     state.history = [...state.history, entry].slice(-CHAT_HISTORY_MAX);
     persistHistory();
     return entry.id;
@@ -261,7 +324,9 @@ export function createClaudeOrchestrator(options = {}) {
       sync({
         loading: false,
         canReconnect: false,
-        bubbleMessage: getLastAssistantText() || getDefaultPrompt()
+        bubbleMessage: status === 'blocked'
+          ? getCompanionStatusCopy('error')
+          : getLastAssistantText() || getDefaultPrompt()
       });
     }
 
@@ -273,7 +338,7 @@ export function createClaudeOrchestrator(options = {}) {
       }
     }
 
-    setVisualState(status);
+    setVisualState(status, `bridge_${status}`);
   }
 
   function handleBridgeUser(text, source = 'unknown') {
@@ -312,7 +377,7 @@ export function createClaudeOrchestrator(options = {}) {
       bubblePassive: false
     });
 
-    setVisualState('delta');
+    setVisualState('delta', 'bridge_delta');
   }
 
   function handleBridgeTool(name) {
@@ -327,7 +392,7 @@ export function createClaudeOrchestrator(options = {}) {
       bubbleVisible: !state.panelOpen,
       bubblePassive: true
     });
-    setVisualState('working');
+    setVisualState('working', 'bridge_tool');
   }
 
   function handleBridgeError(message) {
@@ -337,7 +402,7 @@ export function createClaudeOrchestrator(options = {}) {
     activeAssistantId = null;
     sync({ loading: false, canReconnect: true, bubbleMessage: message || 'Bridge error' });
     setChatPaused(false);
-    setVisualState('error');
+    setVisualState('error', 'bridge_error');
   }
 
   function handleBridgeDisconnect() {
@@ -358,7 +423,7 @@ export function createClaudeOrchestrator(options = {}) {
       bubbleMessage: 'Reconnect to continue'
     });
     setChatPaused(false);
-    setVisualState('disconnected');
+    setVisualState('disconnected', 'bridge_disconnect');
   }
 
   function attachBridge(client = sharedBridgeClient) {
@@ -405,7 +470,7 @@ export function createClaudeOrchestrator(options = {}) {
       bubbleMessage: clean
     });
 
-    setVisualState('thinking');
+    setVisualState('thinking', 'user_submit');
     sync({ bubbleMessage: getCompanionStatusCopy('thinking') });
     setChatPaused(true);
 
@@ -426,7 +491,7 @@ export function createClaudeOrchestrator(options = {}) {
 
     pushMessage('assistant', reply);
     sync({ history: state.history, bubbleMessage: reply, loading: false });
-    onMood('nod');
+    completeLocalReply();
     if (typeof window !== 'undefined') {
       window.setTimeout(() => {
         setChatPaused(false);
@@ -444,7 +509,7 @@ export function createClaudeOrchestrator(options = {}) {
     lastError.set('');
     connectionStatus.set('connecting');
     sync({ loading: false, canReconnect: false });
-    setVisualState('connecting');
+    setVisualState('connecting', 'bridge_reconnect');
     return bridgeClient.connect();
   }
 
@@ -485,6 +550,10 @@ export function createClaudeOrchestrator(options = {}) {
       return state;
     }
 
+    if (transientBubbleTimer || state.loading || state.companionState !== 'idle') {
+      return sync({ bubbleVisible: true });
+    }
+
     if (state.history.length > 0) {
       sync({ bubbleMessage: getLastAssistantText() || getDefaultPrompt(), bubbleVisible: true, bubblePassive: false });
       return state;
@@ -522,6 +591,7 @@ export function createClaudeOrchestrator(options = {}) {
     getState,
     closeBubble,
     closePanel,
+    clearHistory,
     reconnectBridge,
     showAmbientComment,
     showTransientBubble,

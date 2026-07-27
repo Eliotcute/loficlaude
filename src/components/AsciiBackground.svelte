@@ -21,6 +21,8 @@
   let previousStaticCanvas = null;
   let previousParticles = [];
   let transitionStart = 0;
+  let reducedMotion = false;
+  let motionQuery;
   const transitionDuration = 1000;
 
   function drawSceneTo(canvasTarget, sceneKey) {
@@ -52,6 +54,39 @@
     staticCanvas.width = width;
     staticCanvas.height = height;
     rebuildStatic();
+    if (reducedMotion) {
+      drawReducedFrame();
+    }
+  }
+
+  function drawReducedFrame() {
+    if (!ctx || !staticCanvas) return;
+    if (scene !== activeScene) {
+      rebuildStatic();
+    }
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(staticCanvas, 0, 0);
+    drawAmbientParticles(ctx, particles);
+  }
+
+  function startAnimation() {
+    if (!reducedMotion && !animationFrame) {
+      lastTime = 0;
+      animationFrame = window.requestAnimationFrame(loop);
+    }
+  }
+
+  function handleMotionPreference(event) {
+    reducedMotion = event.matches;
+    if (reducedMotion) {
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame);
+        animationFrame = null;
+      }
+      drawReducedFrame();
+      return;
+    }
+    startAnimation();
   }
 
   function prepareCrossfade(nextScene) {
@@ -68,6 +103,12 @@
   }
 
   function loop(timestamp) {
+    animationFrame = null;
+    if (reducedMotion) {
+      drawReducedFrame();
+      return;
+    }
+
     const dt = Math.min(0.05, (timestamp - (lastTime || timestamp)) / 1000);
     lastTime = timestamp;
 
@@ -108,23 +149,31 @@
       }
     }
 
-    animationFrame = window.requestAnimationFrame(loop);
+    startAnimation();
   }
 
   onMount(() => {
     ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
     staticCanvas = document.createElement('canvas');
     staticCtx = staticCanvas.getContext('2d', { alpha: true });
+    motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    reducedMotion = motionQuery.matches;
 
     resize();
     window.addEventListener('resize', resize);
-    animationFrame = window.requestAnimationFrame(loop);
+    motionQuery.addEventListener?.('change', handleMotionPreference);
+    startAnimation();
 
     return () => {
       window.removeEventListener('resize', resize);
+      motionQuery?.removeEventListener?.('change', handleMotionPreference);
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
     };
   });
+
+  $: if (reducedMotion && ctx && scene !== activeScene) {
+    drawReducedFrame();
+  }
 </script>
 
 <div class="ascii-stage" class:working aria-label="ASCII animated background">
@@ -149,6 +198,7 @@
     image-rendering: pixelated;
     pointer-events: none;
     animation: pan-x 25s ease-in-out infinite alternate;
+    filter: brightness(1.12) saturate(1.08);
     will-change: transform;
   }
 
@@ -164,5 +214,13 @@
   .working .ascii-background {
     filter: brightness(1.08) saturate(1.1);
     transition: filter 0.5s ease;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ascii-background {
+      animation: none;
+      transform: none;
+      transition: none;
+    }
   }
 </style>

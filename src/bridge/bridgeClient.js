@@ -87,7 +87,11 @@ export class BridgeClient {
     return true;
   }
 
-  disconnect() {
+  disconnect(options = {}) {
+    if (options.clearToken) {
+      this.token = '';
+    }
+
     if (!this.socket) {
       this.onDisconnect();
       return;

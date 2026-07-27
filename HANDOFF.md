@@ -1,94 +1,41 @@
-# LoFiClaude — Handoff
+# LoFiClaude Handoff
 
-> 最后更新：2026-05-24
-> 当前版本：v1.0.0
-> 分支：`master`
-> 项目目录：`/Users/lieliot/Documents/eliot-codex/loficlaude`
+> 最后更新：2026-07-28
+> 当前版本：V1.1.0
+> 分支：`codex/core-reliability`
 
-## 项目一句话
+## 当前目标
 
-一个在 ASCII 雨夜里陪你和本地 Claude 一起编码的 lofi 空间。浏览器和终端是同一个 Claude 的两个窗口。
+以 `docs/LoFiClaude_PRODUCT_DIRECTION.md` 为产品方向，以 `docs/LoFiClaude_PRD_V1.1.0.md` 为实施和验收依据，完成 V1.1 可靠性、状态表达、隐私边界和发布 QA。
 
-## 版本标签
+## 已完成
 
-```bash
-git checkout v0.3   # Canvas MVP
-git checkout v0.4   # ASCII + DOM Claude
-git checkout v0.6   # ASCII 场景 + Bridge + Claude companion
-git checkout v0.7   # Bridge E2E + Streaming Companion
-git checkout v0.9   # Chat UX + Music + Forms
-git checkout v1.0   # Terminal Companion (最新)
-```
+- 雨声 fallback、强度、静音、淡出恢复和远端错误降级已修复。
+- YouTube API 可重试，频道失败会换台，全部失败后停止循环并允许手动重试。
+- Claw 七状态、离线 typing 回落、实时状态文案优先级和 reduced-motion 已补齐。
+- 首日 streak、跨午夜和后台/idle 专注累计已修复。
+- Bridge token 改为 SessionStorage，断开和清除时删除运行时及存储 token。
+- Bridge 设置移入设置层；Start room、移动布局和主场景层级已调整。
+- 聊天历史限制为 50 条/7 天，并提供清空入口。
+- V1.1 默认使用本地 Web Audio 雨声；远端模式保留为显式能力，不作为发布默认。
+- V1.0 PRD 和旧 Handoff 已归档，当前文档层级见 `docs/README.md`。
 
-## 当前状态
+## 关键决策
 
-### 已完成
+- 产品方向优先“可长期停留的陪伴房间”，Bridge 是增强层。
+- V1.1 不新增依赖，不接入远端分析，不默认使用授权未确认的雨声热链。
+- 对话历史只保存在本地；Bridge token 仅限当前浏览器 session。
 
-| 模块 | 说明 |
-|---|---|
-| ASCII 场景 | Canvas 3 场景（`lofi-night` / `soft-rain` / `star-drift`） |
-| 音乐 | 8 个 lofi 频道，带 genre 色点、自动切歌、兜底和自定义 URL |
-| 雨声 | Web Audio 程序化粉红噪声，3 档强度 |
-| Claude Sprite | DOM/CSS transform 定位，支持走动、点击、拖拽 |
-| 形态系统 | `claudepix` 形态库 + 三击切换 |
-| 播放器 | 底部 Drawer 的 collapsed / expanded 状态 |
-| 对话体验 | 气泡到面板的渐进式对话，支持流式输出 |
-| Bridge | WebSocket `:9120` + Unix Socket `/tmp/loficlaude-claude.sock` |
-| 终端 Companion | `socat` 直连 socket，实时双向 Claude 会话 |
-| 安全 | token 认证、socket 0600、无硬编码密钥 |
+## 验证状态
 
-## 最近修复
+- 全量测试：49 项，43 通过、0 失败；6 项 Unix Socket 测试因沙箱 `EPERM` 跳过。
+- 构建：`npm run build` 已通过；`git diff --check` 已通过。
+- 浏览器 QA：1440x900、768x1024、390x844 均无横向滚动或 Claw/文案重叠。
+- 交互 QA：Start 前设置可用、Esc 可关闭、历史可清空、token 未进入 URL 或 SessionStorage。
+- reduced-motion：两个 Canvas 在 1.5 秒采样内均保持静止。
+- Standards/Spec 双轴 review 已完成；存储降级和 summary 快照问题已修复。
 
-- 修掉了黑屏启动问题：`src/canvas/claudepixForms.js` 的浏览器侧加载改为 `import.meta.glob`，不再在前端路径里误走 `node:fs/promises`。
-- 修复后应用恢复渲染。
-- 验证结果：`npm test` 通过，`npm run build` 通过。
-- 浏览器复核结果：页面壳、Claude 按钮、头部、折叠态播放器都正常显示，控制台干净。
+## 下一步
 
-## 仍要盯的点
-
-- 底部播放器折叠 / 展开时，Claude 小人要始终站在播放器上方，并随播放器升降联动。
-- 这块在桌面和移动端都要再看一遍，尤其是展开播放器后的垂直定位。
-- Vite 还有警告，主要围绕 `new URL('../../archive/misc/claudepix_presets/', import.meta.url)` 和 `node:fs/promises` 路径提示；目前不影响运行，但后面可以继续收敛。
-
-## 技术栈
-
-| 层 | 技术 |
-|---|---|
-| 框架 | Svelte 5 + Vite 8 |
-| 音频 | YouTube iframe API + Web Audio API |
-| Canvas | 原生 Canvas 2D |
-| 桥接 | WebSocket + Unix Domain Socket |
-| 字体 | Press Start 2P + IBM Plex Mono |
-
-## 关键文件
-
-- `src/App.svelte`
-- `src/canvas/claudepixForms.js`
-- `src/canvas/claudeMotion.js`
-- `src/components/ClaudeSprite.svelte`
-- `src/components/ExpandedPlayer.svelte`
-- `src/components/ClaudeChatPanel.svelte`
-- `src/bridge/bridgeClient.js`
-- `src/stores/bridgeState.js`
-- `bridge/server.js`
-- `bridge/claude.js`
-- `test/claudepixForms.test.js`
-
-## 运行
-
-```bash
-cd /Users/lieliot/Documents/eliot-codex/loficlaude
-npm run dev
-node bridge/index.js
-npm test
-npm run build
-
-./bridge/loficlaude-cli
-# 或: socat - UNIX-CONNECT:/tmp/loficlaude-claude.sock
-```
-
-## 下一步建议
-
-1. 把 Claude 与播放器的垂直联动再做一次桌面 / 移动端 QA。
-2. 如果还要继续收尾，再清一轮 Vite 警告。
-3. 保持 lofi-only 播放列表，不再往电台里加非 lofi 频道。
+1. 发布前确认 Bridge 终端是否继续在启动时显示一次 token。
+2. 如需发布，再执行对应发布流程和真实 Unix Socket 环境验收。

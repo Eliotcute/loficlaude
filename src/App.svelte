@@ -24,10 +24,13 @@
     createStartedFocusSnapshot,
     createPersistedSnapshot,
     getSceneName,
+    incrementActiveFocusMinute,
     normalizeTrackIndex,
     normalizeTrackTitle,
     parseFocusSnapshot,
-    parsePersistedSnapshot
+    parsePersistedSnapshot,
+    readStorageValue,
+    writeStorageValue
   } from './utils/appPersistence.js';
   import { createSessionSummary, getStartRitualCopy } from './utils/rituals.js';
 
@@ -143,6 +146,11 @@
     refreshClaudeState();
   }
 
+  function clearClaudeHistory() {
+    claudeOrch.clearHistory();
+    refreshClaudeState();
+  }
+
   function openClaudeHistory() {
     setActivityState();
     claudeOrch.openPanel();
@@ -196,7 +204,7 @@
       sceneLocked: get(scene.locked)
     });
 
-    window.localStorage.setItem(PERSIST_KEY, JSON.stringify(snapshot));
+    writeStorageValue(window.localStorage, PERSIST_KEY, JSON.stringify(snapshot));
   }
 
   function applyFocusSnapshot(snapshot) {
@@ -220,7 +228,7 @@
       return;
     }
 
-    window.localStorage.setItem(FOCUS_KEY, JSON.stringify(snapshot));
+    writeStorageValue(window.localStorage, FOCUS_KEY, JSON.stringify(snapshot));
   }
 
   function restoreState() {
@@ -230,7 +238,7 @@
 
     suppressPersist = true;
 
-    const stored = window.localStorage.getItem(PERSIST_KEY);
+    const stored = readStorageValue(window.localStorage, PERSIST_KEY);
     if (stored) {
       try {
         const restored = parsePersistedSnapshot(stored, PLAYLIST);
@@ -253,7 +261,7 @@
       }
     }
 
-    const storedFocus = window.localStorage.getItem(FOCUS_KEY);
+    const storedFocus = readStorageValue(window.localStorage, FOCUS_KEY);
     try {
       restoredFocusSnapshot = parseFocusSnapshot(storedFocus);
       applyFocusSnapshot(restoredFocusSnapshot);
@@ -408,11 +416,12 @@
     });
     if (summary) {
       focus.lastSummary.set(summary);
-      persistFocusSnapshot(createFocusSnapshot({ ...getCurrentFocusSnapshot(), lastSummary: summary }));
+      restoredFocusSnapshot = createFocusSnapshot({ ...getCurrentFocusSnapshot(), lastSummary: summary });
+      persistFocusSnapshot(restoredFocusSnapshot);
     }
 
     const { youtubePlayer, rainPlayer } = audio.getPlayers();
-    youtubePlayer?.pause();
+    youtubePlayer?.fadeOut?.(4000);
     rainPlayer?.fadeOut(4000);
 
     claudeOrch.showAmbientComment('timerEnding', true).then(refreshClaudeState);
@@ -452,11 +461,14 @@
         return;
       }
 
-      focus.todayMinutes.update((minutes) => {
-        const nextMinutes = minutes + 1;
-        persistFocusSnapshot(createFocusSnapshot({ ...getCurrentFocusSnapshot(), todayMinutes: nextMinutes }));
-        return nextMinutes;
-      });
+      if (document.visibilityState === 'hidden' || get(ui.idleSince)) {
+        return;
+      }
+
+      const incremented = incrementActiveFocusMinute(restoredFocusSnapshot ?? getCurrentFocusSnapshot());
+      restoredFocusSnapshot = incremented;
+      applyFocusSnapshot(incremented);
+      persistFocusSnapshot(incremented);
     }, 60000);
   }
 
@@ -585,6 +597,7 @@
       toolRunning={claudeToolRunning}
       lastError={claudeLastError}
       on:close={closeClaudePanel}
+      on:clear={clearClaudeHistory}
       on:send={(event) => sendClaudePanelMessage(event.detail.text)}
       on:reconnect={reconnectClaudeBridge}
     />
@@ -609,10 +622,11 @@
     position: absolute;
     inset: 0;
     z-index: 7;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    padding-bottom: max(160px, 24vh);
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: 22px;
+    padding: 12vh 24px 24vh;
     pointer-events: none;
   }
 
@@ -653,19 +667,13 @@
 
   .start-overlay {
     pointer-events: auto;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    padding-bottom: max(108px, 16vh);
+    z-index: 1;
   }
 
   @media (max-height: 760px) {
     .empty-state {
-      padding-bottom: 150px;
-    }
-
-    .start-overlay {
-      padding-bottom: 96px;
+      padding: 96px 20px 150px;
+      gap: 16px;
     }
   }
 </style>

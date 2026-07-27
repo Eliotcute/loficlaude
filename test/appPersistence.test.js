@@ -4,10 +4,13 @@ import assert from 'node:assert/strict';
 import {
   createFocusSnapshot,
   createStartedFocusSnapshot,
+  incrementActiveFocusMinute,
   normalizeTrackIndex,
   normalizeTrackTitle,
   parseFocusSnapshot,
-  parsePersistedSnapshot
+  parsePersistedSnapshot,
+  readStorageValue,
+  writeStorageValue
 } from '../src/utils/appPersistence.js';
 
 const playlist = [
@@ -79,4 +82,40 @@ test('advances focus streak and session count when a room starts', () => {
   const secondStart = createStartedFocusSnapshot(started, today);
   assert.equal(secondStart.streakDays, 3);
   assert.equal(secondStart.sessionCount, 2);
+});
+
+test('starts the first same-day focus session at a one-day streak', () => {
+  const today = new Date('2026-07-15T08:00:00.000Z');
+  const restored = createFocusSnapshot({ todayMinutes: 0, streakDays: 0, sessionCount: 0 }, today);
+  const started = createStartedFocusSnapshot(restored, today);
+
+  assert.equal(started.streakDays, 1);
+  assert.equal(started.sessionCount, 1);
+});
+
+test('starts a new active focus day when a running room crosses midnight', () => {
+  const yesterday = new Date('2026-07-15T08:00:00.000Z');
+  const today = new Date('2026-07-16T08:00:00.000Z');
+  const previous = createFocusSnapshot({ todayMinutes: 42, streakDays: 2, sessionCount: 3 }, yesterday);
+
+  const incremented = incrementActiveFocusMinute(previous, today);
+
+  assert.equal(incremented.date, '2026-07-16');
+  assert.equal(incremented.todayMinutes, 1);
+  assert.equal(incremented.streakDays, 3);
+  assert.equal(incremented.sessionCount, 1);
+});
+
+test('storage helpers keep the current session usable when storage is blocked', () => {
+  const blockedStorage = {
+    getItem() {
+      throw new Error('blocked');
+    },
+    setItem() {
+      throw new Error('blocked');
+    }
+  };
+
+  assert.equal(readStorageValue(blockedStorage, 'room'), null);
+  assert.equal(writeStorageValue(blockedStorage, 'room', '{}'), false);
 });

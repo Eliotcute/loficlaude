@@ -29,6 +29,8 @@
   let lastDragClientX = 0;
   let wasDragged = false;
   let spriteRoot;
+  let reducedMotion = false;
+  let motionQuery;
 
   let motionState = {
     x: 0,
@@ -136,6 +138,12 @@
   }
 
   function tick(timestamp) {
+    raf = null;
+    if (reducedMotion) {
+      drawStaticForm();
+      return;
+    }
+
     const dt = Math.min(0.05, (timestamp - (lastTime || timestamp)) / 1000);
     lastTime = timestamp;
 
@@ -154,7 +162,34 @@
       const renderedForm = getAnimatedFormFrame(dt * 1000, $currentClaudeForm);
       drawGrid(renderedForm.grid, renderedForm.palette);
     }
-    raf = window.requestAnimationFrame(tick);
+    startAnimation();
+  }
+
+  function drawStaticForm() {
+    if (!spriteCtx) return;
+    resetFormAnimation($currentClaudeForm);
+    const form = getForm($currentClaudeForm);
+    drawGrid(form.frames[0]?.grid ?? form.baseGrid, getPaletteForForm($currentClaudeForm));
+  }
+
+  function startAnimation() {
+    if (!reducedMotion && !raf) {
+      lastTime = 0;
+      raf = window.requestAnimationFrame(tick);
+    }
+  }
+
+  function handleMotionPreference(event) {
+    reducedMotion = event.matches;
+    if (reducedMotion) {
+      if (raf) {
+        window.cancelAnimationFrame(raf);
+        raf = null;
+      }
+      drawStaticForm();
+      return;
+    }
+    startAnimation();
   }
 
   function handleSpriteClick() {
@@ -254,21 +289,29 @@
   onMount(() => {
     spriteCtx = spriteCanvas.getContext('2d', { alpha: true });
     motionState = createClaudeMotionState(window.innerWidth, window.innerHeight);
+    motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    reducedMotion = motionQuery.matches;
     resetFormAnimation($currentClaudeForm);
     syncStores();
-    const initialForm = getAnimatedFormFrame(0, $currentClaudeForm);
-    drawGrid(initialForm.grid, initialForm.palette);
+    drawStaticForm();
     window.addEventListener('resize', handleResize);
-    raf = window.requestAnimationFrame(tick);
+    motionQuery.addEventListener?.('change', handleMotionPreference);
+    startAnimation();
 
     return () => {
       cleanupDragListeners();
       window.removeEventListener('resize', handleResize);
+      motionQuery?.removeEventListener?.('change', handleMotionPreference);
       if (raf) window.cancelAnimationFrame(raf);
     };
   });
 
-  $: setModeFromMood($claudeMood);
+  $: {
+    setModeFromMood($claudeMood);
+    if (reducedMotion && spriteCtx && $currentClaudeForm >= 0) {
+      drawStaticForm();
+    }
+  }
 </script>
 
 <div
@@ -311,5 +354,11 @@
     outline: 1px solid rgba(212, 165, 116, 0.82);
     outline-offset: 5px;
     box-shadow: 0 0 0 5px rgba(212, 165, 116, 0.08);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .claude-sprite {
+      transition: none;
+    }
   }
 </style>

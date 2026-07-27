@@ -69,6 +69,10 @@
     dispatch('reconnect');
   }
 
+  function clearHistory() {
+    dispatch('clear');
+  }
+
   onMount(() => {
     window.addEventListener('keydown', handleDocumentKeydown);
     window.addEventListener('pointerdown', handleDocumentPointerDown);
@@ -93,10 +97,13 @@
       <div class="title">LoFiClaude</div>
       <div class="scene">{sceneName} · Claude {statusLabel}</div>
     </div>
-    <div class="status-chip" class:connected={currentStatus === 'connected'} class:working={currentStatus === 'working'}>
-      {bridgeStatus}
+    <div class="panel-actions">
+      <div class="status-chip" class:connected={currentStatus === 'connected'} class:working={currentStatus === 'working'}>
+        {bridgeStatus}
+      </div>
+      <button type="button" class="clear-btn" disabled={loading || recentMessages.length === 0} on:click={clearHistory}>Clear</button>
+      <button type="button" class="close-btn" aria-label="Close chat panel" on:click={close}>×</button>
     </div>
-    <button type="button" class="close-btn" aria-label="Close chat panel" on:click={close}>×</button>
   </header>
 
   <div class="messages" aria-live="polite">
@@ -202,6 +209,18 @@
   .status-chip.working {
     color: #e4c189;
     border-color: rgba(212, 165, 116, 0.42);
+  }
+
+  .panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .clear-btn {
+    height: 32px;
+    padding: 0 9px;
+    font-size: 10px;
   }
 
   .title {
@@ -377,10 +396,11 @@
   @media (max-width: 640px) {
     .chat-panel {
       top: 72px;
+      bottom: 84px;
       right: 12px;
       left: 12px;
       width: auto;
-      max-height: calc(100vh - 104px);
+      max-height: none;
     }
 
     .panel-header {

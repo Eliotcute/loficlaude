@@ -7,15 +7,39 @@
 
   let copied = false;
   let copiedTimer = null;
+  let settingsOpen = false;
 
   function connect() {
+    const token = get(bridgeToken).trim();
+    if (!token) {
+      settingsOpen = true;
+      connectionStatus.set('disconnected');
+      lastError.set('Bridge token required');
+      return;
+    }
+
     lastError.set('');
     connectionStatus.set('connecting');
-    bridgeClient.connect(get(bridgeToken));
+    if (!bridgeClient.connect(token)) {
+      connectionStatus.set('disconnected');
+    }
   }
 
   function disconnect() {
-    bridgeClient.disconnect();
+    bridgeClient.disconnect({ clearToken: true });
+    bridgeToken.set('');
+  }
+
+  function clearToken() {
+    bridgeClient.disconnect({ clearToken: true });
+    bridgeToken.set('');
+    lastError.set('');
+  }
+
+  function handleWindowKeydown(event) {
+    if (event.key === 'Escape' && settingsOpen) {
+      settingsOpen = false;
+    }
   }
 
   async function copyCommand() {
@@ -49,19 +73,42 @@
   $: statusDetail = isConnected ? `bridge ready · ${$claudeStatus}` : 'bridge offline';
 </script>
 
+<svelte:window on:keydown={handleWindowKeydown} />
+
 <div class="connection-status">
   <div class="status-row">
     <span class="status-dot" class:online={isConnected} aria-hidden="true"></span>
     <span class="status-label">{statusLabel}</span>
     <span class="status-sub">{statusDetail}</span>
-    <input type="password" placeholder="bridge token" bind:value={$bridgeToken} aria-label="Bridge token" />
+    <button
+      type="button"
+      class="settings-btn"
+      aria-label="Bridge settings"
+      aria-expanded={settingsOpen}
+      aria-controls="bridge-settings-panel"
+      on:click={() => (settingsOpen = !settingsOpen)}
+    >⚙</button>
     <button type="button" on:click={isConnected ? disconnect : connect}>{isConnected ? 'Disconnect' : 'Connect'}</button>
   </div>
 
-  {#if !isConnected}
-    <div class="command-row">
-      <input class="cmd" type="text" readonly value={BRIDGE_CMD} aria-label="Start bridge command" />
-      <button type="button" class="copy-btn" on:click={copyCommand}>{copied ? 'Copied' : 'Copy'}</button>
+  {#if settingsOpen}
+    <div id="bridge-settings-panel" class="settings-panel" role="dialog" aria-label="Bridge settings">
+      <div class="settings-header">
+        <span>Bridge settings</span>
+        <button type="button" class="close-btn" aria-label="Close bridge settings" on:click={() => (settingsOpen = false)}>×</button>
+      </div>
+
+      <div class="token-row">
+        <input type="password" placeholder="bridge token" bind:value={$bridgeToken} aria-label="Bridge token" />
+        <button type="button" on:click={clearToken} disabled={!$bridgeToken.trim()}>Clear</button>
+      </div>
+
+      {#if !isConnected}
+        <div class="command-row">
+          <input class="cmd" type="text" readonly value={BRIDGE_CMD} aria-label="Start bridge command" />
+          <button type="button" class="copy-btn" on:click={copyCommand}>{copied ? 'Copied' : 'Copy'}</button>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -72,21 +119,48 @@
 
 <style>
   .connection-status {
+    position: relative;
     display: grid;
     gap: 6px;
-    min-width: min(420px, calc(100vw - 48px));
+    min-width: 0;
   }
 
   .status-row,
+  .token-row,
   .command-row {
     display: grid;
-    grid-template-columns: auto auto auto minmax(0, 1fr) auto;
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
     gap: 8px;
     align-items: center;
   }
 
+  .token-row,
   .command-row {
     grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .settings-panel {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 8px);
+    right: 0;
+    width: min(360px, calc(100vw - 24px));
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid rgba(212, 165, 116, 0.34);
+    border-radius: 8px;
+    background: rgba(9, 11, 14, 0.97);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.38);
+  }
+
+  .settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: rgba(232, 224, 216, 0.78);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
   }
 
   .status-dot {
@@ -144,6 +218,23 @@
     white-space: nowrap;
   }
 
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .settings-btn {
+    width: 38px;
+    padding: 0;
+  }
+
+  .close-btn {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    font-size: 16px;
+  }
+
   input:focus-visible,
   button:focus-visible {
     outline: 2px solid rgba(212, 165, 116, 0.72);
@@ -159,7 +250,6 @@
 
   @media (max-width: 900px) {
     .connection-status {
-      min-width: 0;
       width: min(100%, 360px);
     }
 
@@ -173,13 +263,24 @@
   }
 
   @media (max-width: 640px) {
-    .status-row,
+    .token-row,
     .command-row {
       grid-template-columns: 1fr;
     }
 
+    .status-row {
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      gap: 6px;
+    }
+
     .status-sub {
-      white-space: normal;
+      display: none;
+    }
+
+    .settings-panel {
+      position: fixed;
+      top: 62px;
+      right: 12px;
     }
   }
 </style>

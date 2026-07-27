@@ -39,7 +39,9 @@
     }
 
     inactivityTimeout = setTimeout(() => {
+      inactivityTimeout = null;
       expanded = false;
+      ui.miniPlayerExpanded.set(false);
     }, 5000);
   }
 

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { get } from 'svelte/store';
 
 import { BridgeClient } from '../src/bridge/bridgeClient.js';
 import {
@@ -93,6 +94,44 @@ test('bridge client authenticates, forwards messages, and emits callbacks', () =
     ['error', 'boom'],
     ['disconnect']
   ]);
+});
+
+test('bridge client cannot reuse a token after an explicit credential clear', () => {
+  const client = new BridgeClient({ WebSocketImpl: FakeWebSocket });
+  const errors = [];
+  client.onError = (message) => errors.push(message);
+
+  assert.equal(client.connect('session-secret'), true);
+  client.disconnect({ clearToken: true });
+
+  assert.equal(client.connect(), false);
+  assert.equal(errors.at(-1), 'Bridge token required');
+});
+
+test('bridge token state remains usable when session storage is blocked', async () => {
+  const originalWindow = globalThis.window;
+  globalThis.window = {
+    sessionStorage: {
+      getItem() {
+        throw new Error('blocked');
+      },
+      setItem() {
+        throw new Error('blocked');
+      },
+      removeItem() {
+        throw new Error('blocked');
+      }
+    }
+  };
+
+  try {
+    const isolated = await import('../src/stores/bridgeState.js?blocked-session-storage');
+    isolated.bridgeToken.set('session-secret');
+    isolated.bridgeToken.set('');
+    assert.equal(get(isolated.bridgeToken), '');
+  } finally {
+    globalThis.window = originalWindow;
+  }
 });
 
 test('resetBridgeState restores shared bridge stores', () => {

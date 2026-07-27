@@ -26,7 +26,7 @@
   $: activeAssistant = activeAssistantId
     ? messages.find((item) => item.id === activeAssistantId && item.role === 'assistant')
     : null;
-  $: bubbleText = activeAssistant?.text || (loading ? message : latestAssistant?.text || message);
+  $: bubbleText = activeAssistant?.text || message || latestAssistant?.text || '今天想做点什么呢？';
   $: userPreview = latestUser?.text ?? '';
 
   function close() {
