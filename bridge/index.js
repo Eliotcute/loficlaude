@@ -1,14 +1,40 @@
+const fs = require('node:fs');
 const { createBridgeServer } = require('./server');
 const { createClaudeSession } = require('./claude');
 const { createTokenManager } = require('./token');
 const { createSocketServer } = require('./socketServer');
-const { SERVER_TYPES, STATUS } = require('./protocol');
-const fs = require('node:fs');
+const { createSessionState } = require('./sessionState');
+const { STATUS } = require('./protocol');
 const config = require('./config');
 
-const tokenManager = createTokenManager();
-let activeSession = null;
+fs.mkdirSync(config.runtimeDir, { recursive: true, mode: 0o700 });
+const runtimeStats = fs.lstatSync(config.runtimeDir);
+if (!runtimeStats.isDirectory() || (typeof process.getuid === 'function' && runtimeStats.uid !== process.getuid())) {
+  throw new Error('Bridge runtime directory must be private and owned by the current user');
+}
+fs.chmodSync(config.runtimeDir, 0o700);
+
+const sessionState = createSessionState({ statePath: config.sessionStatePath, reset: config.resetSession });
+const tokenManager = createTokenManager(sessionState.bridgeToken);
 let socketClosed = false;
+let bridgeServer;
+
+const socketServer = createSocketServer({
+  socketPath: config.socketPath,
+  runtimeDir: config.runtimeDir,
+  maxLineBytes: config.maxSocketLineBytes,
+  maxPendingWriteBytes: config.maxSocketPendingWriteBytes,
+  maxClients: config.maxSocketClients,
+  onError: (error) => {
+    console.error(`Socket server failed: ${error.message}`);
+    shutdown('socket error');
+  },
+  onClientData: (line, client) => {
+    if (!bridgeServer?.sendUserMessage(line, 'terminal')) {
+      socketServer.sendToClient(client, '[Message not accepted]\n');
+    }
+  }
+});
 
 function closeSocketServerOnce(callback = () => {}) {
   if (socketClosed) {
@@ -20,24 +46,11 @@ function closeSocketServerOnce(callback = () => {}) {
   socketServer.close(() => callback());
 }
 
-const socketServer = createSocketServer({
-  socketPath: config.socketPath,
-  onClientData: (line) => {
-    if (!activeSession) {
-      socketServer.broadcast('[Bridge not connected]\n');
-      return;
-    }
-
-    activeSession.sendUserMessage(line, 'terminal');
-  }
-});
-
 function statusToText(status) {
   switch (status) {
     case STATUS.THINKING:
       return '[Thinking...]\n';
     case STATUS.TALKING:
-      return '[Working...]\n';
     case STATUS.WORKING:
       return '[Working...]\n';
     case STATUS.BLOCKED:
@@ -47,31 +60,29 @@ function statusToText(status) {
     case STATUS.CONNECTED:
       return '[Connected]\n';
     case STATUS.DISCONNECTED:
-      return '[Claude exited]\n';
+      return '[Claude exited; the next message will resume this conversation]\n';
     default:
       return '';
   }
 }
 
-let bridgeServer;
-
 try {
   bridgeServer = createBridgeServer({
     config,
     tokenManager,
-    sessionFactory: ({ onStatus, onDelta, onTool, onError, model, workspace }) => {
+    sessionFactory: ({ onStatus, onDelta, onTool, onUser, onError, model, workspace }) => {
+      const launchOptions = sessionState.getLaunchOptions();
       const session = createClaudeSession({
+        ...launchOptions,
         model,
         workspace,
+        maxUserMessageChars: config.maxUserMessageChars,
+        onInitialized: () => sessionState.markInitialized(),
         onStatus: (value) => {
           onStatus(value);
           const marker = statusToText(value);
           if (marker) {
             socketServer.broadcast(marker);
-          }
-          if (value === STATUS.DISCONNECTED) {
-            closeSocketServerOnce();
-            activeSession = null;
           }
         },
         onDelta: (text) => {
@@ -79,7 +90,8 @@ try {
           socketServer.broadcast(text);
         },
         onUser: (text, source) => {
-          bridgeServer.broadcast({ type: SERVER_TYPES.USER_MESSAGE, text, source });
+          onUser(text, source);
+          socketServer.broadcast(`${source === 'browser' ? '[Browser]' : '[You]'} ${text}\n`);
         },
         onTool: (name) => {
           onTool(name);
@@ -91,13 +103,6 @@ try {
         }
       });
 
-      const originalClose = session.close.bind(session);
-      session.close = () => {
-        activeSession = null;
-        originalClose();
-      };
-
-      activeSession = session;
       socketServer.broadcast(statusToText(STATUS.CONNECTED));
       return session;
     }
@@ -137,15 +142,16 @@ bridgeServer?.on('listening', () => {
     return;
   }
 
-  console.log(`🔌 LoFiClaude Bridge running on ws://localhost:${config.port}`);
-  console.log(`🔑 Token: ${tokenManager.token}`);
-  console.log(`🧵 Terminal socket: ${config.socketPath}`);
+  console.log(`LoFiClaude Bridge running on ws://localhost:${config.port}`);
+  console.log(`Token: ${tokenManager.token}`);
+  console.log(`Terminal socket: ${config.socketPath}`);
+  console.log(`Claude session: ${config.sessionStatePath}`);
 });
 
 bridgeServer?.on('error', (error) => {
   console.error(`Bridge failed to start: ${error.message}`);
-  closeSocketServerOnce();
   process.exitCode = 1;
+  bridgeServer.close(() => closeSocketServerOnce());
 });
 
 if (bridgeServer) {
@@ -153,25 +159,18 @@ if (bridgeServer) {
     if (socketError) {
       console.error(`Socket server failed to start: ${socketError.message}`);
       process.exitCode = 1;
+      bridgeServer.close(() => closeSocketServerOnce());
       return;
     }
 
     if (bridgeServer.listening) {
-      console.log(`🔌 LoFiClaude Bridge running on ws://localhost:${config.port}`);
-      console.log(`🔑 Token: ${tokenManager.token}`);
-      console.log(`🧵 Terminal socket: ${config.socketPath}`);
+      console.log(`LoFiClaude Bridge running on ws://localhost:${config.port}`);
+      console.log(`Token: ${tokenManager.token}`);
+      console.log(`Terminal socket: ${config.socketPath}`);
+      console.log(`Claude session: ${config.sessionStatePath}`);
     }
   });
 }
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('exit', () => {
-  try {
-    if (fs.existsSync(config.socketPath)) {
-      fs.unlinkSync(config.socketPath);
-    }
-  } catch {
-    // Ignore cleanup errors.
-  }
-});

@@ -61,7 +61,7 @@ function read(store) {
 }
 
 test('bridge client authenticates, forwards messages, and emits callbacks', () => {
-  const client = new BridgeClient({ WebSocketImpl: FakeWebSocket });
+  const client = new BridgeClient({ WebSocketImpl: FakeWebSocket, autoReconnect: false });
   const events = [];
 
   client.onStatus = (value) => events.push(['status', value]);
@@ -97,7 +97,7 @@ test('bridge client authenticates, forwards messages, and emits callbacks', () =
 });
 
 test('bridge client cannot reuse a token after an explicit credential clear', () => {
-  const client = new BridgeClient({ WebSocketImpl: FakeWebSocket });
+  const client = new BridgeClient({ WebSocketImpl: FakeWebSocket, autoReconnect: false });
   const errors = [];
   client.onError = (message) => errors.push(message);
 
@@ -148,4 +148,75 @@ test('resetBridgeState restores shared bridge stores', () => {
   assert.equal(read(streamingText), '');
   assert.equal(read(toolRunning), null);
   assert.equal(read(lastError), '');
+});
+
+test('bridge client persists its replay cursor and skips duplicate events', () => {
+  const values = new Map();
+  const storage = {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => values.delete(key)
+  };
+  const first = new BridgeClient({ WebSocketImpl: FakeWebSocket, autoReconnect: false, storage });
+  const firstDeltas = [];
+  first.onDelta = (text) => firstDeltas.push(text);
+  first.connect('secret');
+  first.socket.open();
+  first.socket.dispatch('message', { data: JSON.stringify({ type: 'ready', instanceId: 'server-a' }) });
+  first.socket.dispatch('message', {
+    data: JSON.stringify({ type: 'assistant_delta', text: 'one', instanceId: 'server-a', eventId: 1 })
+  });
+
+  const second = new BridgeClient({ WebSocketImpl: FakeWebSocket, autoReconnect: false, storage });
+  const secondDeltas = [];
+  second.onDelta = (text) => secondDeltas.push(text);
+  second.connect('secret');
+  second.socket.open();
+
+  assert.deepEqual(JSON.parse(second.socket.sent[0]), {
+    type: 'auth',
+    token: 'secret',
+    instanceId: 'server-a',
+    cursor: 1
+  });
+
+  second.socket.dispatch('message', {
+    data: JSON.stringify({ type: 'assistant_delta', text: 'duplicate', instanceId: 'server-a', eventId: 1 })
+  });
+  second.socket.dispatch('message', {
+    data: JSON.stringify({ type: 'assistant_delta', text: 'two', instanceId: 'server-a', eventId: 2 })
+  });
+
+  assert.deepEqual(firstDeltas, ['one']);
+  assert.deepEqual(secondDeltas, ['two']);
+});
+
+test('an old socket closing cannot clear a newer connection', () => {
+  const client = new BridgeClient({ WebSocketImpl: FakeWebSocket, autoReconnect: false });
+  client.connect('secret');
+  const oldSocket = client.socket;
+  oldSocket.open();
+  oldSocket.readyState = FakeWebSocket.CLOSED;
+
+  client.connect('secret');
+  const currentSocket = client.socket;
+  oldSocket.dispatch('close');
+
+  assert.equal(client.socket, currentSocket);
+});
+
+test('bridge client surfaces a truncated replay window', () => {
+  const client = new BridgeClient({ WebSocketImpl: FakeWebSocket, autoReconnect: false });
+  let gaps = 0;
+  client.onReplayGap = () => {
+    gaps += 1;
+  };
+  client.connect('secret');
+  client.socket.open();
+
+  client.socket.dispatch('message', {
+    data: JSON.stringify({ type: 'ready', instanceId: 'server-a', replayTruncated: true })
+  });
+
+  assert.equal(gaps, 1);
 });

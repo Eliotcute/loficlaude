@@ -51,6 +51,7 @@
   let suppressPersist = false;
   let unsubscribePersist = [];
   let unsubscribeScene;
+  let unsubscribeBridgeSettings;
   let teardownKeyboard = () => {};
   let focusInterval;
   let restoredFocusSnapshot = null;
@@ -81,15 +82,10 @@
   });
 
   const claudeOrch = createClaudeOrchestrator({
-    apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY ?? '',
-    getChatContext: () => ({
-      trackName: $currentTrackTitle,
-      sceneName: getSceneName($currentScene),
-      rainVolume: $rainVolume
-    }),
     onMood: (mood) => claude.mood.set(mood),
     onBubbleVisible: (visible) => claude.bubbleVisible.set(visible),
-    onPanelVisible: (open) => claude.chatOpen.set(open)
+    onPanelVisible: (open) => claude.chatOpen.set(open),
+    onStateChange: applyClaudeState
   });
 
   const session = createSessionController({
@@ -116,8 +112,7 @@
     onSceneRotate: rotateScene
   });
 
-  function refreshClaudeState() {
-    const state = claudeOrch.getState();
+  function applyClaudeState(state) {
     claudeBubbleVisible = state.bubbleVisible;
     claudeBubblePassive = state.bubblePassive;
     claudeBubbleMessage = state.bubbleMessage;
@@ -130,6 +125,10 @@
     claudeBridgeStatus = state.bridgeStatus ?? 'disconnected';
     claudeToolRunning = state.toolRunning ?? null;
     claudeLastError = state.lastError ?? '';
+  }
+
+  function refreshClaudeState() {
+    applyClaudeState(claudeOrch.getState());
   }
 
   function setActivityState() {
@@ -153,6 +152,7 @@
 
   function openClaudeHistory() {
     setActivityState();
+    closeTransientUi();
     claudeOrch.openPanel();
     refreshClaudeState();
   }
@@ -178,6 +178,7 @@
 
   async function handleClaudeActivate() {
     setActivityState();
+    ui.bridgeSettingsOpen.set(false);
     await claudeOrch.handleClick();
     refreshClaudeState();
   }
@@ -187,6 +188,7 @@
     ui.timerPopoverOpen.set(false);
     ui.rainPopoverOpen.set(false);
     ui.miniPlayerExpanded.set(false);
+    ui.bridgeSettingsOpen.set(false);
     closeClaudeBubble();
     closeClaudePanel();
   }
@@ -476,6 +478,12 @@
     restoreState();
     claudeOrch.attachBridge(bridgeClient);
     refreshClaudeState();
+    unsubscribeBridgeSettings = ui.bridgeSettingsOpen.subscribe((open) => {
+      if (open) {
+        closeClaudeBubble();
+        closeClaudePanel();
+      }
+    });
 
     teardownKeyboard = setupKeyboardShortcuts({
       onActivity: setActivityState,
@@ -489,6 +497,7 @@
       onToggleTimerPopover: () => {
         ui.timerPopoverOpen.update((open) => !open);
         ui.scenePopoverOpen.set(false);
+        ui.bridgeSettingsOpen.set(false);
       },
       onToggleShortcutHint: () => ui.shortcutVisible.update((visible) => !visible),
       isSceneLocked: () => $sceneLocked,
@@ -530,6 +539,7 @@
       unsubscribePersist.forEach((unsubscribe) => unsubscribe());
       unsubscribePersist = [];
       unsubscribeScene?.();
+      unsubscribeBridgeSettings?.();
       audio.destroy();
     };
   });

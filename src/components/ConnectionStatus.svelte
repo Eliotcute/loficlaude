@@ -1,18 +1,20 @@
 <script>
   import { get } from 'svelte/store';
+  import { onMount } from 'svelte';
   import { bridgeClient } from '../bridge/bridgeClient.js';
   import { bridgeToken, connectionStatus, claudeStatus, getSessionStatus, lastError } from '../stores/bridgeState.js';
+  import { ui } from '../stores/appState.js';
 
   const BRIDGE_CMD = 'cd bridge && npm start';
 
   let copied = false;
   let copiedTimer = null;
-  let settingsOpen = false;
+  const bridgeSettingsOpen = ui.bridgeSettingsOpen;
 
   function connect() {
     const token = get(bridgeToken).trim();
     if (!token) {
-      settingsOpen = true;
+      bridgeSettingsOpen.set(true);
       connectionStatus.set('disconnected');
       lastError.set('Bridge token required');
       return;
@@ -37,9 +39,22 @@
   }
 
   function handleWindowKeydown(event) {
-    if (event.key === 'Escape' && settingsOpen) {
-      settingsOpen = false;
+    if (event.key === 'Escape' && $bridgeSettingsOpen) {
+      bridgeSettingsOpen.set(false);
     }
+  }
+
+  function toggleSettings() {
+    bridgeSettingsOpen.update((open) => {
+      const nextOpen = !open;
+      if (nextOpen) {
+        ui.scenePopoverOpen.set(false);
+        ui.timerPopoverOpen.set(false);
+        ui.rainPopoverOpen.set(false);
+        ui.miniPlayerExpanded.set(false);
+      }
+      return nextOpen;
+    });
   }
 
   async function copyCommand() {
@@ -71,6 +86,12 @@
             ? 'Needs attention'
             : 'Claude asleep';
   $: statusDetail = isConnected ? `bridge ready · ${$claudeStatus}` : 'bridge offline';
+
+  onMount(() => {
+    if (get(bridgeToken).trim()) {
+      connect();
+    }
+  });
 </script>
 
 <svelte:window on:keydown={handleWindowKeydown} />
@@ -84,18 +105,18 @@
       type="button"
       class="settings-btn"
       aria-label="Bridge settings"
-      aria-expanded={settingsOpen}
+      aria-expanded={$bridgeSettingsOpen}
       aria-controls="bridge-settings-panel"
-      on:click={() => (settingsOpen = !settingsOpen)}
+      on:click={toggleSettings}
     >⚙</button>
     <button type="button" on:click={isConnected ? disconnect : connect}>{isConnected ? 'Disconnect' : 'Connect'}</button>
   </div>
 
-  {#if settingsOpen}
+  {#if $bridgeSettingsOpen}
     <div id="bridge-settings-panel" class="settings-panel" role="dialog" aria-label="Bridge settings">
       <div class="settings-header">
         <span>Bridge settings</span>
-        <button type="button" class="close-btn" aria-label="Close bridge settings" on:click={() => (settingsOpen = false)}>×</button>
+        <button type="button" class="close-btn" aria-label="Close bridge settings" on:click={() => bridgeSettingsOpen.set(false)}>×</button>
       </div>
 
       <div class="token-row">

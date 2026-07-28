@@ -57,7 +57,7 @@ Renders a 24×24 canvas element positioned absolutely via `translate3d`. Uses `c
 
 ### AI companion (`src/ai/ClaudeChat.js`)
 
-Direct fetch to Anthropic API (`claude-3-5-haiku-latest`). Falls back to Chinese ambient phrases when no API key or on error. System prompt: "calm ambient companion, reply in concise Chinese." Context includes current track, scene, rain volume.
+Provides local ambient fallback replies only. Browser code never sends conversation text or credentials directly to the Anthropic API; real Claude responses flow through the authenticated local Bridge.
 
 ### Orchestration (`src/utils/`)
 
@@ -70,9 +70,10 @@ Direct fetch to Anthropic API (`claude-3-5-haiku-latest`). Falls back to Chinese
 
 Node.js WebSocket bridge that connects local Claude Code CLI to the browser companion.
 
-- `bridge/index.js` bootstraps token auth and lifecycle handling.
-- `bridge/server.js` manages socket auth, `user_message` routing, and `status/assistant_delta/tool_running/error` events.
-- `bridge/claude.js` runs Claude in `--input-format stream-json --output-format stream-json` mode, streaming assistant deltas and tool activity back to the UI.
+- `bridge/index.js` bootstraps token auth, the private Unix Socket, persisted session state, and lifecycle handling.
+- `bridge/server.js` manages socket auth, bounded event replay, shared browser/terminal routing, and `status/assistant_delta/tool_running/error` events.
+- `bridge/claude.js` runs one serialized Claude CLI session in `--input-format stream-json --output-format stream-json` mode, streaming assistant deltas and tool activity back to the UI.
+- `bridge/sessionState.js` persists the Claude session id and Bridge token in a private runtime file so a restart resumes the same conversation. Set `LOFICLAUDE_RESET_SESSION=1` for an explicit reset.
 
 ### Components (`src/components/`)
 

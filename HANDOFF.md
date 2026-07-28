@@ -15,6 +15,9 @@
 - Claw 七状态、离线 typing 回落、实时状态文案优先级和 reduced-motion 已补齐。
 - 首日 streak、跨午夜和后台/idle 专注累计已修复。
 - Bridge token 改为 SessionStorage，断开和清除时删除运行时及存储 token。
+- Bridge 服务端会话、token 和回放游标已加固：浏览器重连与 Bridge 重启可恢复同一 Claude 会话，显式 reset 才轮换会话和 token。
+- 浏览器和终端消息统一串行进入 Claude；补齐消息/客户端/缓冲区上限、慢客户端隔离和 Unix Socket 所有权保护。
+- 浏览器不再携带 API key 直连 Anthropic；离线陪伴完全本地，真实 Claude 对话只经过本机 Bridge。
 - Bridge 设置移入设置层；Start room、移动布局和主场景层级已调整。
 - 聊天历史限制为 50 条/7 天，并提供清空入口。
 - V1.1 默认使用本地 Web Audio 雨声；远端模式保留为显式能力，不作为发布默认。
@@ -28,7 +31,7 @@
 
 ## 验证状态
 
-- 全量测试：49 项，43 通过、0 失败；6 项 Unix Socket 测试因沙箱 `EPERM` 跳过。
+- 全量测试：94 项，94 通过、0 失败；已在沙箱外真实执行全部 Unix Socket 用例。
 - 构建：`npm run build` 已通过；`git diff --check` 已通过。
 - 浏览器 QA：1440x900、768x1024、390x844 均无横向滚动或 Claw/文案重叠。
 - 交互 QA：Start 前设置可用、Esc 可关闭、历史可清空、token 未进入 URL 或 SessionStorage。
@@ -38,4 +41,4 @@
 ## 下一步
 
 1. 发布前确认 Bridge 终端是否继续在启动时显示一次 token。
-2. 如需发布，再执行对应发布流程和真实 Unix Socket 环境验收。
+2. 如需发布，执行对应发布流程；真实 Unix Socket 环境验收已完成。

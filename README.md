@@ -30,7 +30,7 @@ npm install
 npm start
 ```
 
-The bridge listens on `ws://localhost:9120`.
+The bridge listens on `ws://localhost:9120`. It keeps one Claude CLI conversation across browser reconnects and Bridge restarts. Start it with `LOFICLAUDE_RESET_SESSION=1 npm start` only when you intentionally want a new conversation and token.
 
 ## Connect
 
@@ -69,5 +69,5 @@ Local generated rain is the V1.1 default because authorization for the remote so
   local companion chat still works; start `bridge/` and reconnect for Claude CLI streaming.
 - No rain audio:
   set rain volume above 0, then retry Start room; the local Web Audio source requires a user gesture.
-- No Claude API key:
-  ambient fallback text still works; the Bridge remains an optional enhancement for Claude CLI streaming.
+- Bridge is not running:
+  ambient fallback text still works without browser API credentials; the Bridge remains an optional enhancement for Claude CLI streaming.

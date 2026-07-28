@@ -230,6 +230,38 @@ test('Claude history restore drops entries older than seven days', () => {
   }
 });
 
+test('Claude history restore removes expired entries from local storage', () => {
+  resetBridgeState();
+  const originalWindow = globalThis.window;
+  const now = Date.now();
+  const persisted = [
+    { id: 1, role: 'assistant', text: 'expired', source: 'assistant', createdAt: now - 8 * 24 * 60 * 60 * 1000 }
+  ];
+  const removedKeys = [];
+
+  globalThis.window = {
+    localStorage: {
+      getItem() {
+        return JSON.stringify(persisted);
+      },
+      setItem() {
+        assert.fail('empty normalized history should not be persisted');
+      },
+      removeItem(key) {
+        removedKeys.push(key);
+      }
+    }
+  };
+
+  try {
+    const orchestrator = createClaudeOrchestrator();
+    assert.deepEqual(orchestrator.getState().history, []);
+    assert.deepEqual(removedKeys, ['loficlaude-chat-history']);
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});
+
 test('Claude history migration timestamps legacy entries', () => {
   resetBridgeState();
   const originalWindow = globalThis.window;
@@ -250,6 +282,51 @@ test('Claude history migration timestamps legacy entries', () => {
     const orchestrator = createClaudeOrchestrator();
     assert.equal(orchestrator.getState().history[0].text, 'legacy');
     assert.equal(typeof storedHistory[0].createdAt, 'number');
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});
+
+test('Claude history restore canonicalizes untrusted entries and keyed ids', async () => {
+  resetBridgeState();
+  const originalWindow = globalThis.window;
+  const now = Date.now();
+  let storedHistory = null;
+  const oversizedText = 'x'.repeat(200001);
+  const persisted = [
+    { id: Number.MAX_SAFE_INTEGER, role: 'user', text: 'first', source: 'browser', createdAt: now },
+    { id: Number.MAX_SAFE_INTEGER, role: 'assistant', text: oversizedText, source: 'assistant', createdAt: now },
+    { id: -1, role: 'system', text: 'not allowed', source: 'unknown', createdAt: now },
+    { id: 1.5, role: 'user', text: 'not safe', source: 'browser', createdAt: now }
+  ];
+
+  globalThis.window = {
+    localStorage: {
+      getItem() {
+        return JSON.stringify(persisted);
+      },
+      setItem(_key, value) {
+        storedHistory = JSON.parse(value);
+      },
+      removeItem() {}
+    },
+    setTimeout() {
+      return 1;
+    },
+    clearTimeout() {}
+  };
+
+  try {
+    const orchestrator = createClaudeOrchestrator();
+    const restored = orchestrator.getState().history;
+
+    assert.deepEqual(restored.map((item) => item.id), [1, 2]);
+    assert.deepEqual(restored.map((item) => item.role), ['user', 'assistant']);
+    assert.equal(restored[1].text.length, 200000);
+    assert.deepEqual(storedHistory, restored);
+
+    await orchestrator.sendMessage('next');
+    assert.deepEqual(orchestrator.getState().history.slice(-2).map((item) => item.id), [3, 4]);
   } finally {
     globalThis.window = originalWindow;
   }
@@ -288,4 +365,127 @@ test('Claude history can be cleared from memory and local storage', async () => 
   } finally {
     globalThis.window = originalWindow;
   }
+});
+
+test('Claude disconnect does not mark an already completed reply as interrupted', async () => {
+  resetBridgeState();
+  const bridgeClient = {
+    connect() {
+      return true;
+    },
+    sendMessage() {
+      return true;
+    }
+  };
+  const orchestrator = createClaudeOrchestrator();
+  orchestrator.attachBridge(bridgeClient);
+
+  await orchestrator.sendMessage('completed local reply');
+  const completedText = orchestrator.getState().history.at(-1).text;
+  bridgeClient.onDisconnect();
+
+  assert.equal(orchestrator.getState().history.at(-1).text, completedText);
+});
+
+test('Claude transient reconnect preserves and completes the active streamed reply', async () => {
+  resetBridgeState();
+  const bridgeClient = {
+    connect() {
+      return true;
+    },
+    sendMessage() {
+      return true;
+    }
+  };
+  const orchestrator = createClaudeOrchestrator();
+  orchestrator.attachBridge(bridgeClient);
+  bridgeClient.onStatus('connected');
+
+  await orchestrator.sendMessage('keep streaming');
+  bridgeClient.onDelta('partial');
+  bridgeClient.onDisconnect({ willReconnect: true });
+
+  assert.equal(orchestrator.getState().loading, true);
+  assert.equal(orchestrator.getState().history.at(-1).text, 'partial');
+
+  bridgeClient.onDelta(' reply');
+  bridgeClient.onStatus('done');
+  assert.equal(orchestrator.getState().history.at(-1).text, 'partial reply');
+  assert.equal(orchestrator.getState().loading, false);
+});
+
+test('Claude CLI exit interrupts only the active reply and the bridge remains sendable', async () => {
+  resetBridgeState();
+  const sent = [];
+  const bridgeClient = {
+    connect() {
+      return true;
+    },
+    sendMessage(text) {
+      sent.push(text);
+      return true;
+    }
+  };
+  const orchestrator = createClaudeOrchestrator();
+  orchestrator.attachBridge(bridgeClient);
+  bridgeClient.onStatus('connected');
+
+  await orchestrator.sendMessage('first turn');
+  bridgeClient.onDelta('partial');
+  bridgeClient.onStatus('disconnected');
+
+  assert.equal(orchestrator.getState().bridgeStatus, 'connected');
+  assert.equal(orchestrator.getState().loading, false);
+  assert.match(orchestrator.getState().history.at(-1).text, /\(interrupted\)$/);
+
+  await orchestrator.sendMessage('resume next turn');
+  assert.deepEqual(sent, ['first turn', 'resume next turn']);
+});
+
+test('Claude refresh appends replayed deltas to the persisted incomplete reply', () => {
+  resetBridgeState();
+  const originalWindow = globalThis.window;
+  const stored = JSON.stringify([
+    { id: 1, role: 'user', text: 'question', source: 'browser', complete: true, createdAt: Date.now() },
+    { id: 2, role: 'assistant', text: 'partial', source: 'assistant', complete: false, createdAt: Date.now() }
+  ]);
+  globalThis.window = {
+    localStorage: {
+      getItem: () => stored,
+      setItem() {},
+      removeItem() {}
+    },
+    setTimeout: () => 1,
+    clearTimeout() {}
+  };
+
+  try {
+    const bridgeClient = { connect: () => true, sendMessage: () => true };
+    const orchestrator = createClaudeOrchestrator();
+    orchestrator.attachBridge(bridgeClient);
+    bridgeClient.onDelta(' reply');
+    bridgeClient.onStatus('done');
+
+    const assistants = orchestrator.getState().history.filter((item) => item.role === 'assistant');
+    assert.equal(assistants.length, 1);
+    assert.equal(assistants[0].text, 'partial reply');
+    assert.equal(assistants[0].complete, true);
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});
+
+test('Claude bridge errors finalize the active placeholder instead of leaving stale pending state', async () => {
+  resetBridgeState();
+  const bridgeClient = { connect: () => true, sendMessage: () => true };
+  const orchestrator = createClaudeOrchestrator();
+  orchestrator.attachBridge(bridgeClient);
+  bridgeClient.onStatus('connected');
+
+  await orchestrator.sendMessage('too large');
+  bridgeClient.onError('Message too long');
+
+  const assistant = orchestrator.getState().history.at(-1);
+  assert.equal(assistant.complete, true);
+  assert.match(assistant.text, /\(interrupted\)$/);
 });

@@ -2,7 +2,9 @@
 
 set -eu
 
-SOCKET_PATH="${LOFICLAUDE_SOCKET_PATH:-/tmp/loficlaude-claude.sock}"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+DEFAULT_SOCKET_PATH="$(node -e "process.stdout.write(require(process.argv[1]).socketPath)" "$SCRIPT_DIR/config.js")"
+SOCKET_PATH="${LOFICLAUDE_SOCKET_PATH:-$DEFAULT_SOCKET_PATH}"
 
 if ! command -v socat >/dev/null 2>&1; then
   echo "socat is required. Install it first (e.g. brew install socat)." >&2

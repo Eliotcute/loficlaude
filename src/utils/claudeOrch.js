@@ -49,18 +49,18 @@ const DONE_TO_IDLE_DELAY_MS = 900;
 const CHAT_HISTORY_STORAGE_KEY = 'loficlaude-chat-history';
 const CHAT_HISTORY_MAX = 50;
 const CHAT_HISTORY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const CHAT_MESSAGE_MAX_CHARS = 200000;
 const IDLE_ACTIVITY_DELAY_MS = 1200;
 
 export function createClaudeOrchestrator(options = {}) {
   const {
-    apiKey = '',
-    getChatContext = () => ({}),
     onMood = () => {},
     onBubbleVisible = () => {},
-    onPanelVisible = () => {}
+    onPanelVisible = () => {},
+    onStateChange = () => {}
   } = options;
 
-  const claudeChat = new ClaudeChat(apiKey);
+  const claudeChat = new ClaudeChat();
 
   let bridgeClient = sharedBridgeClient;
   let bridgeAttached = false;
@@ -81,6 +81,7 @@ export function createClaudeOrchestrator(options = {}) {
   let transientBubbleTimer = null;
   let doneVisualTimer = null;
   let typingVisualTimer = null;
+  let chatPauseTimer = null;
   let activeAssistantId = null;
 
   function clearTransientBubbleTimer() {
@@ -108,7 +109,27 @@ export function createClaudeOrchestrator(options = {}) {
     state = { ...state, ...next, activeAssistantId };
     onBubbleVisible(state.bubbleVisible);
     onPanelVisible(state.panelOpen);
+    onStateChange(getState());
     return state;
+  }
+
+  function scheduleChatUnpause() {
+    if (typeof window === 'undefined') {
+      if (!state.loading) {
+        setChatPaused(false);
+      }
+      return;
+    }
+
+    if (chatPauseTimer) {
+      window.clearTimeout(chatPauseTimer);
+    }
+    chatPauseTimer = window.setTimeout(() => {
+      chatPauseTimer = null;
+      if (!state.loading) {
+        setChatPaused(false);
+      }
+    }, 15000);
   }
 
   function persistHistory() {
@@ -118,7 +139,11 @@ export function createClaudeOrchestrator(options = {}) {
 
     try {
       const subset = state.history.slice(-CHAT_HISTORY_MAX);
-      window.localStorage.setItem(CHAT_HISTORY_STORAGE_KEY, JSON.stringify(subset));
+      if (subset.length === 0) {
+        window.localStorage.removeItem(CHAT_HISTORY_STORAGE_KEY);
+      } else {
+        window.localStorage.setItem(CHAT_HISTORY_STORAGE_KEY, JSON.stringify(subset));
+      }
     } catch {
       // Ignore storage failures.
     }
@@ -144,22 +169,26 @@ export function createClaudeOrchestrator(options = {}) {
       }
 
       const restoredAt = Date.now();
-      let migratedLegacyEntry = false;
       state.history = parsed
-        .slice(-CHAT_HISTORY_MAX)
-        .filter((item) => item && typeof item.id === 'number' && typeof item.role === 'string')
-        .filter((item) => !Number.isFinite(item.createdAt) || item.createdAt >= restoredAt - CHAT_HISTORY_MAX_AGE_MS)
+        .filter((item) => (
+          item &&
+          Number.isSafeInteger(item.id) &&
+          item.id >= 0 &&
+          (item.role === 'user' || item.role === 'assistant') &&
+          typeof item.text === 'string'
+        ))
         .map((item) => ({
-          id: item.id,
           role: item.role,
-          text: typeof item.text === 'string' ? item.text : '',
-          source: typeof item.source === 'string' ? item.source : 'browser',
-          createdAt: Number.isFinite(item.createdAt) ? item.createdAt : (migratedLegacyEntry = true, restoredAt)
-        }));
+          text: item.text.slice(0, CHAT_MESSAGE_MAX_CHARS),
+          source: typeof item.source === 'string' ? item.source.slice(0, 64) : 'browser',
+          complete: item.role !== 'assistant' || item.complete !== false,
+          createdAt: Number.isFinite(item.createdAt) ? Math.min(item.createdAt, restoredAt) : restoredAt
+        }))
+        .filter((item) => item.createdAt >= restoredAt - CHAT_HISTORY_MAX_AGE_MS)
+        .slice(-CHAT_HISTORY_MAX)
+        .map((item, index) => ({ ...item, id: index + 1 }));
 
-      if (migratedLegacyEntry) {
-        persistHistory();
-      }
+      persistHistory();
     } catch {
       // Ignore corrupt data.
     }
@@ -296,14 +325,33 @@ export function createClaudeOrchestrator(options = {}) {
 
   function pushMessage(role, text, source = role === 'user' ? 'browser' : 'assistant') {
     messageId += 1;
-    const entry = { id: messageId, role, text, source, createdAt: Date.now() };
+    const entry = {
+      id: messageId,
+      role,
+      text,
+      source,
+      complete: role !== 'assistant' || Boolean(text),
+      createdAt: Date.now()
+    };
     state.history = [...state.history, entry].slice(-CHAT_HISTORY_MAX);
     persistHistory();
     return entry.id;
   }
 
   function updateMessage(id, updater) {
-    state.history = state.history.map((item) => (item.id === id ? { ...item, text: updater(item.text) } : item));
+    state.history = state.history.map((item) => {
+      if (item.id !== id) {
+        return item;
+      }
+
+      const nextText = `${updater(item.text) ?? ''}`;
+      return {
+        ...item,
+        text: nextText.length > CHAT_MESSAGE_MAX_CHARS
+          ? `${nextText.slice(0, CHAT_MESSAGE_MAX_CHARS)}\n[response truncated]`
+          : nextText
+      };
+    });
     persistHistory();
   }
 
@@ -311,13 +359,58 @@ export function createClaudeOrchestrator(options = {}) {
     return [...state.history].reverse().find((item) => item.role === 'assistant')?.text?.trim() ?? '';
   }
 
+  function getPendingAssistant() {
+    const latest = state.history.at(-1);
+    return latest?.role === 'assistant' && latest.complete === false ? latest : null;
+  }
+
+  function markActiveReplyComplete() {
+    const pending = activeAssistantId
+      ? state.history.find((item) => item.id === activeAssistantId && item.role === 'assistant')
+      : getPendingAssistant();
+    if (pending) {
+      state.history = state.history.map((item) => (item.id === pending.id ? { ...item, complete: true } : item));
+      persistHistory();
+    }
+  }
+
   function handleBridgeStatus(status) {
     claudeStatus.set(status);
-    lastError.set('');
+
+    if (status === 'disconnected') {
+      connectionStatus.set('connected');
+      markActiveReplyInterrupted();
+      activeAssistantId = null;
+      toolRunning.set(null);
+      streamingText.set('');
+      sync({
+        history: state.history,
+        loading: false,
+        canReconnect: false,
+        bubbleMessage: 'Claude will resume with your next message'
+      });
+      setChatPaused(false);
+      setVisualState('disconnected', 'claude_process_exit');
+      return;
+    }
 
     connectionStatus.set(status === 'connecting' ? 'connecting' : status === 'disconnected' ? 'disconnected' : 'connected');
 
+    if (status === 'thinking' || status === 'talking' || status === 'working') {
+      if (!activeAssistantId) {
+        activeAssistantId = getPendingAssistant()?.id ?? (
+          state.history.at(-1)?.role === 'user' ? pushMessage('assistant', '') : null
+        );
+      }
+      sync({ history: state.history, loading: true, canReconnect: false });
+    }
+
     if (status === 'done' || status === 'blocked' || status === 'connected') {
+      if (status === 'done') {
+        markActiveReplyComplete();
+      } else if (status === 'blocked' || (status === 'connected' && getPendingAssistant())) {
+        markActiveReplyInterrupted();
+      }
       activeAssistantId = null;
       toolRunning.set(null);
       streamingText.set('');
@@ -331,11 +424,7 @@ export function createClaudeOrchestrator(options = {}) {
     }
 
     if (status === 'done') {
-      if (typeof window !== 'undefined') {
-        window.setTimeout(() => {
-          setChatPaused(false);
-        }, 15000);
-      }
+      scheduleChatUnpause();
     }
 
     setVisualState(status, `bridge_${status}`);
@@ -348,7 +437,7 @@ export function createClaudeOrchestrator(options = {}) {
     }
 
     const last = [...state.history].reverse().find((item) => item.role === 'user');
-    if (!last || last.text !== clean || last.source !== source) {
+    if (source !== 'browser' || !last || last.text !== clean || last.source !== source) {
       pushMessage('user', clean, source);
       sync({ history: state.history });
     }
@@ -364,7 +453,7 @@ export function createClaudeOrchestrator(options = {}) {
     toolRunning.set(null);
 
     if (!activeAssistantId) {
-      activeAssistantId = pushMessage('assistant', '');
+      activeAssistantId = getPendingAssistant()?.id ?? pushMessage('assistant', '');
     }
 
     updateMessage(activeAssistantId, (current) => `${current}${text}`);
@@ -396,6 +485,7 @@ export function createClaudeOrchestrator(options = {}) {
   }
 
   function handleBridgeError(message) {
+    markActiveReplyInterrupted();
     lastError.set(message || 'Bridge error');
     toolRunning.set(null);
     streamingText.set('');
@@ -405,16 +495,58 @@ export function createClaudeOrchestrator(options = {}) {
     setVisualState('error', 'bridge_error');
   }
 
-  function handleBridgeDisconnect() {
-    const latestAssistant = [...state.history].reverse().find((item) => item.role === 'assistant');
-    if (latestAssistant && !latestAssistant.text.includes('(interrupted)')) {
-      updateMessage(latestAssistant.id, (current) => {
+  function markActiveReplyInterrupted() {
+    const interruptedAssistant = activeAssistantId
+      ? state.history.find((item) => item.id === activeAssistantId && item.role === 'assistant')
+      : getPendingAssistant();
+    if (interruptedAssistant && !interruptedAssistant.text.includes('(interrupted)')) {
+      updateMessage(interruptedAssistant.id, (current) => {
         const base = current?.trim() ? current.trim() : 'Reconnect to continue';
         return `${base} (interrupted)`;
       });
     }
+    if (interruptedAssistant) {
+      state.history = state.history.map((item) => (
+        item.id === interruptedAssistant.id ? { ...item, complete: true } : item
+      ));
+      persistHistory();
+    }
+  }
 
-    resetBridgeState();
+  function handleBridgeSessionReset() {
+    markActiveReplyInterrupted();
+    streamingText.set('');
+    toolRunning.set(null);
+    activeAssistantId = null;
+    sync({ history: state.history, loading: false, canReconnect: false });
+  }
+
+  function handleBridgeReplayGap() {
+    markActiveReplyInterrupted();
+    activeAssistantId = null;
+    streamingText.set('');
+    toolRunning.set(null);
+    lastError.set('Some Claude output could not be replayed');
+    sync({ history: state.history, loading: false, canReconnect: false });
+  }
+
+  function handleBridgeDisconnect(details = {}) {
+    if (details.willReconnect) {
+      connectionStatus.set('connecting');
+      claudeStatus.set('connecting');
+      sync({
+        history: state.history,
+        loading: state.loading,
+        canReconnect: false,
+        bubbleMessage: 'Reconnecting to Claude'
+      });
+      setVisualState('connecting', 'bridge_reconnecting');
+      return;
+    }
+
+    markActiveReplyInterrupted();
+
+    resetBridgeState({ preserveLastError: true });
     activeAssistantId = null;
     sync({
       history: state.history,
@@ -434,6 +566,8 @@ export function createClaudeOrchestrator(options = {}) {
     bridgeClient.onUser = handleBridgeUser;
     bridgeClient.onError = handleBridgeError;
     bridgeClient.onDisconnect = handleBridgeDisconnect;
+    bridgeClient.onSessionReset = handleBridgeSessionReset;
+    bridgeClient.onReplayGap = handleBridgeReplayGap;
     bridgeAttached = true;
   }
 
@@ -472,6 +606,10 @@ export function createClaudeOrchestrator(options = {}) {
 
     setVisualState('thinking', 'user_submit');
     sync({ bubbleMessage: getCompanionStatusCopy('thinking') });
+    if (chatPauseTimer && typeof window !== 'undefined') {
+      window.clearTimeout(chatPauseTimer);
+      chatPauseTimer = null;
+    }
     setChatPaused(true);
 
     if (get(connectionStatus) === 'connected') {
@@ -481,22 +619,18 @@ export function createClaudeOrchestrator(options = {}) {
       activeAssistantId = pushMessage('assistant', '');
       sync({ history: state.history });
 
-      if (!bridgeClient.sendMessage(clean)) {
+      if (!bridgeClient.sendMessage(clean) && !get(lastError)) {
         handleBridgeError('Bridge send failed');
       }
       return state;
     }
 
-    const reply = await claudeChat.getResponse(clean, getChatContext());
+    const reply = await claudeChat.getResponse(clean);
 
     pushMessage('assistant', reply);
     sync({ history: state.history, bubbleMessage: reply, loading: false });
     completeLocalReply();
-    if (typeof window !== 'undefined') {
-      window.setTimeout(() => {
-        setChatPaused(false);
-      }, 15000);
-    }
+    scheduleChatUnpause();
 
     return state;
   }

@@ -70,10 +70,12 @@ bridgeToken.subscribe((value) => {
   }
 });
 
-export function resetBridgeState() {
+export function resetBridgeState(options = {}) {
   connectionStatus.set('disconnected');
   claudeStatus.set('disconnected');
   streamingText.set('');
   toolRunning.set(null);
-  lastError.set('');
+  if (!options.preserveLastError) {
+    lastError.set('');
+  }
 }

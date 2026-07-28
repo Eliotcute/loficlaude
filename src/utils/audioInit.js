@@ -10,79 +10,101 @@ export function createAudioInitializer(options = {}) {
     getRainVolume = () => 60,
     onLoading = () => {},
     onError = () => {},
-    onRainStatus = () => {}
+    onRainStatus = () => {},
+    createYouTubePlayer = (playerOptions) => new YouTubePlayer(playerOptions),
+    createRainPlayer = (playerOptions) => new RainPlayer(playerOptions)
   } = options;
 
   let youtubePlayer;
   let rainPlayer;
-  let audioInitializing = false;
+  let initializationPromise = null;
+  let initializationGeneration = 0;
+  let autoplayRequested = false;
   let audioReady = false;
   let youtubeReady = false;
   let rainReady = false;
 
-  async function initAudio(autoplay = false) {
+  function initAudio(autoplay = false) {
+    autoplayRequested ||= autoplay;
+
     if (audioReady) {
       if (autoplay && youtubePlayer) {
         youtubePlayer.play();
         rainPlayer?.play();
       }
-      return { youtubePlayer, rainPlayer };
+      return Promise.resolve({ youtubePlayer, rainPlayer });
     }
 
-    if (audioInitializing) {
-      return { youtubePlayer, rainPlayer };
+    if (initializationPromise) {
+      return initializationPromise;
     }
 
-    audioInitializing = true;
+    const generation = ++initializationGeneration;
     onLoading(true);
 
-    try {
+    initializationPromise = (async () => {
       if (!youtubePlayer) {
-        youtubePlayer = new YouTubePlayer({ mountId });
+        youtubePlayer = createYouTubePlayer({ mountId });
       }
       if (!rainPlayer) {
-        rainPlayer = new RainPlayer({ onStatus: onRainStatus, preferLocal: true });
+        rainPlayer = createRainPlayer({ onStatus: onRainStatus, preferLocal: true });
       }
+
+      const initializeRain = (async () => {
+        try {
+          await rainPlayer.init(getRainType(), autoplayRequested);
+          rainPlayer.setVolume(getRainMuted() ? 0 : getRainVolume());
+          rainReady = true;
+        } catch (error) {
+          rainReady = false;
+          onError(`Rain unavailable: ${error?.message ?? 'retry from player'}`);
+        }
+      })();
+
+      const initializeYouTube = (async () => {
+        try {
+          await youtubePlayer.init(getCurrentTrackIndex());
+          youtubePlayer.setVolume(60);
+          youtubeReady = true;
+        } catch (error) {
+          youtubeReady = false;
+          onError(`Music unavailable: ${error?.message ?? 'retry from player'}`);
+        }
+      })();
 
       try {
-        await youtubePlayer.init(getCurrentTrackIndex());
-        youtubePlayer.setVolume(60);
-        youtubeReady = true;
-      } catch (error) {
-        youtubeReady = false;
-        onError(`Music unavailable: ${error?.message ?? 'retry from player'}`);
-      }
-
-      try {
-        await rainPlayer.init(getRainType(), autoplay);
-        rainPlayer.setVolume(getRainMuted() ? 0 : getRainVolume());
-        rainReady = true;
-      } catch (error) {
-        rainReady = false;
-        onError(`Rain unavailable: ${error?.message ?? 'retry from player'}`);
-      }
-
-      audioReady = youtubeReady && rainReady;
-      if (audioReady) {
-        onError(null);
-      }
-
-      if (autoplay) {
-        if (youtubeReady) {
-          youtubePlayer.play();
+        await Promise.all([initializeRain, initializeYouTube]);
+        if (generation !== initializationGeneration) {
+          return { youtubePlayer, rainPlayer };
         }
-        if (rainReady) {
-          rainPlayer.play();
+
+        audioReady = youtubeReady && rainReady;
+        if (audioReady) {
+          onError(null);
+        }
+
+        if (autoplayRequested) {
+          if (youtubeReady) {
+            youtubePlayer.play();
+          }
+          if (rainReady) {
+            rainPlayer.play();
+          }
+        }
+      } catch {
+        onError('Failed to initialize audio.');
+      } finally {
+        if (generation === initializationGeneration) {
+          onLoading(false);
+          autoplayRequested = false;
+          initializationPromise = null;
         }
       }
-    } catch {
-      onError('Failed to initialize audio.');
-    } finally {
-      onLoading(false);
-      audioInitializing = false;
-    }
 
-    return { youtubePlayer, rainPlayer };
+      return { youtubePlayer, rainPlayer };
+    })();
+
+    return initializationPromise;
   }
 
   function getPlayers() {
@@ -97,7 +119,10 @@ export function createAudioInitializer(options = {}) {
     audioReady = false;
     youtubeReady = false;
     rainReady = false;
-    audioInitializing = false;
+    autoplayRequested = false;
+    initializationPromise = null;
+    initializationGeneration += 1;
+    onLoading(false);
   }
 
   return {

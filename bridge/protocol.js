@@ -4,6 +4,7 @@ const CLIENT_TYPES = {
 };
 
 const SERVER_TYPES = {
+  READY: 'ready',
   STATUS: 'status',
   USER_MESSAGE: 'user_message',
   ASSISTANT_DELTA: 'assistant_delta',

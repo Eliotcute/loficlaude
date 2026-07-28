@@ -24,6 +24,7 @@
       const nextOpen = !open;
       if (nextOpen) {
         ui.timerPopoverOpen.set(false);
+        ui.bridgeSettingsOpen.set(false);
       }
       return nextOpen;
     });
@@ -34,6 +35,7 @@
       const nextOpen = !open;
       if (nextOpen) {
         ui.scenePopoverOpen.set(false);
+        ui.bridgeSettingsOpen.set(false);
       }
       return nextOpen;
     });

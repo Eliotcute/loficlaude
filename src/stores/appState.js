@@ -62,6 +62,7 @@ export const ui = {
   rainPopoverOpen: writable(false),
   timerPopoverOpen: writable(false),
   scenePopoverOpen: writable(false),
+  bridgeSettingsOpen: writable(false),
   shortcutVisible: writable(false)
 };
 
