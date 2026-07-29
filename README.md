@@ -30,7 +30,7 @@ npm install
 npm start
 ```
 
-The bridge listens on `ws://localhost:9120`. It keeps one Claude CLI conversation across browser reconnects and Bridge restarts. Start it with `LOFICLAUDE_RESET_SESSION=1 npm start` only when you intentionally want a new conversation and token.
+The bridge listens on `ws://localhost:9120`. It keeps one Claude CLI conversation across browser reconnects and Bridge restarts, while generating a new Bridge token for every server process. Start it with `LOFICLAUDE_RESET_SESSION=1 npm start` when you intentionally want a new Claude conversation.
 
 ## Connect
 

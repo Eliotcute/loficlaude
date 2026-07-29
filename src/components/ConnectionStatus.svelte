@@ -85,7 +85,7 @@
           : sessionStatus === 'blocked'
             ? 'Needs attention'
             : 'Claude asleep';
-  $: statusDetail = isConnected ? `bridge ready · ${$claudeStatus}` : 'bridge offline';
+  $: statusDetail = isConnected ? 'connected locally' : 'offline';
 
   onMount(() => {
     if (get(bridgeToken).trim()) {
@@ -109,7 +109,6 @@
       aria-controls="bridge-settings-panel"
       on:click={toggleSettings}
     >⚙</button>
-    <button type="button" on:click={isConnected ? disconnect : connect}>{isConnected ? 'Disconnect' : 'Connect'}</button>
   </div>
 
   {#if $bridgeSettingsOpen}
@@ -123,6 +122,8 @@
         <input type="password" placeholder="bridge token" bind:value={$bridgeToken} aria-label="Bridge token" />
         <button type="button" on:click={clearToken} disabled={!$bridgeToken.trim()}>Clear</button>
       </div>
+
+      <button type="button" on:click={isConnected ? disconnect : connect}>{isConnected ? 'Disconnect' : 'Connect'}</button>
 
       {#if !isConnected}
         <div class="command-row">
@@ -150,7 +151,7 @@
   .token-row,
   .command-row {
     display: grid;
-    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
     gap: 8px;
     align-items: center;
   }
@@ -165,13 +166,13 @@
     z-index: 30;
     top: calc(100% + 8px);
     right: 0;
-    width: min(360px, calc(100vw - 24px));
+    width: min(320px, calc(100vw - 24px));
     display: grid;
     gap: 10px;
     padding: 12px;
     border: 1px solid rgba(212, 165, 116, 0.34);
     border-radius: 8px;
-    background: rgba(9, 11, 14, 0.97);
+    background: #090b0e;
     box-shadow: 0 18px 40px rgba(0, 0, 0, 0.38);
   }
 

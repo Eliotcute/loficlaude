@@ -16,6 +16,7 @@
   const focusLastSummary = focus.lastSummary;
   const scenePopoverOpen = ui.scenePopoverOpen;
   const timerPopoverOpen = ui.timerPopoverOpen;
+  const bridgeSettingsOpen = ui.bridgeSettingsOpen;
 
   $: sceneIcon = SCENES.find((item) => item.key === $currentScene)?.icon ?? '🌙';
 
@@ -77,7 +78,11 @@
   }
 </script>
 
-<header class="ambient-header" style={`opacity: ${$uiChromeOpacity};`}>
+<header
+  class="ambient-header"
+  class:overlay-open={$bridgeSettingsOpen}
+  style={`opacity: ${$bridgeSettingsOpen ? 1 : $uiChromeOpacity};`}
+>
   <h1>LoFiClaude</h1>
 
   <div class="header-status" aria-label="Current scene and timer">
@@ -125,6 +130,10 @@
     z-index: 4;
     transition: opacity 180ms ease;
     pointer-events: none;
+  }
+
+  .ambient-header.overlay-open {
+    z-index: 8;
   }
 
   h1 {

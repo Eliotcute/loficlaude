@@ -35,6 +35,7 @@ export class BridgeClient {
     this.storage = options.storage ?? getBrowserStorage();
     this.autoReconnect = options.autoReconnect ?? false;
     this.reconnectDelayMs = options.reconnectDelayMs ?? 500;
+    this.maxReconnectAttempts = options.maxReconnectAttempts ?? 5;
     this.socket = null;
     this.token = '';
     this.instanceId = '';
@@ -139,6 +140,9 @@ export class BridgeClient {
   }
 
   connect(token) {
+    if (token !== undefined) {
+      this.reconnectAttempt = 0;
+    }
     const candidate = token ?? this.token;
     const clean = `${candidate ?? ''}`.trim();
     if (!clean) {
@@ -215,6 +219,8 @@ export class BridgeClient {
           return;
         }
         if (payload.replayTruncated) {
+          this.cursor = 0;
+          this.persistReplayState();
           this.onReplayGap();
         }
         return;
@@ -252,6 +258,7 @@ export class BridgeClient {
       const willReconnect = this.autoReconnect &&
         Boolean(this.token) &&
         !this.manualDisconnect &&
+        this.reconnectAttempt < this.maxReconnectAttempts &&
         !NON_RETRYABLE_CLOSE_CODES.has(event.code);
       this.onDisconnect({ willReconnect, code: event.code ?? 0, explicit: false });
       if (willReconnect) {

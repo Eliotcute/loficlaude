@@ -13,3 +13,11 @@ test('bridge token verification rejects empty, malformed, and near-match values'
   assert.equal(manager.verify(nearMatch), false);
   assert.equal(manager.verify('é'.repeat(manager.token.length)), false);
 });
+
+test('each Bridge process token manager starts with a fresh credential', () => {
+  const first = createTokenManager();
+  const second = createTokenManager();
+
+  assert.notEqual(first.token, second.token);
+  assert.equal(first.verify(second.token), false);
+});

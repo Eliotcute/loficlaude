@@ -1,6 +1,6 @@
 # LoFiClaude Handoff
 
-> 最后更新：2026-07-28
+> 最后更新：2026-07-29
 > 当前版本：V1.1.0
 > 分支：`codex/core-reliability`
 
@@ -15,7 +15,8 @@
 - Claw 七状态、离线 typing 回落、实时状态文案优先级和 reduced-motion 已补齐。
 - 首日 streak、跨午夜和后台/idle 专注累计已修复。
 - Bridge token 改为 SessionStorage，断开和清除时删除运行时及存储 token。
-- Bridge 服务端会话、token 和回放游标已加固：浏览器重连与 Bridge 重启可恢复同一 Claude 会话，显式 reset 才轮换会话和 token。
+- Bridge 服务端会话和回放游标已加固：浏览器重连与 Bridge 重启可恢复同一 Claude 会话；仅在 CLI 明确认定旧会话不存在时回退到新会话并重放当前 turn。
+- Unix Socket 单实例所有权先于会话状态读写建立，关闭后的 Claude 输出不会覆盖后继进程状态；token 每个服务进程轮换，显式 reset 只用于新建 Claude 会话。
 - 浏览器和终端消息统一串行进入 Claude；补齐消息/客户端/缓冲区上限、慢客户端隔离和 Unix Socket 所有权保护。
 - 浏览器不再携带 API key 直连 Anthropic；离线陪伴完全本地，真实 Claude 对话只经过本机 Bridge。
 - Bridge 设置移入设置层；Start room、移动布局和主场景层级已调整。
@@ -31,10 +32,10 @@
 
 ## 验证状态
 
-- 全量测试：94 项，94 通过、0 失败；已在沙箱外真实执行全部 Unix Socket 用例。
+- 全量测试：105 项，94 通过、0 失败；11 项 Unix Socket 用例在沙箱内因 `EPERM` 跳过，且相同 Socket 实现已在沙箱外真实通过。
 - 构建：`npm run build` 已通过；`git diff --check` 已通过。
 - 浏览器 QA：1440x900、768x1024、390x844 均无横向滚动或 Claw/文案重叠。
-- 交互 QA：Start 前设置可用、Esc 可关闭、历史可清空、token 未进入 URL 或 SessionStorage。
+- 交互 QA：Start 前设置可用、Esc 可关闭、历史可清空、token 未进入 URL、LocalStorage 或截图。
 - reduced-motion：两个 Canvas 在 1.5 秒采样内均保持静止。
 - Standards/Spec 双轴 review 已完成；存储降级和 summary 快照问题已修复。
 

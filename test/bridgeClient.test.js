@@ -206,17 +206,46 @@ test('an old socket closing cannot clear a newer connection', () => {
 });
 
 test('bridge client surfaces a truncated replay window', () => {
-  const client = new BridgeClient({ WebSocketImpl: FakeWebSocket, autoReconnect: false });
+  const storage = {
+    getItem: () => JSON.stringify({ instanceId: 'server-a', cursor: 99 }),
+    setItem() {}
+  };
+  const client = new BridgeClient({ WebSocketImpl: FakeWebSocket, autoReconnect: false, storage });
   let gaps = 0;
+  const deltas = [];
   client.onReplayGap = () => {
     gaps += 1;
   };
+  client.onDelta = (text) => deltas.push(text);
   client.connect('secret');
   client.socket.open();
 
   client.socket.dispatch('message', {
     data: JSON.stringify({ type: 'ready', instanceId: 'server-a', replayTruncated: true })
   });
+  client.socket.dispatch('message', {
+    data: JSON.stringify({ type: 'assistant_delta', text: 'replayed', instanceId: 'server-a', eventId: 1 })
+  });
 
   assert.equal(gaps, 1);
+  assert.deepEqual(deltas, ['replayed']);
+});
+
+test('bridge client stops reconnecting after the configured attempt limit', async () => {
+  const client = new BridgeClient({
+    WebSocketImpl: FakeWebSocket,
+    autoReconnect: true,
+    reconnectDelayMs: 1,
+    maxReconnectAttempts: 1
+  });
+  const disconnects = [];
+  client.onDisconnect = (details) => disconnects.push(details);
+
+  client.connect('secret');
+  client.socket.close();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  client.socket.close();
+
+  assert.deepEqual(disconnects.map(({ willReconnect }) => willReconnect), [true, false]);
+  assert.equal(client.reconnectTimer, null);
 });

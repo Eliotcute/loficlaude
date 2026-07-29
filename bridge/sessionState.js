@@ -33,16 +33,12 @@ function readRuntimeState(statePath) {
     if (!UUID_PATTERN.test(payload?.sessionId ?? '')) {
       throw new Error('Invalid persisted Claude session id');
     }
-    if (payload.bridgeToken !== undefined && !UUID_PATTERN.test(payload.bridgeToken)) {
-      throw new Error('Invalid persisted Bridge token');
-    }
-
     fs.fchmodSync(descriptor, 0o600);
 
     return {
       sessionId: payload.sessionId,
-      bridgeToken: payload.bridgeToken ?? null,
-      initialized: payload.initialized === true
+      initialized: payload.initialized === true,
+      needsRewrite: Object.hasOwn(payload, 'bridgeToken')
     };
   } finally {
     fs.closeSync(descriptor);
@@ -66,6 +62,13 @@ function writeRuntimeState(statePath, state, exclusive) {
   }
 }
 
+function createFreshRuntimeState() {
+  return {
+    sessionId: crypto.randomUUID(),
+    initialized: false
+  };
+}
+
 function createSessionState({ statePath, reset = false }) {
   if (!statePath || typeof statePath !== 'string') {
     throw new Error('session state path is required');
@@ -74,11 +77,7 @@ function createSessionState({ statePath, reset = false }) {
   let runtimeState;
 
   if (reset) {
-    runtimeState = {
-      sessionId: crypto.randomUUID(),
-      bridgeToken: crypto.randomUUID(),
-      initialized: false
-    };
+    runtimeState = createFreshRuntimeState();
     try {
       writeRuntimeState(statePath, runtimeState, true);
     } catch (error) {
@@ -92,11 +91,7 @@ function createSessionState({ statePath, reset = false }) {
   }
 
   if (!runtimeState) {
-    runtimeState = {
-      sessionId: crypto.randomUUID(),
-      bridgeToken: crypto.randomUUID(),
-      initialized: false
-    };
+    runtimeState = createFreshRuntimeState();
     try {
       writeRuntimeState(statePath, runtimeState, true);
     } catch (error) {
@@ -105,22 +100,41 @@ function createSessionState({ statePath, reset = false }) {
       }
       runtimeState = readRuntimeState(statePath);
     }
-  } else if (!runtimeState.bridgeToken) {
-    runtimeState.bridgeToken = crypto.randomUUID();
+  } else if (runtimeState.needsRewrite) {
+    delete runtimeState.needsRewrite;
     writeRuntimeState(statePath, runtimeState, false);
   }
 
   return {
-    bridgeToken: runtimeState.bridgeToken,
     getLaunchOptions() {
       return { sessionId: runtimeState.sessionId, resume: runtimeState.initialized };
     },
     markInitialized() {
       if (runtimeState.initialized) {
-        return;
+        return true;
+      }
+
+      const persisted = readRuntimeState(statePath);
+      if (!persisted || persisted.sessionId !== runtimeState.sessionId) {
+        if (persisted) {
+          delete persisted.needsRewrite;
+          runtimeState = persisted;
+        }
+        return false;
       }
       runtimeState.initialized = true;
       writeRuntimeState(statePath, runtimeState, false);
+      return true;
+    },
+    replaceFailedResume(expectedSessionId) {
+      const persisted = readRuntimeState(statePath);
+      if (!persisted || persisted.sessionId !== expectedSessionId || persisted.initialized !== true) {
+        return null;
+      }
+
+      runtimeState = createFreshRuntimeState();
+      writeRuntimeState(statePath, runtimeState, false);
+      return { sessionId: runtimeState.sessionId, resume: false };
     }
   };
 }

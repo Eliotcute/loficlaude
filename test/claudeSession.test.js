@@ -10,10 +10,12 @@ function createFakeChild() {
   child.stdout = new PassThrough();
   child.stderr = new PassThrough();
   child.writes = [];
+  child.writeCallbacks = [];
   child.stdin = new EventEmitter();
   child.stdin.writable = true;
-  child.stdin.write = (payload) => {
+  child.stdin.write = (payload, callback) => {
     child.writes.push(payload);
+    child.writeCallbacks.push(callback);
     return true;
   };
   child.killCalls = [];
@@ -204,4 +206,169 @@ test('Claude session retires after an asynchronous stdin error', () => {
   assert.equal(statuses.at(-1), 'blocked');
   assert.equal(errors.at(-1), 'Claude input is unavailable');
   assert.deepEqual(child.killCalls, ['SIGTERM']);
+});
+
+test('Claude session replays one active turn after a failed resume fallback', () => {
+  const resumedChild = createFakeChild();
+  const freshChild = createFakeChild();
+  const children = [resumedChild, freshChild];
+  const launches = [];
+  const users = [];
+  const statuses = [];
+  let resumeFailures = 0;
+  const session = createClaudeSession({
+    sessionId: '11111111-1111-4111-8111-111111111111',
+    resume: true,
+    onUser: (text, source) => users.push([text, source]),
+    onStatus: (status) => statuses.push(status),
+    onResumeFailed(expectedSessionId) {
+      resumeFailures += 1;
+      assert.equal(expectedSessionId, '11111111-1111-4111-8111-111111111111');
+      return { sessionId: '22222222-2222-4222-8222-222222222222', resume: false };
+    },
+    spawnImpl(command, args) {
+      launches.push({ command, args });
+      return children.shift();
+    }
+  });
+
+  assert.equal(session.sendUserMessage('keep this turn', 'browser'), true);
+  resumedChild.stdout.write(`${JSON.stringify({
+    type: 'result',
+    is_error: true,
+    session_id: '11111111-1111-4111-8111-111111111111',
+    errors: ['No conversation found with session ID: 11111111-1111-4111-8111-111111111111']
+  })}\n`);
+  resumedChild.emit('close');
+
+  assert.equal(resumeFailures, 1);
+  assert.deepEqual(launches[0].args.slice(-2), ['--resume', '11111111-1111-4111-8111-111111111111']);
+  assert.deepEqual(launches[1].args.slice(-2), ['--session-id', '22222222-2222-4222-8222-222222222222']);
+  assert.equal(freshChild.writes.length, 1);
+  assert.equal(JSON.parse(freshChild.writes[0]).message.content[0].text, 'keep this turn');
+  assert.deepEqual(users, [['keep this turn', 'browser']]);
+  assert.equal(statuses.includes('disconnected'), false);
+
+  resumedChild.writeCallbacks[0](new Error('late EPIPE'));
+  assert.deepEqual(freshChild.killCalls, []);
+
+  freshChild.emit('close');
+  assert.equal(resumeFailures, 1);
+  assert.equal(statuses.at(-1), 'disconnected');
+});
+
+test('Claude session does not replace a resume after an unconfirmed pre-init exit', () => {
+  for (const exit of [
+    { code: 1, signal: null },
+    { code: null, signal: 'SIGTERM' }
+  ]) {
+    const child = createFakeChild();
+    let resumeFailures = 0;
+    const statuses = [];
+    const session = createClaudeSession({
+      sessionId: '11111111-1111-4111-8111-111111111111',
+      resume: true,
+      onResumeFailed: () => {
+        resumeFailures += 1;
+        return { sessionId: '22222222-2222-4222-8222-222222222222', resume: false };
+      },
+      onStatus: (status) => statuses.push(status),
+      spawnImpl: () => child
+    });
+
+    assert.equal(session.sendUserMessage('keep this turn'), true);
+    child.emit('close', exit.code, exit.signal);
+
+    assert.equal(resumeFailures, 0);
+    assert.equal(statuses.at(-1), 'disconnected');
+  }
+});
+
+test('Claude session rejects near-match invalid-resume result signals', () => {
+  const variants = [
+    {
+      session_id: '33333333-3333-4333-8333-333333333333',
+      errors: ['No conversation found with session ID: 11111111-1111-4111-8111-111111111111']
+    },
+    {
+      session_id: '11111111-1111-4111-8111-111111111111',
+      errors: ['No conversation found with session ID: 33333333-3333-4333-8333-333333333333']
+    },
+    {
+      session_id: '11111111-1111-4111-8111-111111111111',
+      errors: ['Authentication failed']
+    }
+  ];
+
+  for (const variant of variants) {
+    const child = createFakeChild();
+    let resumeFailures = 0;
+    createClaudeSession({
+      sessionId: '11111111-1111-4111-8111-111111111111',
+      resume: true,
+      onResumeFailed: () => {
+        resumeFailures += 1;
+        return { sessionId: '22222222-2222-4222-8222-222222222222', resume: false };
+      },
+      spawnImpl: () => child
+    });
+
+    child.stdout.write(`${JSON.stringify({ type: 'result', is_error: true, ...variant })}\n`);
+    child.emit('close');
+    assert.equal(resumeFailures, 0);
+  }
+});
+
+test('Claude session does not replace a resume during explicit shutdown', () => {
+  const child = createFakeChild();
+  let resumeFailures = 0;
+  const session = createClaudeSession({
+    sessionId: '11111111-1111-4111-8111-111111111111',
+    resume: true,
+    onResumeFailed: () => {
+      resumeFailures += 1;
+      return { sessionId: '22222222-2222-4222-8222-222222222222', resume: false };
+    },
+    spawnImpl: () => child
+  });
+
+  session.close();
+  child.emit('close');
+
+  assert.equal(resumeFailures, 0);
+});
+
+test('Claude session ignores initialization output after explicit shutdown', () => {
+  const child = createFakeChild();
+  let initializations = 0;
+  const session = createClaudeSession({
+    onInitialized: () => {
+      initializations += 1;
+    },
+    spawnImpl: () => child
+  });
+
+  session.close();
+  child.stdout.write(`${JSON.stringify({ type: 'system', subtype: 'init' })}\n`);
+
+  assert.equal(initializations, 0);
+});
+
+test('Claude session keeps an initialized resume after a later exit', () => {
+  const child = createFakeChild();
+  let resumeFailures = 0;
+  createClaudeSession({
+    sessionId: '11111111-1111-4111-8111-111111111111',
+    resume: true,
+    onResumeFailed: () => {
+      resumeFailures += 1;
+      return { sessionId: '22222222-2222-4222-8222-222222222222', resume: false };
+    },
+    spawnImpl: () => child
+  });
+
+  child.stdout.write(`${JSON.stringify({ type: 'system', subtype: 'init' })}\n`);
+  child.emit('close');
+
+  assert.equal(resumeFailures, 0);
 });

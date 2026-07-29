@@ -14,10 +14,10 @@ if (!runtimeStats.isDirectory() || (typeof process.getuid === 'function' && runt
 }
 fs.chmodSync(config.runtimeDir, 0o700);
 
-const sessionState = createSessionState({ statePath: config.sessionStatePath, reset: config.resetSession });
-const tokenManager = createTokenManager(sessionState.bridgeToken);
+const tokenManager = createTokenManager();
 let socketClosed = false;
 let bridgeServer;
+let sessionState;
 
 const socketServer = createSocketServer({
   socketPath: config.socketPath,
@@ -66,51 +66,70 @@ function statusToText(status) {
   }
 }
 
-try {
-  bridgeServer = createBridgeServer({
-    config,
-    tokenManager,
-    sessionFactory: ({ onStatus, onDelta, onTool, onUser, onError, model, workspace }) => {
-      const launchOptions = sessionState.getLaunchOptions();
-      const session = createClaudeSession({
-        ...launchOptions,
-        model,
-        workspace,
-        maxUserMessageChars: config.maxUserMessageChars,
-        onInitialized: () => sessionState.markInitialized(),
-        onStatus: (value) => {
-          onStatus(value);
-          const marker = statusToText(value);
-          if (marker) {
-            socketServer.broadcast(marker);
+function startBridgeServer() {
+  try {
+    // The singleton socket is already owned, so no competing Bridge can mutate this state.
+    sessionState = createSessionState({ statePath: config.sessionStatePath, reset: config.resetSession });
+    bridgeServer = createBridgeServer({
+      config,
+      tokenManager,
+      sessionFactory: ({ onStatus, onDelta, onTool, onUser, onError, model, workspace }) => {
+        const launchOptions = sessionState.getLaunchOptions();
+        const session = createClaudeSession({
+          ...launchOptions,
+          model,
+          workspace,
+          maxUserMessageChars: config.maxUserMessageChars,
+          onInitialized: () => sessionState.markInitialized(),
+          onResumeFailed: (expectedSessionId) => sessionState.replaceFailedResume(expectedSessionId),
+          onStatus: (value) => {
+            onStatus(value);
+            const marker = statusToText(value);
+            if (marker) {
+              socketServer.broadcast(marker);
+            }
+          },
+          onDelta: (text) => {
+            onDelta(text);
+            socketServer.broadcast(text);
+          },
+          onUser: (text, source) => {
+            onUser(text, source);
+            socketServer.broadcast(`${source === 'browser' ? '[Browser]' : '[You]'} ${text}\n`);
+          },
+          onTool: (name) => {
+            onTool(name);
+            socketServer.broadcast(`[Tool: ${name}]\n`);
+          },
+          onError: (message) => {
+            onError(message);
+            socketServer.broadcast(`[Error: ${message}]\n`);
           }
-        },
-        onDelta: (text) => {
-          onDelta(text);
-          socketServer.broadcast(text);
-        },
-        onUser: (text, source) => {
-          onUser(text, source);
-          socketServer.broadcast(`${source === 'browser' ? '[Browser]' : '[You]'} ${text}\n`);
-        },
-        onTool: (name) => {
-          onTool(name);
-          socketServer.broadcast(`[Tool: ${name}]\n`);
-        },
-        onError: (message) => {
-          onError(message);
-          socketServer.broadcast(`[Error: ${message}]\n`);
-        }
-      });
+        });
 
-      socketServer.broadcast(statusToText(STATUS.CONNECTED));
-      return session;
-    }
+        socketServer.broadcast(statusToText(STATUS.CONNECTED));
+        return session;
+      }
+    });
+  } catch (error) {
+    console.error(`Bridge failed to start: ${error.message}`);
+    closeSocketServerOnce();
+    process.exitCode = 1;
+    return;
+  }
+
+  bridgeServer.on('listening', () => {
+    console.log(`LoFiClaude Bridge running on ws://localhost:${config.port}`);
+    console.log(`Token: ${tokenManager.token}`);
+    console.log(`Terminal socket: ${config.socketPath}`);
+    console.log(`Claude session: ${config.sessionStatePath}`);
   });
-} catch (error) {
-  console.error(`Bridge failed to start: ${error.message}`);
-  closeSocketServerOnce();
-  process.exitCode = 1;
+
+  bridgeServer.on('error', (error) => {
+    console.error(`Bridge failed to start: ${error.message}`);
+    process.exitCode = 1;
+    bridgeServer.close(() => closeSocketServerOnce());
+  });
 }
 
 let shuttingDown = false;
@@ -137,40 +156,16 @@ function shutdown(signal) {
   });
 }
 
-bridgeServer?.on('listening', () => {
-  if (!socketServer.isListening()) {
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+socketServer.start((socketError) => {
+  if (socketError) {
+    console.error(`Socket server failed to start: ${socketError.message}`);
+    process.exitCode = 1;
+    closeSocketServerOnce();
     return;
   }
 
-  console.log(`LoFiClaude Bridge running on ws://localhost:${config.port}`);
-  console.log(`Token: ${tokenManager.token}`);
-  console.log(`Terminal socket: ${config.socketPath}`);
-  console.log(`Claude session: ${config.sessionStatePath}`);
+  startBridgeServer();
 });
-
-bridgeServer?.on('error', (error) => {
-  console.error(`Bridge failed to start: ${error.message}`);
-  process.exitCode = 1;
-  bridgeServer.close(() => closeSocketServerOnce());
-});
-
-if (bridgeServer) {
-  socketServer.start((socketError) => {
-    if (socketError) {
-      console.error(`Socket server failed to start: ${socketError.message}`);
-      process.exitCode = 1;
-      bridgeServer.close(() => closeSocketServerOnce());
-      return;
-    }
-
-    if (bridgeServer.listening) {
-      console.log(`LoFiClaude Bridge running on ws://localhost:${config.port}`);
-      console.log(`Token: ${tokenManager.token}`);
-      console.log(`Terminal socket: ${config.socketPath}`);
-      console.log(`Claude session: ${config.sessionStatePath}`);
-    }
-  });
-}
-
-process.on('SIGINT', () => shutdown('SIGINT'));
-process.on('SIGTERM', () => shutdown('SIGTERM'));

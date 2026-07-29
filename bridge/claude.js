@@ -14,6 +14,7 @@ function createClaudeSession({
   onUser,
   onError,
   onInitialized,
+  onResumeFailed,
   model,
   workspace,
   sessionId,
@@ -23,42 +24,49 @@ function createClaudeSession({
   maxQueuedTurns = DEFAULT_MAX_QUEUED_TURNS,
   spawnImpl = spawn
 } = {}) {
-  const args = [
-    '-p',
-    '--input-format',
-    'stream-json',
-    '--output-format',
-    'stream-json',
-    '--verbose',
-    '--include-partial-messages'
-  ];
-
-  if (model) {
-    args.push('--model', model);
-  }
-
-  if (sessionId) {
-    if (!UUID_PATTERN.test(sessionId)) {
-      throw new Error('Claude session id must be a UUID');
-    }
-    args.push(resume ? '--resume' : '--session-id', sessionId);
-  }
-
-  const child = spawnImpl('claude', args, {
-    cwd: workspace || process.cwd(),
-    stdio: ['pipe', 'pipe', 'pipe']
-  });
-
+  let child = null;
   let closed = false;
+  let explicitClose = false;
   let disconnectedEmitted = false;
   let stdoutBuffer = '';
   let stderrBuffer = '';
-  const stdoutDecoder = new StringDecoder('utf8');
-  const stderrDecoder = new StringDecoder('utf8');
+  let stdoutDecoder = new StringDecoder('utf8');
+  let stderrDecoder = new StringDecoder('utf8');
   let sawOutputThisTurn = false;
   let turnActive = false;
   let initialized = false;
+  let spawnFailed = false;
+  let fallbackUsed = false;
+  let resumeFailureConfirmed = false;
+  let launchSessionId = sessionId;
+  let launchResume = resume;
+  let activeTurn = null;
   const pendingTurns = [];
+
+  function createLaunchArgs() {
+    const args = [
+      '-p',
+      '--input-format',
+      'stream-json',
+      '--output-format',
+      'stream-json',
+      '--verbose',
+      '--include-partial-messages'
+    ];
+
+    if (model) {
+      args.push('--model', model);
+    }
+
+    if (launchSessionId) {
+      if (!UUID_PATTERN.test(launchSessionId)) {
+        throw new Error('Claude session id must be a UUID');
+      }
+      args.push(launchResume ? '--resume' : '--session-id', launchSessionId);
+    }
+
+    return args;
+  }
 
   function emitStatus(nextStatus) {
     onStatus?.(nextStatus);
@@ -160,16 +168,20 @@ function createClaudeSession({
     if (closed) {
       return false;
     }
-    if (turnActive || pendingTurns.length === 0) {
+    if (turnActive || (!activeTurn && pendingTurns.length === 0)) {
       return true;
     }
 
-    const next = pendingTurns[0];
-    if (!child.stdin.writable) {
+    const next = activeTurn ?? pendingTurns[0];
+    const targetChild = child;
+    if (!targetChild.stdin.writable) {
       terminateForProtocolError('Claude input is unavailable');
       return false;
     }
 
+    if (!activeTurn) {
+      activeTurn = pendingTurns.shift();
+    }
     turnActive = true;
     sawOutputThisTurn = false;
 
@@ -181,8 +193,8 @@ function createClaudeSession({
       }
     };
     try {
-      child.stdin.write(`${JSON.stringify(payload)}\n`, (error) => {
-        if (error) {
+      targetChild.stdin.write(`${JSON.stringify(payload)}\n`, (error) => {
+        if (error && child === targetChild) {
           terminateForProtocolError('Claude input is unavailable');
         }
       });
@@ -196,18 +208,35 @@ function createClaudeSession({
       return false;
     }
 
-    pendingTurns.shift();
-    onUser?.(next.text, next.source);
+    if (!next.announced) {
+      next.announced = true;
+      onUser?.(next.text, next.source);
+    }
     emitStatus(STATUS.THINKING);
     return true;
   }
 
   function finishTurn() {
     turnActive = false;
+    activeTurn = null;
     startNextTurn();
   }
 
   function handleResultEvent(payload) {
+    const expectedResumeError = `No conversation found with session ID: ${launchSessionId}`;
+    if (
+      launchResume &&
+      !fallbackUsed &&
+      !initialized &&
+      payload?.is_error === true &&
+      payload.session_id === launchSessionId &&
+      Array.isArray(payload.errors) &&
+      payload.errors.includes(expectedResumeError)
+    ) {
+      resumeFailureConfirmed = true;
+      return;
+    }
+
     if (payload?.is_error || (typeof payload?.subtype === 'string' && payload.subtype.startsWith('error_'))) {
       emitStatus(STATUS.BLOCKED);
       emitError('Claude run ended with an error');
@@ -297,6 +326,7 @@ function createClaudeSession({
     closed = true;
     pendingTurns.length = 0;
     turnActive = false;
+    activeTurn = null;
     emitStatus(STATUS.BLOCKED);
     emitError(message);
     try {
@@ -306,45 +336,99 @@ function createClaudeSession({
     }
   }
 
-  child.stdout.on('data', (chunk) => {
-    const consumed = consumeChunk(stdoutBuffer, stdoutDecoder.write(chunk), handleStdoutLine);
-    stdoutBuffer = consumed.buffer;
-    if (consumed.overflow) {
-      terminateForProtocolError('Claude output exceeded the safety limit');
-    }
-  });
+  function launchChild() {
+    stdoutBuffer = '';
+    stderrBuffer = '';
+    stdoutDecoder = new StringDecoder('utf8');
+    stderrDecoder = new StringDecoder('utf8');
+    initialized = false;
+    spawnFailed = false;
+    resumeFailureConfirmed = false;
 
-  child.stderr.on('data', (chunk) => {
-    const consumed = consumeChunk(stderrBuffer, stderrDecoder.write(chunk), (line) => {
-      const clean = line.trim();
-      if (clean) {
-        console.error('Claude CLI wrote diagnostic output to stderr');
+    const spawnedChild = spawnImpl('claude', createLaunchArgs(), {
+      cwd: workspace || process.cwd(),
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    child = spawnedChild;
+
+    spawnedChild.stdout.on('data', (chunk) => {
+      if (closed || child !== spawnedChild) {
+        return;
+      }
+      const consumed = consumeChunk(stdoutBuffer, stdoutDecoder.write(chunk), handleStdoutLine);
+      stdoutBuffer = consumed.buffer;
+      if (consumed.overflow) {
+        terminateForProtocolError('Claude output exceeded the safety limit');
       }
     });
-    stderrBuffer = consumed.buffer;
-    if (consumed.overflow) {
-      terminateForProtocolError('Claude output exceeded the safety limit');
-    }
-  });
 
-  child.on('error', (error) => {
-    console.error(`Failed to start Claude CLI: ${error.message}`);
-    terminateForProtocolError('Failed to start Claude CLI');
-  });
+    spawnedChild.stderr.on('data', (chunk) => {
+      if (closed || child !== spawnedChild) {
+        return;
+      }
+      const consumed = consumeChunk(stderrBuffer, stderrDecoder.write(chunk), (line) => {
+        const clean = line.trim();
+        if (clean) {
+          console.error('Claude CLI wrote diagnostic output to stderr');
+        }
+      });
+      stderrBuffer = consumed.buffer;
+      if (consumed.overflow) {
+        terminateForProtocolError('Claude output exceeded the safety limit');
+      }
+    });
 
-  child.on('close', () => {
-    closed = true;
-    pendingTurns.length = 0;
-    turnActive = false;
-    if (!disconnectedEmitted) {
-      disconnectedEmitted = true;
-      emitStatus(STATUS.DISCONNECTED);
-    }
-  });
+    spawnedChild.on('error', (error) => {
+      if (closed || child !== spawnedChild) {
+        return;
+      }
+      spawnFailed = true;
+      console.error(`Failed to start Claude CLI: ${error.message}`);
+      terminateForProtocolError('Failed to start Claude CLI');
+    });
 
-  child.stdin.on?.('error', () => {
-    terminateForProtocolError('Claude input is unavailable');
-  });
+    spawnedChild.on('close', () => {
+      if (child !== spawnedChild) {
+        return;
+      }
+
+      if (!closed && !explicitClose && resumeFailureConfirmed && !spawnFailed && !fallbackUsed) {
+        let replacement = null;
+        try {
+          replacement = onResumeFailed?.(launchSessionId) ?? null;
+        } catch {
+          emitError('Claude session recovery failed');
+        }
+        if (replacement && UUID_PATTERN.test(replacement.sessionId ?? '') && replacement.resume === false) {
+          fallbackUsed = true;
+          launchSessionId = replacement.sessionId;
+          launchResume = false;
+          turnActive = false;
+          sawOutputThisTurn = false;
+          launchChild();
+          startNextTurn();
+          return;
+        }
+      }
+
+      closed = true;
+      pendingTurns.length = 0;
+      turnActive = false;
+      activeTurn = null;
+      if (!disconnectedEmitted) {
+        disconnectedEmitted = true;
+        emitStatus(STATUS.DISCONNECTED);
+      }
+    });
+
+    spawnedChild.stdin.on?.('error', () => {
+      if (child === spawnedChild) {
+        terminateForProtocolError('Claude input is unavailable');
+      }
+    });
+  }
+
+  launchChild();
 
   return {
     sendUserMessage(text, source = 'terminal') {
@@ -370,8 +454,10 @@ function createClaudeSession({
       }
 
       closed = true;
+      explicitClose = true;
       pendingTurns.length = 0;
       turnActive = false;
+      activeTurn = null;
       try {
         child.kill('SIGTERM');
       } catch {

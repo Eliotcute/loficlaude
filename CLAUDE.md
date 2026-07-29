@@ -73,7 +73,7 @@ Node.js WebSocket bridge that connects local Claude Code CLI to the browser comp
 - `bridge/index.js` bootstraps token auth, the private Unix Socket, persisted session state, and lifecycle handling.
 - `bridge/server.js` manages socket auth, bounded event replay, shared browser/terminal routing, and `status/assistant_delta/tool_running/error` events.
 - `bridge/claude.js` runs one serialized Claude CLI session in `--input-format stream-json --output-format stream-json` mode, streaming assistant deltas and tool activity back to the UI.
-- `bridge/sessionState.js` persists the Claude session id and Bridge token in a private runtime file so a restart resumes the same conversation. Set `LOFICLAUDE_RESET_SESSION=1` for an explicit reset.
+- `bridge/sessionState.js` persists only the Claude session id in a private runtime file so a restart resumes the same conversation. The Bridge token rotates per server process; set `LOFICLAUDE_RESET_SESSION=1` for an explicit conversation reset.
 
 ### Components (`src/components/`)
 
