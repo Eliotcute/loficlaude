@@ -168,11 +168,13 @@
     const dt = Math.min(0.05, (timestamp - (lastTime || timestamp)) / 1000);
     lastTime = timestamp;
 
-    updateClaudeMotion(
-      motionState,
-      { width: window.innerWidth, height: window.innerHeight, playerExpanded: $uiMiniPlayerExpanded },
-      dt
-    );
+    if (!formMenuOpen) {
+      updateClaudeMotion(
+        motionState,
+        { width: window.innerWidth, height: window.innerHeight, playerExpanded: $uiMiniPlayerExpanded },
+        dt
+      );
+    }
 
     motionSyncElapsedMs += dt * 1000;
     syncStores({ force: motionSyncElapsedMs >= 33 });
@@ -258,6 +260,8 @@
     const nextFormIndex = ((Number(index) || 0) % FORM_NAMES.length + FORM_NAMES.length) % FORM_NAMES.length;
     claudeForm.set(nextFormIndex);
     resetFormAnimation(nextFormIndex);
+    const form = getForm(nextFormIndex);
+    drawGrid(form.frames[0]?.grid ?? form.baseGrid, getPaletteForForm(nextFormIndex));
     formMenuOpen = false;
     dispatch('formchange', {
       index: nextFormIndex,
