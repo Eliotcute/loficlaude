@@ -535,6 +535,10 @@
       lastNonZeroRainVolume = $rainVolume;
     }
 
+    // Prepare the players before the first gesture without starting playback.
+    // This keeps the eventual play() call inside the user's click path.
+    audio.initAudio(false);
+
     startIdleTimer();
     startSceneRotation();
     startFocusTracking();
