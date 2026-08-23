@@ -65,6 +65,7 @@
     isPlaying={$playerIsPlaying}
     isLoading={$playerIsLoading}
     error={$playerError}
+    rainSourceStatus={$rainSourceStatus}
     rainType={$rainType}
     rainVolume={$rainVolume}
     timerMinutes={$timerMinutes}
@@ -122,8 +123,10 @@
     <p class="player-status error" role="status">{$playerError}</p>
   {:else if $playerIsLoading}
     <p class="player-status" role="status">loading audio...</p>
+  {:else if $rainSourceStatus === 'rainy-mood'}
+    <p class="player-status" role="status">Rainy Mood remote rain active</p>
   {:else if $rainSourceStatus === 'fallback'}
-    <p class="player-status" role="status">rain fallback active</p>
+    <p class="player-status" role="status">Local fallback rain active; Rainy Mood unavailable</p>
   {/if}
 </div>
 
@@ -160,10 +163,15 @@
     color: #e8e0d8;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 11px;
-    height: 28px;
+    min-height: 44px;
   }
 
-  .custom-toggle,
+  .custom-toggle {
+    width: 44px;
+    padding: 0 10px;
+    cursor: pointer;
+  }
+
   .custom-form button {
     padding: 0 10px;
     cursor: pointer;
@@ -197,7 +205,7 @@
     left: 0;
     bottom: calc(100% + 8px);
     max-width: min(420px, calc(100vw - 32px));
-    color: rgba(232, 224, 216, 0.74);
+    color: rgba(232, 224, 216, 0.86);
     font-family: 'IBM Plex Mono', monospace;
     font-size: 11px;
   }

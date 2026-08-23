@@ -4,6 +4,7 @@ const { createClaudeSession } = require('./claude');
 const { createTokenManager } = require('./token');
 const { createSocketServer } = require('./socketServer');
 const { createSessionState } = require('./sessionState');
+const { createPairingServer } = require('./pairingServer');
 const { STATUS } = require('./protocol');
 const config = require('./config');
 
@@ -18,6 +19,11 @@ const tokenManager = createTokenManager();
 let socketClosed = false;
 let bridgeServer;
 let sessionState;
+const pairingServer = createPairingServer({
+  host: config.host,
+  port: config.pairingPort,
+  tokenManager
+});
 
 const socketServer = createSocketServer({
   socketPath: config.socketPath,
@@ -113,7 +119,7 @@ function startBridgeServer() {
     });
   } catch (error) {
     console.error(`Bridge failed to start: ${error.message}`);
-    closeSocketServerOnce();
+    pairingServer.close(() => closeSocketServerOnce());
     process.exitCode = 1;
     return;
   }
@@ -128,7 +134,7 @@ function startBridgeServer() {
   bridgeServer.on('error', (error) => {
     console.error(`Bridge failed to start: ${error.message}`);
     process.exitCode = 1;
-    bridgeServer.close(() => closeSocketServerOnce());
+    bridgeServer.close(() => pairingServer.close(() => closeSocketServerOnce()));
   });
 }
 
@@ -141,18 +147,18 @@ function shutdown(signal) {
 
   shuttingDown = true;
   if (!bridgeServer) {
-    closeSocketServerOnce(() => {
+    pairingServer.close(() => closeSocketServerOnce(() => {
       console.log(`Bridge closed (${signal})`);
       process.exit(0);
-    });
+    }));
     return;
   }
 
   bridgeServer.close(() => {
-    closeSocketServerOnce(() => {
+    pairingServer.close(() => closeSocketServerOnce(() => {
       console.log(`Bridge closed (${signal})`);
       process.exit(0);
-    });
+    }));
   });
 }
 
@@ -167,5 +173,13 @@ socketServer.start((socketError) => {
     return;
   }
 
-  startBridgeServer();
+  pairingServer.start((pairingError) => {
+    if (pairingError) {
+      console.error(`Pairing server failed to start: ${pairingError.message}`);
+      closeSocketServerOnce();
+      process.exitCode = 1;
+      return;
+    }
+    startBridgeServer();
+  });
 });

@@ -45,6 +45,9 @@ test('Claude session uses an explicit session id and resume mode', () => {
     }
   });
 
+  assert.equal(launches[0].args[launches[0].args.indexOf('--permission-mode') + 1], 'dontAsk');
+  assert.equal(launches[0].args[launches[0].args.indexOf('--tools') + 1], '');
+  assert.equal(launches[0].args.includes('--allowed-tools'), false);
   assert.deepEqual(launches[0].args.slice(-2), ['--session-id', '11111111-1111-4111-8111-111111111111']);
   assert.deepEqual(launches[1].args.slice(-2), ['--resume', '11111111-1111-4111-8111-111111111111']);
 });

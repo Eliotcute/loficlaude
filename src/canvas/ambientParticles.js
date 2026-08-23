@@ -5,8 +5,24 @@ export function createAmbientParticles(sceneKey, width, height) {
   const particles = [];
 
   if (sceneKey === 'softRain') {
-    for (let i = 0; i < 120; i += 1) {
-      particles.push({ type: 'rain', x: rng() * width, y: rng() * height, vy: 120 + rng() * 180, len: 8 + rng() * 8 });
+    for (let i = 0; i < 180; i += 1) {
+      particles.push({
+        type: 'rain',
+        x: rng() * width,
+        y: rng() * height,
+        vy: 150 + rng() * 220,
+        len: 10 + rng() * 10,
+        phase: rng() * Math.PI * 2
+      });
+    }
+    for (let i = 0; i < 24; i += 1) {
+      particles.push({
+        type: 'ripple',
+        x: rng() * width,
+        y: height * (0.82 + rng() * 0.14),
+        age: rng() * 1.4,
+        duration: 1.4 + rng() * 0.8
+      });
     }
   } else {
     for (let i = 0; i < 80; i += 1) {
@@ -27,9 +43,17 @@ export function updateAmbientParticles(particles, dt, width, height) {
     if (p.type === 'rain') {
       p.y += p.vy * dt;
       p.x -= p.vy * 0.06 * dt;
+      p.phase += dt * 2;
       if (p.y > height + 12 || p.x < -12) {
         p.x = Math.random() * width;
         p.y = -12;
+      }
+    } else if (p.type === 'ripple') {
+      p.age += dt;
+      if (p.age > p.duration) {
+        p.x = Math.random() * width;
+        p.y = height * (0.82 + Math.random() * 0.14);
+        p.age = 0;
       }
     } else if (p.type === 'star') {
       p.tw += p.tws * dt;
@@ -47,12 +71,23 @@ export function updateAmbientParticles(particles, dt, width, height) {
 export function drawAmbientParticles(ctx, particles) {
   for (const p of particles) {
     if (p.type === 'rain') {
-      ctx.strokeStyle = 'rgba(176,210,255,0.4)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(p.x, p.y);
-      ctx.lineTo(p.x - 2, p.y + p.len);
-      ctx.stroke();
+      const glow = 0.52 + ((Math.sin(p.phase) + 1) * 0.5) * 0.3;
+      ctx.fillStyle = `rgba(176,210,255,${glow.toFixed(3)})`;
+      const x = Math.round(p.x);
+      const y = Math.round(p.y);
+      ctx.fillRect(x, y, 2, 2);
+      ctx.fillRect(x - 1, y + 3, 2, Math.max(5, Math.round(p.len * 0.62)));
+    } else if (p.type === 'ripple') {
+      const progress = p.age / p.duration;
+      const alpha = Math.max(0, 0.32 * (1 - progress));
+      const width = Math.max(2, Math.round(progress * 12));
+      ctx.fillStyle = `rgba(164,196,220,${alpha.toFixed(3)})`;
+      const x = Math.round(p.x);
+      const y = Math.round(p.y);
+      ctx.fillRect(x - width, y, width * 2 + 1, 1);
+      if (width > 3) {
+        ctx.fillRect(x - width + 2, y + 2, width * 2 - 3, 1);
+      }
     } else if (p.type === 'star') {
       const a = 0.3 + ((Math.sin(p.tw) + 1) * 0.5) * 0.65;
       ctx.fillStyle = `rgba(245,236,220,${a.toFixed(3)})`;

@@ -7,7 +7,10 @@
   const SCENES = [
     { key: 'lofiNight', icon: '🌙', label: 'Night' },
     { key: 'softRain', icon: '🌧', label: 'Rain' },
-    { key: 'starDrift', icon: '⭐', label: 'Stars' }
+    { key: 'starDrift', icon: '⭐', label: 'Stars' },
+    { key: 'fmStudio', icon: '📻', label: 'FM Studio' },
+    { key: 'recordRoom', icon: '💿', label: 'Records' },
+    { key: 'focusConsole', icon: '⌘', label: 'Console' }
   ];
   const currentScene = scene.current;
   const sceneLocked = scene.locked;

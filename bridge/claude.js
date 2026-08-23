@@ -51,7 +51,11 @@ function createClaudeSession({
       '--output-format',
       'stream-json',
       '--verbose',
-      '--include-partial-messages'
+      '--include-partial-messages',
+      '--permission-mode',
+      'dontAsk',
+      '--tools',
+      ''
     ];
 
     if (model) {

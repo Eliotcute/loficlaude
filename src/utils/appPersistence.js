@@ -10,9 +10,12 @@ export const FOCUS_KEY = 'lofi-claude-focus-state';
 export const SCENE_NAME_MAP = {
   lofiNight: 'Lofi Night',
   softRain: 'Soft Rain',
-  starDrift: 'Star Drift'
+  starDrift: 'Star Drift',
+  fmStudio: 'FM Studio',
+  recordRoom: 'Record Room',
+  focusConsole: 'Focus Console'
 };
-export const SCENE_ORDER = ['lofiNight', 'softRain', 'starDrift'];
+export const SCENE_ORDER = ['lofiNight', 'softRain', 'starDrift', 'fmStudio', 'recordRoom', 'focusConsole'];
 
 export function readStorageValue(storage, key) {
   try {

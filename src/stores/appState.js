@@ -20,7 +20,7 @@ export const rain = {
 };
 
 export const scene = {
-  current: writable('lofiNight'), // lofiNight | softRain | starDrift
+  current: writable('lofiNight'), // lofiNight | softRain | starDrift | fmStudio | recordRoom | focusConsole
   locked: writable(false),
   transitionProgress: writable(0)
 };

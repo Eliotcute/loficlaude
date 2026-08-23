@@ -56,10 +56,12 @@
   let focusInterval;
   let restoredFocusSnapshot = null;
   let lastNonZeroRainVolume = 60;
+  let lastActivityNotifiedAt = 0;
 
   let claudeBubbleVisible = false;
   let claudeBubblePassive = false;
   let claudeBubbleMessage = '今天想做点什么呢？';
+  let claudeCompanionState = 'resting';
   let claudePanelOpen = false;
   let claudeLoading = false;
   let claudeCanReconnect = false;
@@ -97,8 +99,6 @@
     onIdleStart: (idleSince) => {
       ui.idleSince.set(idleSince);
       uiMode.set('focus');
-      claudeOrch.markResting();
-      refreshClaudeState();
     },
     onIdleEnd: () => {
       ui.idleSince.set(null);
@@ -116,6 +116,7 @@
     claudeBubbleVisible = state.bubbleVisible;
     claudeBubblePassive = state.bubblePassive;
     claudeBubbleMessage = state.bubbleMessage;
+    claudeCompanionState = state.companionState ?? 'resting';
     claudePanelOpen = state.panelOpen;
     claudeLoading = state.loading;
     claudeCanReconnect = state.canReconnect;
@@ -132,6 +133,11 @@
   }
 
   function setActivityState() {
+    const now = Date.now();
+    if (now - lastActivityNotifiedAt < 250) {
+      return;
+    }
+    lastActivityNotifiedAt = now;
     session.markActivity();
   }
 
@@ -171,7 +177,9 @@
 
   function handleClaudeFormChange(event) {
     const formName = event.detail?.name ?? '新形态';
-    claudeOrch.closePanel();
+    // Switching forms should close the lightweight chat without letting the
+    // normal close path overwrite the newly selected form with idle_breathe.
+    claudeOrch.closePanel({ resumePatrol: false });
     claudeOrch.showTransientBubble(`切换形态：${formName}`, 2000);
     refreshClaudeState();
   }
@@ -279,7 +287,8 @@
     const wasStarted = get(hasStarted);
     hasStarted.set(true);
     uiMode.set('default');
-    claude.mood.set(get(connectionStatus) === 'connected' ? 'idle' : 'sleep');
+    claudeOrch.markActive();
+    refreshClaudeState();
     setActivityState();
 
     if (!wasStarted) {
@@ -545,7 +554,7 @@
   });
 </script>
 
-<main class="app-shell" aria-label="LoFiClaude phase four shell">
+<main class="app-shell" aria-label="LoFiClaude ambient room">
   <section class="canvas-zone" aria-label="Canvas scene" on:mousemove={setActivityState}>
     <AsciiBackground scene={$currentScene} rainVolume={$rainVolume} working={$claudeMode === 'working'} />
     <ClaudeSprite on:activate={handleClaudeActivate} on:formchange={handleClaudeFormChange} />
@@ -582,6 +591,7 @@
   {#if claudeBubbleVisible}
     <ClaudeBubble
       message={claudeBubbleMessage}
+      companionState={claudeCompanionState}
       messages={claudeHistory}
       activeAssistantId={claudeActiveAssistantId}
       anchor={$claudeBubbleAnchor}
@@ -613,7 +623,9 @@
     />
   {/if}
 
-  <div id="youtube-player-host" class="youtube-host" aria-hidden="true"></div>
+  <div class="youtube-host" aria-hidden="true" tabindex="-1" role="presentation">
+    <div id="youtube-player-host" class="youtube-player-mount"></div>
+  </div>
 </main>
 
 <style>
@@ -626,6 +638,11 @@
     pointer-events: none;
     left: -9999px;
     top: -9999px;
+  }
+
+  .youtube-player-mount {
+    width: 1px;
+    height: 1px;
   }
 
   .empty-state {
@@ -672,7 +689,7 @@
   .empty-state-hint {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 11px;
-    color: rgba(231, 219, 202, 0.58);
+    color: rgba(231, 219, 202, 0.72);
   }
 
   .start-overlay {

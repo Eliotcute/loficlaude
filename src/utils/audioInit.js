@@ -1,6 +1,27 @@
 import { RainPlayer } from '../audio/RainPlayer.js';
 import { YouTubePlayer } from '../audio/YouTubePlayer.js';
 
+const DEFAULT_YOUTUBE_INITIALIZATION_TIMEOUT_MS = 12000;
+
+function withTimeout(promise, timeoutMs, message) {
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(new Error(message));
+    }, timeoutMs);
+
+    Promise.resolve(promise).then(
+      (value) => {
+        clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+  });
+}
+
 export function createAudioInitializer(options = {}) {
   const {
     mountId = 'youtube-player-host',
@@ -12,8 +33,13 @@ export function createAudioInitializer(options = {}) {
     onError = () => {},
     onRainStatus = () => {},
     createYouTubePlayer = (playerOptions) => new YouTubePlayer(playerOptions),
-    createRainPlayer = (playerOptions) => new RainPlayer(playerOptions)
+    createRainPlayer = (playerOptions) => new RainPlayer(playerOptions),
+    youtubeInitializationTimeoutMs = DEFAULT_YOUTUBE_INITIALIZATION_TIMEOUT_MS
   } = options;
+  const youtubeTimeoutMs =
+    Number.isFinite(youtubeInitializationTimeoutMs) && youtubeInitializationTimeoutMs > 0
+      ? youtubeInitializationTimeoutMs
+      : DEFAULT_YOUTUBE_INITIALIZATION_TIMEOUT_MS;
 
   let youtubePlayer;
   let rainPlayer;
@@ -27,7 +53,7 @@ export function createAudioInitializer(options = {}) {
   function initAudio(autoplay = false) {
     autoplayRequested ||= autoplay;
 
-    if (audioReady) {
+    if (audioReady && youtubeReady && rainReady) {
       if (autoplay && youtubePlayer) {
         youtubePlayer.play();
         rainPlayer?.play();
@@ -47,7 +73,7 @@ export function createAudioInitializer(options = {}) {
         youtubePlayer = createYouTubePlayer({ mountId });
       }
       if (!rainPlayer) {
-        rainPlayer = createRainPlayer({ onStatus: onRainStatus, preferLocal: true });
+        rainPlayer = createRainPlayer({ onStatus: onRainStatus, preferLocal: false });
       }
 
       const initializeRain = (async () => {
@@ -63,12 +89,16 @@ export function createAudioInitializer(options = {}) {
 
       const initializeYouTube = (async () => {
         try {
-          await youtubePlayer.init(getCurrentTrackIndex());
+          await withTimeout(
+            youtubePlayer.init(getCurrentTrackIndex()),
+            youtubeTimeoutMs,
+            'YouTube initialization timed out.'
+          );
           youtubePlayer.setVolume(60);
           youtubeReady = true;
         } catch (error) {
           youtubeReady = false;
-          onError(`Music unavailable: ${error?.message ?? 'retry from player'}`);
+          onError(`Music unavailable: ${error?.message ?? 'Unknown error.'} Retry from player.`);
         }
       })();
 
@@ -78,8 +108,8 @@ export function createAudioInitializer(options = {}) {
           return { youtubePlayer, rainPlayer };
         }
 
-        audioReady = youtubeReady && rainReady;
-        if (audioReady) {
+        audioReady = youtubeReady || rainReady;
+        if (youtubeReady && rainReady) {
           onError(null);
         }
 

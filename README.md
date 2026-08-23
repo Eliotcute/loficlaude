@@ -22,25 +22,35 @@ Open the Vite URL, then click `Start room`.
 
 ## Run bridge
 
-In a second terminal:
+Install the local command once from the project directory:
 
 ```bash
-cd bridge
-npm install
-npm start
+npm install --prefix bridge
+npm link
 ```
 
-The bridge listens on `ws://localhost:9120`. It keeps one Claude CLI conversation across browser reconnects and Bridge restarts, while generating a new Bridge token for every server process. Start it with `LOFICLAUDE_RESET_SESSION=1 npm start` when you intentionally want a new Claude conversation.
+Then, from any terminal directory, start the Bridge with:
+
+```bash
+loficlaude bridge
+```
+
+The command resolves the Bridge from the installed LoFiClaude project, so the terminal's current directory and the project's absolute path do not matter. The equivalent project-local command is `npm run bridge`.
+
+The bridge listens on `ws://localhost:9120` and exposes a loopback-only pairing endpoint on `http://127.0.0.1:9121/token`. When the room is opened on the same machine, it discovers the running Bridge and connects automatically; the token is never placed in the URL and is retained only in the current browser session. The token is also printed once to the local terminal as a manual fallback. Start it with `LOFICLAUDE_RESET_SESSION=1 loficlaude bridge` when you intentionally want a new Claude conversation.
 
 ## Connect
 
 1. Start the room.
 2. Start the bridge server.
-3. Open the bridge settings button in the header.
-4. Enter the bridge token.
-5. Click `Connect`.
+3. The room automatically discovers the local Bridge and connects.
+4. If auto-discovery is unavailable, open Bridge settings and enter the one-time token printed by the Bridge.
 
 When connected, Claude streams responses through the bridge. Without the bridge, the room and local companion chat remain available.
+
+### Bridge permission boundary
+
+The Bridge starts Claude CLI in the project root with non-interactive `-p` mode, explicit `--permission-mode dontAsk`, and `--tools ""`. This is a text-only conversation boundary: Claude cannot read project files, edit files, run shell commands, or invoke built-in tools through the Bridge. Non-interactive mode skips the workspace trust prompt, but no project tool is available to use. Treat the Bridge token as a local capability and only connect from a trusted browser on the same machine.
 
 ## Shortcuts
 
@@ -48,25 +58,25 @@ When connected, Claude streams responses through the bridge. Without the bridge,
 - `←` / `→`: previous or next track
 - `↑` / `↓`: rain volume
 - `M`: mute rain
-- `1` / `2` / `3`: switch scene
+- `1` / `2` / `3` / `4` / `5` / `6`: switch scene
 - `T`: timer
 - `H`: shortcut hint
 - `Esc`: close transient UI
 
 ## Audio
 
-The room initializes YouTube lofi playback and local Web Audio rain only after a user gesture. `Start room` is the intended first gesture.
+The room initializes YouTube lofi playback and real Rainy Mood rain audio only after a user gesture. `Start room` is the intended first gesture.
 
-Local generated rain is the V1.1 default because authorization for the remote source is not confirmed. `RainPlayer` retains an explicit remote mode with automatic local fallback for testing and future authorized use. Rain intensity changes the effective gain and filter shape.
+Rainy Mood is the default rain source. If the remote audio fails, `RainPlayer` switches to local Web Audio fallback so the room remains usable. Rain intensity changes the effective gain and filter shape. Confirm Rainy Mood usage rights before public distribution.
 
 ## Troubleshooting
 
 - Header shows `bridge disconnected`:
-  start `bridge/` with `npm start`, then reconnect.
+  run `loficlaude bridge`, then reconnect.
 - Token rejected:
   verify the token expected by the bridge server.
 - Bridge chat unavailable:
-  local companion chat still works; start `bridge/` and reconnect for Claude CLI streaming.
+  local companion chat still works; start `loficlaude bridge` and reconnect for Claude CLI streaming.
 - No rain audio:
   set rain volume above 0, then retry Start room; the local Web Audio source requires a user gesture.
 - Bridge is not running:

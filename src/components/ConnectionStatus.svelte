@@ -5,11 +5,122 @@
   import { bridgeToken, connectionStatus, claudeStatus, getSessionStatus, lastError } from '../stores/bridgeState.js';
   import { ui } from '../stores/appState.js';
 
-  const BRIDGE_CMD = 'cd bridge && npm start';
+  // The bridge settings can be opened from any terminal directory.
+  const BRIDGE_CMD = 'loficlaude bridge';
 
   let copied = false;
   let copiedTimer = null;
+  let tokenMask = '';
+  let autoDiscovery = 'idle';
+  let discoveryTimer = null;
+  let discoveryInFlight = false;
+  let discoveryAttempts = 0;
+  const MAX_DISCOVERY_ATTEMPTS = 20;
+  const DISCOVERY_INTERVAL_MS = 1500;
   const bridgeSettingsOpen = ui.bridgeSettingsOpen;
+
+  async function discoverBridgeToken() {
+    if (discoveryInFlight || get(bridgeToken).trim() || typeof fetch !== 'function') {
+      return false;
+    }
+
+    discoveryInFlight = true;
+    autoDiscovery = 'checking';
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 900);
+    try {
+      const response = await fetch('http://127.0.0.1:9121/token', {
+        method: 'GET',
+        cache: 'no-store',
+        credentials: 'omit',
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        autoDiscovery = 'unavailable';
+        return false;
+      }
+      const payload = await response.json();
+      const token = typeof payload?.token === 'string' ? payload.token.trim() : '';
+      if (!token) {
+        autoDiscovery = 'unavailable';
+        return false;
+      }
+      bridgeToken.set(token);
+      autoDiscovery = 'found';
+      return true;
+    } catch {
+      autoDiscovery = 'unavailable';
+      return false;
+    } finally {
+      window.clearTimeout(timeout);
+      discoveryInFlight = false;
+    }
+  }
+
+  function maskToken(token) {
+    return '*'.repeat(token.length);
+  }
+
+  function syncTokenMask(input, caret) {
+    tokenMask = maskToken(get(bridgeToken));
+    queueMicrotask(() => {
+      input.setSelectionRange(caret, caret);
+    });
+  }
+
+  function replaceTokenSelection(input, text) {
+    const currentToken = get(bridgeToken);
+    const start = input.selectionStart ?? currentToken.length;
+    const end = input.selectionEnd ?? start;
+    const nextToken = `${currentToken.slice(0, start)}${text}${currentToken.slice(end)}`;
+
+    bridgeToken.set(nextToken);
+    syncTokenMask(input, start + text.length);
+  }
+
+  function deleteTokenSelection(input, direction) {
+    const currentToken = get(bridgeToken);
+    let start = input.selectionStart ?? currentToken.length;
+    let end = input.selectionEnd ?? start;
+
+    if (start === end) {
+      if (direction === 'backward') {
+        start = Math.max(0, start - 1);
+      } else {
+        end = Math.min(currentToken.length, end + 1);
+      }
+    }
+
+    bridgeToken.set(`${currentToken.slice(0, start)}${currentToken.slice(end)}`);
+    syncTokenMask(input, start);
+  }
+
+  function handleTokenBeforeInput(event) {
+    const { inputType, data, currentTarget } = event;
+
+    if (inputType.startsWith('insert')) {
+      event.preventDefault();
+      if (data) {
+        replaceTokenSelection(currentTarget, data);
+      }
+      return;
+    }
+
+    if (inputType.startsWith('delete')) {
+      event.preventDefault();
+      deleteTokenSelection(currentTarget, inputType.includes('Backward') ? 'backward' : 'forward');
+    }
+  }
+
+  function handleTokenPaste(event) {
+    event.preventDefault();
+    replaceTokenSelection(event.currentTarget, event.clipboardData.getData('text'));
+  }
+
+  function handleTokenCut(event) {
+    event.preventDefault();
+    deleteTokenSelection(event.currentTarget, 'forward');
+  }
 
   function connect() {
     const token = get(bridgeToken).trim();
@@ -52,9 +163,45 @@
         ui.timerPopoverOpen.set(false);
         ui.rainPopoverOpen.set(false);
         ui.miniPlayerExpanded.set(false);
+        if (!get(bridgeToken).trim() && autoDiscovery === 'unavailable') {
+          startDiscovery();
+        }
       }
       return nextOpen;
     });
+  }
+
+  function startDiscovery() {
+    if (discoveryTimer || discoveryInFlight || get(bridgeToken).trim()) {
+      return;
+    }
+
+    discoveryAttempts = 0;
+    autoDiscovery = 'idle';
+    const tryDiscover = () => {
+      if (discoveryAttempts >= MAX_DISCOVERY_ATTEMPTS || get(bridgeToken).trim()) {
+        if (discoveryTimer) {
+          window.clearInterval(discoveryTimer);
+          discoveryTimer = null;
+        }
+        return;
+      }
+
+      discoveryAttempts += 1;
+      discoverBridgeToken().then((found) => {
+        if (!found) {
+          return;
+        }
+        if (discoveryTimer) {
+          window.clearInterval(discoveryTimer);
+          discoveryTimer = null;
+        }
+        connect();
+      });
+    };
+
+    tryDiscover();
+    discoveryTimer = window.setInterval(tryDiscover, DISCOVERY_INTERVAL_MS);
   }
 
   async function copyCommand() {
@@ -86,11 +233,22 @@
             ? 'Needs attention'
             : 'Claude asleep';
   $: statusDetail = isConnected ? 'connected locally' : 'offline';
+  $: tokenMask = maskToken($bridgeToken);
 
   onMount(() => {
     if (get(bridgeToken).trim()) {
       connect();
+      return () => {};
     }
+
+    startDiscovery();
+
+    return () => {
+      if (discoveryTimer) {
+        window.clearInterval(discoveryTimer);
+        discoveryTimer = null;
+      }
+    };
   });
 </script>
 
@@ -119,7 +277,20 @@
       </div>
 
       <div class="token-row">
-        <input type="password" placeholder="bridge token" bind:value={$bridgeToken} aria-label="Bridge token" />
+        <label class="token-field">
+          <span>Bridge token</span>
+          <input
+            id="bridge-token"
+            type="password"
+            placeholder="bridge token"
+            value={tokenMask}
+            autocomplete="off"
+            spellcheck="false"
+            on:beforeinput={handleTokenBeforeInput}
+            on:paste={handleTokenPaste}
+            on:cut={handleTokenCut}
+          />
+        </label>
         <button type="button" on:click={clearToken} disabled={!$bridgeToken.trim()}>Clear</button>
       </div>
 
@@ -154,6 +325,15 @@
     grid-template-columns: auto auto minmax(0, 1fr) auto;
     gap: 8px;
     align-items: center;
+  }
+
+  .token-field {
+    display: grid;
+    gap: 5px;
+    min-width: 0;
+    color: rgba(232, 224, 216, 0.78);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
   }
 
   .token-row,
@@ -209,7 +389,7 @@
   .status-sub {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 10px;
-    color: rgba(232, 224, 216, 0.64);
+    color: rgba(232, 224, 216, 0.76);
     white-space: nowrap;
   }
 
@@ -219,7 +399,7 @@
     border-radius: 8px;
     background: rgba(8, 10, 12, 0.58);
     color: #e8e0d8;
-    height: 38px;
+    min-height: 44px;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 11px;
   }
@@ -246,13 +426,13 @@
   }
 
   .settings-btn {
-    width: 38px;
+    width: 44px;
     padding: 0;
   }
 
   .close-btn {
-    width: 30px;
-    height: 30px;
+    width: 44px;
+    min-height: 44px;
     padding: 0;
     font-size: 16px;
   }
@@ -280,7 +460,7 @@
     }
 
     .status-sub {
-      grid-column: 2 / -1;
+      display: none;
     }
   }
 
@@ -293,6 +473,10 @@
     .status-row {
       grid-template-columns: auto minmax(0, 1fr) auto auto;
       gap: 6px;
+    }
+
+    .token-field {
+      gap: 4px;
     }
 
     .status-sub {

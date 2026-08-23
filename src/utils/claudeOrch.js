@@ -41,7 +41,7 @@ const BRIDGE_STATUS_STATE = {
   working: 'thinking',
   blocked: 'error',
   done: 'idle',
-  disconnected: 'resting',
+  disconnected: 'idle',
   error: 'error'
 };
 
@@ -252,10 +252,22 @@ export function createClaudeOrchestrator(options = {}) {
 
   function closeBubble() {
     clearTransientBubbleTimer();
+    setChatPaused(false);
+    if (!state.loading) {
+      clearTypingVisualTimer();
+      setVisualState('idle', 'chat_closed');
+    }
     return sync({ bubbleVisible: false, bubblePassive: false });
   }
 
-  function closePanel() {
+  function closePanel({ resumePatrol = true } = {}) {
+    if (resumePatrol) {
+      setChatPaused(false);
+      if (!state.loading) {
+        clearTypingVisualTimer();
+        setVisualState('idle', 'chat_closed');
+      }
+    }
     return sync({ panelOpen: false });
   }
 
@@ -311,7 +323,11 @@ export function createClaudeOrchestrator(options = {}) {
   function markResting() {
     if (!state.loading) {
       setVisualState('resting', 'idle_timeout');
-      sync({ bubbleMessage: getCompanionStatusCopy('resting'), bubbleVisible: !state.panelOpen, bubblePassive: true });
+      sync({
+        bubbleMessage: getLastCompletedAssistantText() || getCompanionStatusCopy('resting'),
+        bubbleVisible: !state.panelOpen,
+        bubblePassive: true
+      });
     }
     return state;
   }
@@ -357,6 +373,12 @@ export function createClaudeOrchestrator(options = {}) {
 
   function getLastAssistantText() {
     return [...state.history].reverse().find((item) => item.role === 'assistant')?.text?.trim() ?? '';
+  }
+
+  function getLastCompletedAssistantText() {
+    return [...state.history].reverse().find((item) => (
+      item.role === 'assistant' && item.complete !== false && item.text?.trim()
+    ))?.text.trim() ?? '';
   }
 
   function getPendingAssistant() {
@@ -601,11 +623,10 @@ export function createClaudeOrchestrator(options = {}) {
       panelOpen: false,
       bubbleVisible: true,
       bubblePassive: false,
-      bubbleMessage: clean
+      bubbleMessage: getCompanionStatusCopy('thinking')
     });
 
     setVisualState('thinking', 'user_submit');
-    sync({ bubbleMessage: getCompanionStatusCopy('thinking') });
     if (chatPauseTimer && typeof window !== 'undefined') {
       window.clearTimeout(chatPauseTimer);
       chatPauseTimer = null;
@@ -673,7 +694,7 @@ export function createClaudeOrchestrator(options = {}) {
 
   async function handleClick() {
     setChatPaused(true);
-    closePanel();
+    closePanel({ resumePatrol: false });
 
     if (!hasOpenedClaude) {
       hasOpenedClaude = true;

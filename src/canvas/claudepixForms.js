@@ -4,6 +4,23 @@ const DEFAULT_PALETTE = Object.freeze({
   2: '#0f0f0f'
 });
 
+// Keep the companion drawable if an archived preset is malformed or unavailable
+// in a production bundle. The real archive data remains the normal source.
+const FALLBACK_GRID = Object.freeze([
+  [0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0],
+  [0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0],
+  [0, 1, 1, 2, 1, 1, 0, 1, 2, 1, 1, 1],
+  [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+  [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+  [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+  [0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+  [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0],
+  [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
+  [0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0],
+  [0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+  [0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0]
+]);
+
 const FORM_DEFS = [
   { id: 'idle_blink', label: '眨眼', archive: 'idle_blink.html' },
   { id: 'idle_breathe', label: '呼吸', archive: 'idle_breathe.html' },
@@ -128,7 +145,8 @@ async function loadArchiveSources() {
   if (isBrowser) {
     const archiveManifest = import.meta.glob('../../archive/misc/claudepix_presets/*.html', {
       eager: true,
-      as: 'raw'
+      query: '?raw',
+      import: 'default'
     });
 
     for (const [path, source] of Object.entries(archiveManifest)) {
@@ -151,21 +169,29 @@ function parsePreset(def) {
   const source = FORM_SOURCES.get(def.id);
   const parsed = source ? evaluatePresetSource(source) : null;
   const preset = parsed?.preset ?? null;
-  const frames = preset?.frames ?? parsed?.frames ?? [];
+  const rawFrames = preset?.frames ?? parsed?.frames ?? [];
+  const frames = Array.isArray(rawFrames) ? rawFrames : [];
   const palette = normalizePalette(parsed?.palette ?? null);
 
   const baseFrame = frames.find((frame) => frame?.frame || frame?.rows || frame?.grid) ?? null;
   const baseGrid = toGrid(baseFrame?.frame ?? baseFrame?.rows ?? baseFrame?.grid ?? null);
 
+  const normalizedFrames = frames
+    .map((frame) => ({
+      hold: Math.max(16, Number(frame?.hold) || 0),
+      grid: toGrid(frame?.frame ?? frame?.rows ?? frame?.grid ?? null)
+    }))
+    .filter((frame) => Array.isArray(frame.grid) && frame.grid.length > 0);
+  const safeBaseGrid = baseGrid ?? normalizedFrames[0]?.grid ?? FALLBACK_GRID;
+
   return {
     id: def.id,
     label: def.label,
     name: preset?.name ?? def.id.replaceAll('_', ' '),
-    baseGrid: baseGrid ?? toGrid(frames[0]?.frame ?? frames[0]?.rows ?? frames[0]?.grid ?? null),
-    frames: frames.map((frame) => ({
-      hold: Number(frame?.hold ?? 0),
-      grid: toGrid(frame?.frame ?? frame?.rows ?? frame?.grid ?? null)
-    })),
+    baseGrid: safeBaseGrid,
+    frames: normalizedFrames.length > 0
+      ? normalizedFrames
+      : [{ hold: 900, grid: safeBaseGrid }],
     palette
   };
 }

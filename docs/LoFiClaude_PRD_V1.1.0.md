@@ -23,7 +23,7 @@ LoFiClaude 已具备像素房间、Claw 陪伴角色、YouTube lofi、雨声、�
 - 今日专注会在后台或休息状态继续累计，连续使用天数存在首日偏差。
 - 启动后画面过暗、主场景空旷，Claw 和主要控制的视觉优先级不足。
 - Bridge 配置长期占据主界面，产品更像开发调试工具，而不是陪伴房间。
-- Rainy Mood 热链、YouTube 频道与 bridge token 的使用边界尚未完全确认。
+- Rainy Mood 热链与 YouTube 频道继续遵循显式降级边界；Bridge token 的本机启动展示策略已确认。
 
 lofi.cafe 调研显示，其核心不是独立音乐 API，而是“全屏动态内容 + YouTube 直播台目录 + 一次点击启动 + 极少控制”。V1.1 借鉴其低操作负担和内容优先原则，不复制其视觉素材、代码或未经授权确认的频道清单。
 
@@ -292,7 +292,7 @@ flowchart TD
 | music_status | Enum | 是 | idle/loading/playing/paused/error | playing |
 | station_index | Integer | 是 | 当前频道索引 | 2 |
 | station_fail_count | Integer | 是 | 当前 failover 次数 | 1 |
-| rain_source | Enum | 是 | remote/fallback/off | fallback |
+| rain_source | Enum | 是 | remote/fallback/off | remote |
 | rain_volume | Integer | 是 | 0-100 | 55 |
 | rain_intensity | Enum | 是 | light/medium/heavy | medium |
 
@@ -427,7 +427,7 @@ Claw 使用独立状态机表达用户输入、Claude 工作和空闲陪伴，�
 
 | 元素 | 类型 | 必填 | 默认值 | 校验规则 | 操作反馈 |
 |------|------|------|--------|----------|----------|
-| 房间背景 | 全屏场景 | 是 | lofiNight | 至少前/中/后三层可辨识 | 低频轻动画 |
+| 房间背景 | 全屏场景 | 是 | lofiNight | 至少前/中/后三层可辨识 | 低频轻动画；V1.1 增加 FM Studio、Record Room、Focus Console 三个原创点阵场景 |
 | Claw | 角色 | 是 | 主场景安全区 | 桌面最小可视尺寸 56px | 点击打开气泡 |
 | Header | 工具栏 | 是 | 简洁状态 | 主界面只保留品牌、连接状态、场景、计时 | 设置中展示高级配置 |
 | 播放器 | 底部工具条 | 是 | compact | 1440/768/390 水平居中 | 展开不改变中心位置 |
@@ -456,10 +456,10 @@ Claw 使用独立状态机表达用户输入、Claude 工作和空闲陪伴，�
 | 需求 | 说明 |
 |------|------|
 | Token 生命周期 | **[假设]** 默认仅保存在 SessionStorage；用户未明确选择时不长期保存 |
-| Token 展示 | 不进入 URL、浏览器 console、错误文案、埋点、分享图和测试快照；Bridge 终端可在启动时显示一次供本机用户复制 **[待确认]** |
+| Token 展示 | 不进入 URL、浏览器 console、错误文案、埋点、分享图和测试快照；Bridge 启动时仅在本机终端 stdout 显示一次，供本机用户手动复制到前端设置 |
 | 对话隐私 | 历史只保存在本地，不发送到分析服务 |
 | 历史生命周期 | **[假设]** 最多 50 条、默认 7 天，提供清空入口；需产品确认 |
-| 音频合规 | Rainy Mood 热链发布前必须确认授权；未确认则默认使用本地 fallback |
+| 音频合规 | Rainy Mood 热链发布前必须确认授权；运行时默认使用真实远端音频，失败时切换本地 fallback |
 | Station 合规 | 仅嵌入允许播放的公开 YouTube 内容，保留来源和自动失效处理 |
 | 外部请求 | 不把 token、对话、专注记录作为第三方请求参数 |
 
@@ -503,7 +503,7 @@ V1.1 不引入服务端数据库。
 | 对接系统 | 接口方向 | 协议 | 说明 |
 |----------|----------|------|------|
 | YouTube | 前端加载 | iframe API | Station 播放，不代理音频 |
-| Rainy Mood | 前端读取 | HTTPS Audio | 授权确认前视为临时来源 |
+| Rainy Mood | 前端读取 | HTTPS Audio | 真实雨声默认来源；公开发布前完成授权确认 |
 | Browser AudioContext | 前端本地 | Web Audio API | 雨声 fallback 与强度处理 |
 | Claude Bridge | 双向 | ws://localhost | token 鉴权与流式对话 |
 | Claude CLI | Bridge 调用 | 本地进程 | 真实 Claude 会话 |
@@ -535,9 +535,9 @@ V1.1 不引入服务端数据库。
 
 #### 必须确认（阻塞发布）
 
-1. [已决定] V1.1 默认只使用本地 fallback；Rainy Mood 授权确认前不作为发布默认。见 4.1。
+1. [已决定] V1.1 默认使用 Rainy Mood 真实雨声音频，失败时切换本地 fallback；公开发布前仍需确认 Rainy Mood 使用授权。见 4.1。
 2. [已决定] Bridge token 默认只保存在 SessionStorage。见 4.1、4.4。
-3. [待确认] Bridge 终端是否允许在启动时显示一次 token？见 4.1。
+3. [已决定] Bridge 启动时允许在本机终端 stdout 显示一次 token；前端不会自动读取或显示明文，仅显示受控掩码输入。见 4.1。
 4. [已决定] 对话历史最多 50 条、默认保存 7 天，并提供清空入口。见 4.1、4.4。
 
 #### 建议确认（影响完整度）

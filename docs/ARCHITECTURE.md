@@ -13,8 +13,9 @@ flowchart TB
 
         Orch --> Music["YouTubePlayer"]
         Orch --> Rain["RainPlayer"]
-        Rain --> LocalRain["Web Audio 本地雨声<br/>V1.1 默认"]
-        Rain -. "授权后可显式启用" .-> RemoteRain["远端雨声音源"]
+        Rain --> LocalRain["Web Audio 本地雨声<br/>失败 fallback"]
+        Rain --> RemoteRain["Rainy Mood 真实雨声音源"]
+        RemoteRain -. "失败时" .-> Fallback["本地 Web Audio fallback"]
 
         Orch --> Companion["ClaudeChat<br/>本地陪伴文案"]
         Orch <--> Client["Bridge Client"]
@@ -37,6 +38,6 @@ flowchart TB
 
 - 浏览器负责呈现、状态编排、音频控制和本地持久化。
 - Bridge 只在本机监听，验证 token 后转发浏览器或 Unix Socket 消息。
-- Claude CLI 是实际的流式工作会话；Bridge 离线时房间和本地陪伴仍可使用。
-- V1.1 默认使用本地 Web Audio 雨声，避免未确认授权的远端热链成为发布依赖。
+- Claude CLI 是实际的流式文本对话会话；Bridge 固定禁用 Claude 内置工具，不读取或修改项目文件，也不运行命令。Bridge 离线时房间和本地陪伴仍可使用。
+- V1.1 默认使用 Rainy Mood 真实雨声；远端失败时切换本地 Web Audio fallback，公开发布前确认音频授权。
 - Bridge token 每个服务进程轮换，只在当前浏览器 SessionStorage 保存；聊天历史只存入 LocalStorage，不进入第三方请求参数。

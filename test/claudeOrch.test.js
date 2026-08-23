@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { get } from 'svelte/store';
 
 import { FORMS } from '../src/canvas/claudepixForms.js';
+import { chatPaused } from '../src/canvas/claudeMotion.js';
 import { createClaudeOrchestrator } from '../src/utils/claudeOrch.js';
 import { claudeForm } from '../src/stores/appState.js';
 import { resetBridgeState } from '../src/stores/bridgeState.js';
@@ -58,6 +59,18 @@ test('Claude bubble stays lightweight across multiple browser messages', async (
   assert.equal(state.history.filter((item) => item.role === 'user').length, 2);
 });
 
+test('Claude latest assistant reply replaces the stale typing prompt', async () => {
+  resetBridgeState();
+  const orchestrator = createClaudeOrchestrator();
+
+  await orchestrator.sendMessage('show the reply');
+  const state = orchestrator.getState();
+  const latestAssistant = [...state.history].reverse().find((item) => item.role === 'assistant');
+
+  assert.ok(latestAssistant?.text);
+  assert.equal(state.bubbleMessage, latestAssistant.text);
+});
+
 test('Claude orchestrator returns to idle after a local companion reply', async () => {
   resetBridgeState();
   const orchestrator = createClaudeOrchestrator();
@@ -66,6 +79,20 @@ test('Claude orchestrator returns to idle after a local companion reply', async 
 
   assert.equal(orchestrator.getState().companionState, 'idle');
   assert.equal(orchestrator.getState().stateReason, 'local_reply_complete');
+});
+
+test('Claude resting state keeps the most recent completed reply visible', async () => {
+  resetBridgeState();
+  const orchestrator = createClaudeOrchestrator();
+
+  await orchestrator.sendMessage('stay with me');
+  const reply = orchestrator.getState().bubbleMessage;
+
+  orchestrator.markResting();
+
+  const rested = orchestrator.getState();
+  assert.equal(rested.companionState, 'resting');
+  assert.equal(rested.bubbleMessage, reply);
 });
 
 test('Claude history opens only through the explicit panel action', async () => {
@@ -107,6 +134,43 @@ test('Claude orchestrator exposes listening and resting visual states', () => {
 
   orchestrator.markActive();
   assert.equal(get(claudeForm), idleBreatheIndex);
+  assert.equal(orchestrator.getState().companionState, 'idle');
+});
+
+test('Claude orchestrator keeps the local companion awake while disconnected', () => {
+  resetBridgeState();
+  const orchestrator = createClaudeOrchestrator();
+
+  orchestrator.markActive();
+
+  assert.equal(get(claudeForm), idleBreatheIndex);
+  assert.equal(orchestrator.getState().companionState, 'idle');
+});
+
+test('Closing Claude chat resumes the sprite patrol', async () => {
+  resetBridgeState();
+  const orchestrator = createClaudeOrchestrator();
+
+  await orchestrator.handleClick();
+  assert.equal(chatPaused, true);
+
+  orchestrator.markResting();
+  orchestrator.closeBubble();
+  assert.equal(chatPaused, false);
+  assert.equal(orchestrator.getState().companionState, 'idle');
+  assert.equal(orchestrator.getState().stateReason, 'chat_closed');
+});
+
+test('Closing Claude history resumes the sprite patrol', async () => {
+  resetBridgeState();
+  const orchestrator = createClaudeOrchestrator();
+
+  await orchestrator.handleClick();
+  orchestrator.openPanel();
+  orchestrator.markResting();
+  orchestrator.closePanel();
+
+  assert.equal(chatPaused, false);
   assert.equal(orchestrator.getState().companionState, 'idle');
 });
 

@@ -44,6 +44,10 @@ test('forms have stable labels and accessible frames', () => {
   assert.equal(getForm(-1).id, 'dance_bounce_dj');
   assert.ok(getFormFrame(3, 0).hold > 0);
   assert.ok(getFormFrame(10, 0).hold > 0);
+  assert.ok(FORMS.every((form) => form.frames.length >= 2));
+  assert.ok(FORMS.some((form) => form.frames.length >= 12));
+  assert.ok(FORMS.every((form) => form.frames.every((frame) => frame.hold >= 16 && frame.grid?.length > 0)));
+  assert.ok(FORMS.every((form) => form.baseGrid?.length > 0));
 });
 
 test('preserves palette defaults and special palette flags', () => {

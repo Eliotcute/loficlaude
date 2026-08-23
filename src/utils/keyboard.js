@@ -95,6 +95,12 @@ export function setupKeyboardShortcuts(callbacks = {}) {
       onSceneHotkey('softRain');
     } else if (key === '3') {
       onSceneHotkey('starDrift');
+    } else if (key === '4') {
+      onSceneHotkey('fmStudio');
+    } else if (key === '5') {
+      onSceneHotkey('recordRoom');
+    } else if (key === '6') {
+      onSceneHotkey('focusConsole');
     }
   };
 

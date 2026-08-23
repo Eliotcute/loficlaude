@@ -7,7 +7,10 @@
   const SCENES = [
     { key: 'lofiNight', icon: '🌙' },
     { key: 'softRain', icon: '🌧' },
-    { key: 'starDrift', icon: '⭐' }
+    { key: 'starDrift', icon: '⭐' },
+    { key: 'fmStudio', icon: '📻' },
+    { key: 'recordRoom', icon: '💿' },
+    { key: 'focusConsole', icon: '⌘' }
   ];
   const currentScene = scene.current;
   const sceneLocked = scene.locked;
@@ -88,30 +91,32 @@
   <div class="header-status" aria-label="Current scene and timer">
     <ConnectionStatus />
 
-    {#if $focusTodayMinutes > 0 || $focusStreakDays > 0}
-      <div class="focus-chip" aria-label="Today focus minutes" title={$focusLastSummary}>
-        {$focusTodayMinutes}m{#if $focusStreakDays > 0}<span>{$focusStreakDays}d</span>{/if}
+    <div class="header-controls">
+      {#if $focusTodayMinutes > 0 || $focusStreakDays > 0}
+        <div class="focus-chip" aria-label="Today focus minutes" title={$focusLastSummary}>
+          {$focusTodayMinutes}m{#if $focusStreakDays > 0}<span>{$focusStreakDays}d</span>{/if}
+        </div>
+      {/if}
+
+      <div class="scene-picker">
+        <button type="button" class="icon-button" aria-label="Open scene picker" on:click={toggleScenePopover}>
+          {sceneIcon}
+        </button>
+
+        {#if $scenePopoverOpen}
+          <ScenePopover on:close={closeScenePopover} on:select={selectScene} on:togglelock={toggleSceneLock} />
+        {/if}
       </div>
-    {/if}
 
-    <div class="scene-picker">
-      <button type="button" class="icon-button" aria-label="Open scene picker" on:click={toggleScenePopover}>
-        {sceneIcon}
-      </button>
+      <div class="timer-control">
+        <button type="button" class="timer-button" aria-label="Open timer popover" on:click={toggleTimerPopover}>
+          {$timerLabel}
+        </button>
 
-      {#if $scenePopoverOpen}
-        <ScenePopover on:close={closeScenePopover} on:select={selectScene} on:togglelock={toggleSceneLock} />
-      {/if}
-    </div>
-
-    <div class="timer-control">
-      <button type="button" class="timer-button" aria-label="Open timer popover" on:click={toggleTimerPopover}>
-        {$timerLabel}
-      </button>
-
-      {#if $timerPopoverOpen}
-        <TimerPopover on:close={closeTimerPopover} on:select={selectTimer} />
-      {/if}
+        {#if $timerPopoverOpen}
+          <TimerPopover on:close={closeTimerPopover} on:select={selectTimer} />
+        {/if}
+      </div>
     </div>
   </div>
 </header>
@@ -122,8 +127,9 @@
     top: 0;
     left: 0;
     width: 100%;
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
     justify-content: space-between;
     padding: 24px;
     box-sizing: border-box;
@@ -148,8 +154,17 @@
   .header-status {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 10px;
     pointer-events: auto;
+    min-width: 0;
+  }
+
+  .header-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
   }
 
   .scene-picker,
@@ -158,7 +173,7 @@
   }
 
   .focus-chip {
-    height: 36px;
+    height: 44px;
     min-width: 46px;
     display: flex;
     align-items: center;
@@ -209,15 +224,15 @@
   }
 
   .icon-button {
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
     padding: 0;
     font-size: 16px;
   }
 
   .timer-button {
     min-width: 78px;
-    height: 36px;
+    height: 44px;
     padding: 0 10px;
     font-size: 14px;
   }
@@ -225,7 +240,6 @@
   @media (max-width: 560px) {
     .ambient-header {
       padding: 14px 12px;
-      align-items: flex-start;
     }
 
     h1 {
@@ -235,20 +249,35 @@
     }
 
     .header-status {
-      gap: 6px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 4px;
+      max-width: calc(100vw - 104px);
+    }
+
+    .header-status :global(.connection-status) {
+      grid-column: 1 / -1;
+      width: 100%;
+    }
+
+    .header-controls {
       justify-content: flex-end;
-      flex-wrap: wrap;
-      max-width: calc(100vw - 116px);
+      gap: 4px;
     }
 
     .focus-chip,
-    .icon-button,
-    .timer-button {
-      height: 32px;
+    .icon-button {
+      height: 44px;
+    }
+
+    .icon-button {
+      width: 44px;
+      height: 44px;
     }
 
     .timer-button {
-      min-width: 70px;
+      min-width: 62px;
+      height: 44px;
       font-size: 12px;
     }
   }

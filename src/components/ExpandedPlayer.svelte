@@ -8,6 +8,7 @@
   export let isPlaying = false;
   export let isLoading = false;
   export let error = null;
+  export let rainSourceStatus = 'idle';
   export let rainType = 'medium';
   export let rainVolume = 60;
   export let timerMinutes = 45;
@@ -161,6 +162,9 @@
 
       <div class="section-row">
         <span class="section-title">RAIN</span>
+        <span class="source-badge" class:remote={rainSourceStatus === 'rainy-mood'} class:fallback={rainSourceStatus === 'fallback'}>
+          {rainSourceStatus === 'rainy-mood' ? 'RAINY MOOD' : rainSourceStatus === 'fallback' ? 'LOCAL FALLBACK' : 'NOT STARTED'}
+        </span>
         <div class="chip-row">
           {#each RAIN_TYPES as type}
             <button type="button" class:active={rainType === type} on:click={() => handleRainType(type)}>{type}</button>
@@ -332,7 +336,7 @@
 
   .section-row {
     display: grid;
-    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-columns: 52px auto minmax(0, 1fr);
     align-items: center;
     gap: 10px;
   }
@@ -340,6 +344,26 @@
   .section-title {
     font-size: 12px;
     color: rgba(232, 224, 216, 0.75);
+  }
+
+  .source-badge {
+    border: 1px solid rgba(232, 224, 216, 0.2);
+    border-radius: 8px;
+    padding: 4px 6px;
+    color: rgba(232, 224, 216, 0.55);
+    font-size: 9px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .source-badge.remote {
+    color: #a8d8b2;
+    border-color: rgba(103, 191, 122, 0.42);
+  }
+
+  .source-badge.fallback {
+    color: #e4c189;
+    border-color: rgba(212, 165, 116, 0.5);
   }
 
   .chip-row {

@@ -22,7 +22,12 @@
   let previousParticles = [];
   let transitionStart = 0;
   let reducedMotion = false;
+  let pageVisible = true;
   let motionQuery;
+  let resizeFrame;
+  let resizeObserver;
+  let lastPaintTimestamp = 0;
+  const targetFrameMs = 1000 / 30;
   const transitionDuration = 1000;
 
   function drawSceneTo(canvasTarget, sceneKey) {
@@ -59,6 +64,14 @@
     }
   }
 
+  function scheduleResize() {
+    if (resizeFrame) return;
+    resizeFrame = window.requestAnimationFrame(() => {
+      resizeFrame = null;
+      resize();
+    });
+  }
+
   function drawReducedFrame() {
     if (!ctx || !staticCanvas) return;
     if (scene !== activeScene) {
@@ -69,10 +82,29 @@
     drawAmbientParticles(ctx, particles);
   }
 
-  function startAnimation() {
-    if (!reducedMotion && !animationFrame) {
-      lastTime = 0;
+  function startAnimation({ resetClock = false } = {}) {
+    if (pageVisible && !reducedMotion && !animationFrame) {
+      if (resetClock) {
+        lastTime = 0;
+      }
       animationFrame = window.requestAnimationFrame(loop);
+    }
+  }
+
+  function handleVisibilityChange() {
+    pageVisible = document.visibilityState !== 'hidden';
+    if (!pageVisible) {
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame);
+        animationFrame = null;
+      }
+      return;
+    }
+
+    if (reducedMotion) {
+      drawReducedFrame();
+    } else {
+      startAnimation({ resetClock: true });
     }
   }
 
@@ -86,6 +118,7 @@
       drawReducedFrame();
       return;
     }
+    // Keep the frame clock continuous so rain, stars, and meteors advance.
     startAnimation();
   }
 
@@ -108,6 +141,12 @@
       drawReducedFrame();
       return;
     }
+
+    if (lastPaintTimestamp && timestamp - lastPaintTimestamp < targetFrameMs) {
+      startAnimation();
+      return;
+    }
+    lastPaintTimestamp = timestamp;
 
     const dt = Math.min(0.05, (timestamp - (lastTime || timestamp)) / 1000);
     lastTime = timestamp;
@@ -158,14 +197,26 @@
     staticCtx = staticCanvas.getContext('2d', { alpha: true });
     motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     reducedMotion = motionQuery.matches;
+    pageVisible = document.visibilityState !== 'hidden';
 
     resize();
-    window.addEventListener('resize', resize);
+    window.addEventListener('resize', scheduleResize);
+    resizeObserver = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(scheduleResize)
+      : null;
+    resizeObserver?.observe(canvas);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     motionQuery.addEventListener?.('change', handleMotionPreference);
     startAnimation();
 
     return () => {
-      window.removeEventListener('resize', resize);
+      window.removeEventListener('resize', scheduleResize);
+      resizeObserver?.disconnect();
+      if (resizeFrame) {
+        window.cancelAnimationFrame(resizeFrame);
+        resizeFrame = null;
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       motionQuery?.removeEventListener?.('change', handleMotionPreference);
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
     };

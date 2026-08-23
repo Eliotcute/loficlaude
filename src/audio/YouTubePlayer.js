@@ -16,6 +16,16 @@ const API_TIMEOUT_MS = 15000;
 const PLAYER_READY_TIMEOUT_MS = 9000;
 let youtubeApiPromise;
 
+export function isolateYouTubeFrame(frame) {
+  if (!frame?.setAttribute) {
+    return;
+  }
+
+  frame.setAttribute('aria-hidden', 'true');
+  frame.setAttribute('role', 'presentation');
+  frame.setAttribute('tabindex', '-1');
+}
+
 function readCustomTracks() {
   if (typeof window === 'undefined') {
     return [];
@@ -178,6 +188,20 @@ export class YouTubePlayer {
     this.failedAll = false;
     this.volume = 60;
     this.fadeTimer = null;
+    this.frameObserver = null;
+  }
+
+  isolateMountNode(mountNode, isolationNode = mountNode?.parentElement ?? mountNode) {
+    if (!mountNode) {
+      return;
+    }
+
+    if (!isolationNode) {
+      return;
+    }
+
+    isolationNode.setAttribute?.('aria-hidden', 'true');
+    isolationNode.querySelectorAll?.('iframe').forEach(isolateYouTubeFrame);
   }
 
   async init(initialIndex = 0) {
@@ -200,6 +224,14 @@ export class YouTubePlayer {
             return;
           }
 
+          const isolationNode = mountNode.parentElement ?? mountNode;
+          this.isolateMountNode(mountNode, isolationNode);
+          const MutationObserverImpl = window.MutationObserver;
+          if (MutationObserverImpl) {
+            this.frameObserver = new MutationObserverImpl(() => this.isolateMountNode(mountNode, isolationNode));
+            this.frameObserver.observe(isolationNode, { childList: true, subtree: true });
+          }
+
           let readyTimeoutId = window.setTimeout(() => {
             reject(new Error('Timed out while preparing YouTube player.'));
           }, PLAYER_READY_TIMEOUT_MS);
@@ -220,6 +252,7 @@ export class YouTubePlayer {
               onReady: () => {
                 window.clearTimeout(readyTimeoutId);
                 readyTimeoutId = null;
+                this.isolateMountNode(mountNode, isolationNode);
                 this.ready = true;
                 this.failedAll = false;
                 this.setVolume(this.volume);
@@ -336,6 +369,8 @@ export class YouTubePlayer {
 
   destroy() {
     this.clearFadeTimer();
+    this.frameObserver?.disconnect?.();
+    this.frameObserver = null;
     if (this.instance) {
       this.instance.destroy();
     }

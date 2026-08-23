@@ -3,8 +3,24 @@ import assert from 'node:assert/strict';
 
 import { get } from 'svelte/store';
 
-import { PLAYLIST, YouTubePlayer } from '../src/audio/YouTubePlayer.js';
+import { isolateYouTubeFrame, PLAYLIST, YouTubePlayer } from '../src/audio/YouTubePlayer.js';
 import { player as playerStore } from '../src/stores/appState.js';
+
+test('YouTube iframe accessibility isolation unfocuses the frame without hiding it', () => {
+  const attributes = new Map();
+  const frame = {
+    setAttribute(name, value) {
+      attributes.set(name, value);
+    }
+  };
+
+  isolateYouTubeFrame(frame);
+
+  assert.equal(attributes.get('aria-hidden'), 'true');
+  assert.equal(attributes.get('role'), 'presentation');
+  assert.equal(attributes.get('tabindex'), '-1');
+  assert.equal(frame.hidden, undefined);
+});
 
 test('YouTubePlayer skips to the next channel on playback errors', () => {
   const originalWindow = globalThis.window;

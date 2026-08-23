@@ -6,6 +6,7 @@
   export let message = '今天想做点什么呢？';
   export let messages = [];
   export let activeAssistantId = null;
+  export let companionState = 'resting';
   export let passive = false;
   export let loading = false;
   export let anchor = { x: 0, y: 0 };
@@ -15,19 +16,32 @@
   let root;
   let inputValue = '';
   let autoCloseTimeout;
+  let viewportWidth = 1024;
+  let viewportHeight = 768;
 
   $: bridgeConnected = $connectionStatus === 'connected';
-  $: fallbackWidth = typeof window === 'undefined' ? 1024 : window.innerWidth;
-  $: fallbackHeight = typeof window === 'undefined' ? 768 : window.innerHeight;
+  $: fallbackWidth = viewportWidth;
+  $: fallbackHeight = viewportHeight;
   $: anchorX = Number.isFinite(anchor?.x) && anchor.x > 0 ? anchor.x : Math.round(fallbackWidth / 2);
   $: anchorY = Number.isFinite(anchor?.y) && anchor.y > 0 ? anchor.y : Math.round(fallbackHeight * 0.58);
+  $: bubbleWidth = Math.min(290, Math.max(0, fallbackWidth - 28));
+  $: bubbleLeft = Math.max(
+    14,
+    Math.min(
+      anchorX >= fallbackWidth / 2 ? anchorX - bubbleWidth - 24 : anchorX + 24,
+      fallbackWidth - bubbleWidth - 14
+    )
+  );
+  $: bubbleTop = Math.max(72, Math.min(anchorY - 186, fallbackHeight - 290));
   $: latestAssistant = [...messages].reverse().find((item) => item.role === 'assistant');
-  $: latestUser = [...messages].reverse().find((item) => item.role === 'user');
   $: activeAssistant = activeAssistantId
     ? messages.find((item) => item.id === activeAssistantId && item.role === 'assistant')
     : null;
-  $: bubbleText = activeAssistant?.text || message || latestAssistant?.text || '今天想做点什么呢？';
-  $: userPreview = latestUser?.text ?? '';
+  $: bubbleText = activeAssistant?.text || (loading ? message : latestAssistant?.text || message) || '今天想做点什么呢？';
+  $: statusLabel = {
+    listening: 'LISTENING', typing: 'TYPING', thinking: 'THINKING', speaking: 'REPLYING',
+    resting: 'RESTING', idle: bridgeConnected ? 'CONNECTED' : 'LOCAL MODE', error: 'OFFLINE'
+  }[companionState] ?? (bridgeConnected ? 'CONNECTED' : 'LOCAL MODE');
 
   function close() {
     dispatch('close');
@@ -102,16 +116,21 @@
   }
 </script>
 
+<svelte:window bind:innerWidth={viewportWidth} bind:innerHeight={viewportHeight} />
+
 <div
   bind:this={root}
   class:passive
   class="claude-bubble"
   role="dialog"
   aria-label="Claude bubble"
-  style="left: clamp(14px, {anchorX - 132}px, calc(100vw - 304px)); top: clamp(14px, {anchorY - 164}px, calc(100vh - 360px));"
+  style={`left: ${bubbleLeft}px; top: ${bubbleTop}px;`}
 >
   <div class="bubble-header">
-    <span>{title}</span>
+    <div class="bubble-title">
+      <span>{title}</span>
+      <span class="status-chip" class:active={loading}>{statusLabel}</span>
+    </div>
     <div class="bubble-actions">
       {#if messages.length > 0}
         <button type="button" class="icon-btn" aria-label="Open Claude history" on:click={handleOpenHistory}>≡</button>
@@ -121,12 +140,6 @@
   </div>
 
   <div class="message-list" aria-live="polite">
-    {#if userPreview && loading}
-      <div class="line user">
-        <span class="role">You</span>
-        <p>{userPreview}</p>
-      </div>
-    {/if}
     <div class="message" class:streaming-text={loading && activeAssistantId}>{bubbleText}</div>
   </div>
 
@@ -163,11 +176,11 @@
   .claude-bubble {
     position: absolute;
     width: min(290px, calc(100vw - 28px));
-    border-radius: 12px;
-    background: rgba(232, 224, 216, 0.9);
-    color: #111;
-    border: 1px solid rgba(17, 17, 17, 0.12);
-    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    background: rgba(9, 11, 14, 0.94);
+    color: #e8e0d8;
+    border: 1px solid rgba(212, 165, 116, 0.34);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
     padding: 10px 12px 12px;
     z-index: 19;
     animation: bubble-in 140ms ease;
@@ -184,7 +197,29 @@
     justify-content: space-between;
     margin-bottom: 6px;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 500;
+    color: #e8e0d8;
+  }
+
+  .bubble-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .status-chip {
+    border: 1px solid rgba(212, 165, 116, 0.28);
+    border-radius: 8px;
+    padding: 4px 7px;
+    color: rgba(232, 224, 216, 0.64);
+    font: 10px/1 'IBM Plex Mono', monospace;
+    white-space: nowrap;
+  }
+
+  .status-chip.active {
+    color: #d4a574;
+    border-color: rgba(212, 165, 116, 0.52);
   }
 
   .bubble-actions {
@@ -195,25 +230,28 @@
 
   .icon-btn,
   .close-btn {
-    border: 0;
+    border: 1px solid rgba(212, 165, 116, 0.28);
+    border-radius: 8px;
     background: transparent;
     font-size: 16px;
     line-height: 1;
-    color: #111;
+    color: #e8e0d8;
     cursor: pointer;
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
     padding: 0;
   }
 
   .icon-btn {
     font-size: 14px;
-    width: 20px;
-    height: 20px;
   }
 
   .message-list {
     display: grid;
     gap: 6px;
-    margin-bottom: 8px;
+    margin: 6px 0 10px;
     overflow: hidden;
   }
 
@@ -225,31 +263,6 @@
     -webkit-line-clamp: 5;
     -webkit-box-orient: vertical;
     overflow: hidden;
-  }
-
-  .line {
-    border: 1px solid rgba(17, 17, 17, 0.14);
-    border-radius: 8px;
-    background: rgba(17, 17, 17, 0.05);
-    padding: 6px 7px;
-  }
-
-  .line.user {
-    background: rgba(17, 17, 17, 0.09);
-  }
-
-  .role {
-    font-size: 10px;
-    letter-spacing: 0.05em;
-    opacity: 0.72;
-    display: block;
-    margin-bottom: 3px;
-  }
-
-  p {
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.4;
   }
 
   .streaming-text::after {
@@ -266,7 +279,7 @@
   .bridge-hint {
     margin-bottom: 8px;
     font-size: 11px;
-    color: rgba(17, 17, 17, 0.62);
+    color: rgba(232, 224, 216, 0.58);
   }
 
   .input-row {
@@ -277,10 +290,10 @@
 
   input {
     width: 100%;
-    border: 1px solid rgba(17, 17, 17, 0.18);
+    border: 1px solid rgba(212, 165, 116, 0.28);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.7);
-    color: #111;
+    background: rgba(255, 255, 255, 0.06);
+    color: #e8e0d8;
     padding: 7px 9px;
     font-size: 12px;
     outline: none;
@@ -299,11 +312,12 @@
   }
 
   .send-btn {
-    border: 1px solid rgba(17, 17, 17, 0.18);
+    border: 1px solid rgba(212, 165, 116, 0.28);
     border-radius: 8px;
-    background: rgba(17, 17, 17, 0.06);
-    color: #111;
-    width: 32px;
+    background: rgba(212, 165, 116, 0.08);
+    color: #e8e0d8;
+    width: 40px;
+    height: 40px;
     cursor: pointer;
   }
 
@@ -318,9 +332,9 @@
     bottom: -8px;
     width: 14px;
     height: 14px;
-    background: rgba(232, 224, 216, 0.92);
-    border-right: 1px solid rgba(17, 17, 17, 0.12);
-    border-bottom: 1px solid rgba(17, 17, 17, 0.12);
+    background: rgba(9, 11, 14, 0.94);
+    border-right: 1px solid rgba(212, 165, 116, 0.34);
+    border-bottom: 1px solid rgba(212, 165, 116, 0.34);
     transform: rotate(45deg);
   }
 

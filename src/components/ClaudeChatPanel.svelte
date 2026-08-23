@@ -165,13 +165,14 @@
 
 <style>
   .chat-panel {
+    --control-radius: 8px;
     position: absolute;
-    top: max(80px, calc(100vh - 380px));
+    top: max(80px, calc(100vh - 680px));
     right: 20px;
     width: min(400px, calc(100vw - 24px));
-    max-height: calc(100vh - 120px);
+    height: min(560px, calc(100vh - 184px));
     border: 1px solid rgba(212, 165, 116, 0.3);
-    border-radius: 10px;
+    border-radius: var(--control-radius);
     background: rgba(8, 10, 12, 0.72);
     backdrop-filter: blur(10px);
     color: #e8e0d8;
@@ -192,8 +193,12 @@
 
   .status-chip {
     border: 1px solid rgba(212, 165, 116, 0.22);
-    border-radius: 999px;
-    padding: 4px 7px;
+    border-radius: var(--control-radius);
+    box-sizing: border-box;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 8px;
     font-size: 10px;
     font-family: 'IBM Plex Mono', monospace;
     color: rgba(232, 224, 216, 0.72);
@@ -221,6 +226,7 @@
     height: 32px;
     padding: 0 9px;
     font-size: 10px;
+    border-radius: var(--control-radius);
   }
 
   .title {
@@ -248,10 +254,16 @@
 
   .messages {
     overflow: auto;
+    min-height: 0;
     display: grid;
     align-content: start;
     gap: 8px;
     padding-right: 2px;
+    scrollbar-width: none;
+  }
+
+  .messages::-webkit-scrollbar {
+    display: none;
   }
 
   .empty {
@@ -318,7 +330,7 @@
   input,
   button {
     border: 1px solid rgba(212, 165, 116, 0.28);
-    border-radius: 7px;
+    border-radius: var(--control-radius);
     background: rgba(10, 12, 15, 0.82);
     color: #e8e0d8;
     height: 38px;

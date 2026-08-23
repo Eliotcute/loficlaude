@@ -9,6 +9,7 @@ const runtimeDir = path.join(os.tmpdir(), `loficlaude-${userKey}-${workspaceKey}
 
 module.exports = {
   port: 9120,
+  pairingPort: 9121,
   host: '127.0.0.1',
   authTimeout: 5000,
   defaultModel: 'claude-sonnet-4-6',
