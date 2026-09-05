@@ -18,7 +18,7 @@
 
   const dispatch = createEventDispatcher();
   const TIMER_OPTIONS = [25, 45, 60];
-  const RAIN_TYPES = ['light', 'medium', 'heavy'];
+  const RAIN_TYPES = ['light', 'medium', 'heavy', 'stop'];
 
   let expanded = false;
   let inactivityTimeout;
@@ -166,11 +166,11 @@
       <div class="section-row">
         <span class="section-title">雨声</span>
         <span class="source-badge" class:remote={rainSourceStatus === 'rainy-mood'} class:fallback={rainSourceStatus === 'fallback'}>
-          {rainSourceStatus === 'rainy-mood' ? 'RAINY MOOD' : rainSourceStatus === 'fallback' ? '本机备用' : '未启动'}
+          {rainSourceStatus === 'rainy-mood' ? 'RAINY MOOD' : rainSourceStatus === 'fallback' ? '本机备用' : rainSourceStatus === 'stopped' ? '已停止' : '未启动'}
         </span>
         <div class="chip-row">
           {#each RAIN_TYPES as type}
-            <button type="button" class:active={rainType === type} on:click={() => handleRainType(type)}>{type}</button>
+            <button type="button" class:active={type !== 'stop' && rainType === type} on:click={() => handleRainType(type)}>{type}</button>
           {/each}
         </div>
       </div>

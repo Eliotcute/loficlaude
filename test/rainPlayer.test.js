@@ -112,7 +112,7 @@ class FakeAudioContext {
   }
 }
 
-test('RainPlayer initializes Rainy Mood as the primary audio source', async () => {
+test('RainPlayer initializes the bundled local rain audio source', async () => {
   const statuses = [];
   const player = new RainPlayer({ AudioElement: FakeAudio, onStatus: (status) => statuses.push(status) });
 
@@ -120,7 +120,7 @@ test('RainPlayer initializes Rainy Mood as the primary audio source', async () =
   player.setVolume(55);
   await player.play();
 
-  assert.equal(FakeAudio.instance.src, RAINY_MOOD_SOURCES[0].src);
+  assert.equal(FakeAudio.instance.src, '/0.m4a');
   assert.equal(FakeAudio.instance.volume, 0.4675);
   assert.equal(FakeAudio.instance.playCalls, 1);
   assert.equal(player.usingFallback, false);

@@ -10,6 +10,8 @@ export const RAINY_MOOD_SOURCES = [
   { src: 'https://media.rainymood.com/0.mp3', type: 'audio/mpeg' }
 ];
 
+export const LOCAL_RAIN_SOURCES = [{ src: '/0.m4a', type: 'audio/mp4' }];
+
 let sharedCtx = null;
 let sharedNoiseBuffer = null;
 
@@ -64,7 +66,7 @@ function getNoiseBuffer(ctx) {
 export class RainPlayer {
   constructor(options = {}) {
     this.AudioElement = options.AudioElement ?? globalThis.Audio;
-    this.sources = options.sources ?? RAINY_MOOD_SOURCES;
+    this.sources = options.sources ?? LOCAL_RAIN_SOURCES;
     this.preferLocal = options.preferLocal ?? false;
     this.onStatus = options.onStatus ?? (() => {});
     this.audio = null;
@@ -185,12 +187,24 @@ export class RainPlayer {
   }
 
   loadType(type) {
+    if (type === 'stop') {
+      this.stop();
+      return;
+    }
     if (this.usingFallback && this.fallbackStarted) {
       this.applyPreset(type);
       return;
     }
 
     this.applyPreset(type);
+  }
+
+  stop() {
+    this.shouldPlay = false;
+    this.clearFadeTimer();
+    this.audio?.pause?.();
+    if (this.audio) this.audio.currentTime = 0;
+    this.onStatus('stopped');
   }
 
   setVolume(volume) {
