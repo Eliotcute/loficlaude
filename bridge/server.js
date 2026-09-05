@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const { WebSocketServer } = require('ws');
 const { createClaudeSession } = require('./claude');
+const { createMusicController } = require('./musicController');
 const { CLIENT_TYPES, SERVER_TYPES, STATUS, safeParse, serialize } = require('./protocol');
 
 const DEFAULT_MAX_PAYLOAD_BYTES = 64 * 1024;
@@ -44,6 +45,10 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
   let claudeSession = null;
   let sessionStatus = STATUS.DISCONNECTED;
   let closing = false;
+  const music = createMusicController({
+    onState: (value) => broadcast({ type: SERVER_TYPES.MUSIC_STATE, value }),
+    onError: (message) => broadcast({ type: SERVER_TYPES.ERROR, message })
+  });
 
   function isUserMessageWithinLimit(text) {
     return text.length <= maxUserMessageChars && Buffer.byteLength(text, 'utf8') <= maxUserMessageBytes;
@@ -246,10 +251,20 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
         try {
           ensureClaudeSession();
           send(socket, { type: SERVER_TYPES.STATUS, value: sessionStatus });
+          send(socket, { type: SERVER_TYPES.MUSIC_STATE, value: music.getState() });
         } catch (error) {
           console.error(`Claude session unavailable: ${error.message}`);
           send(socket, { type: SERVER_TYPES.ERROR, message: 'Claude session unavailable' });
         }
+        return;
+      }
+
+      if (data.type === CLIENT_TYPES.MUSIC_COMMAND) {
+        const action = typeof data.command === 'string' ? data.command : '';
+        const args = Array.isArray(data.args) ? data.args.filter((value) => typeof value === 'string').slice(0, 2) : [];
+        music.command(action, args).then((accepted) => {
+          if (!accepted) send(socket, { type: SERVER_TYPES.ERROR, message: 'Music command was not accepted' });
+        });
         return;
       }
 

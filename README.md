@@ -39,6 +39,14 @@ The command resolves the Bridge from the installed LoFiClaude project, so the te
 
 The bridge listens on `ws://localhost:9120` and exposes a loopback-only pairing endpoint on `http://127.0.0.1:9121/token`. When the room is opened on the same machine, it discovers the running Bridge and connects automatically; the token is never placed in the URL and is retained only in the current browser session. The token is also printed once to the local terminal as a manual fallback. Start it with `LOFICLAUDE_RESET_SESSION=1 loficlaude bridge` when you intentionally want a new Claude conversation.
 
+Configure the optional local NetEase provider with one command:
+
+```bash
+loficlaude music setup
+```
+
+This forwards to the official `ncm-cli configure` wizard. Credentials remain in the CLI's local configuration and are never bundled into the browser.
+
 ## Connect
 
 1. Start the room.
@@ -70,6 +78,8 @@ V1.1 release decision: YouTube lofi playback is enabled after user gesture. If t
 The room initializes YouTube lofi playback and real Rainy Mood rain audio only after a user gesture. `Start room` is the intended first gesture.
 
 Rainy Mood is the default rain source. If the remote audio fails, `RainPlayer` switches to local Web Audio fallback so the room remains usable. Rain intensity changes the effective gain and filter shape. Confirm Rainy Mood usage rights before public distribution.
+
+When the local Bridge is connected and `ncm-cli` is configured, the player controls the local NetEase Music `mpv` session. Credentials stay in the local `ncm-cli` configuration; the browser receives only music state. YouTube remains the browser fallback when the local provider is unavailable.
 
 ## Troubleshooting
 

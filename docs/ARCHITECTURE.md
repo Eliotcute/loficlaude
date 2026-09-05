@@ -12,6 +12,7 @@ flowchart TB
         Stores <--> Persist["浏览器存储<br/>LocalStorage / SessionStorage"]
 
         Orch --> Music["YouTubePlayer"]
+        Orch --> LocalMusic["Bridge Music State"]
         Orch --> Rain["RainPlayer"]
         Rain --> LocalRain["Web Audio 本地雨声<br/>失败 fallback"]
         Rain --> RemoteRain["Rainy Mood 真实雨声音源"]
@@ -22,10 +23,12 @@ flowchart TB
     end
 
     Music --> YouTube["YouTube iframe API"]
+    LocalMusic <-->|"music_command / music_state"| Bridge
     Client <-->|"ws://localhost:9120<br/>token 认证"| Bridge["本机 Bridge"]
 
     subgraph LocalRuntime["本机运行时"]
         Bridge --> ClaudeSession["Claude CLI 会话"]
+        Bridge --> Netease["ncm-cli / mpv"]
         Bridge <--> SessionState["私有状态文件<br/>仅 Claude session id"]
         Socket <--> Bridge
     end

@@ -51,6 +51,7 @@ export class BridgeClient {
     this.onDisconnect = () => {};
     this.onSessionReset = () => {};
     this.onReplayGap = () => {};
+    this.onMusicState = () => {};
     this.restoreReplayState();
   }
 
@@ -244,6 +245,8 @@ export class BridgeClient {
         this.onTool(payload.name ?? null);
       } else if (payload.type === 'error') {
         this.onError(payload.message ?? 'Unknown bridge error');
+      } else if (payload.type === 'music_state') {
+        this.onMusicState(payload.value ?? {});
       }
 
       this.markEventProcessed(payload);
@@ -307,6 +310,16 @@ export class BridgeClient {
           text: clean
         })
       );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  sendMusicCommand(command, args = []) {
+    if (!this.socket || this.socket.readyState !== this.WebSocketImpl.OPEN) return false;
+    try {
+      this.socket.send(JSON.stringify({ type: 'music_command', command, args }));
       return true;
     } catch {
       return false;

@@ -137,6 +137,13 @@
     applyClaudeState(claudeOrch.getState());
   }
 
+  function handleMusicState(state) {
+    const status = state?.status ?? 'unavailable';
+    player.musicStatus.set(status === 'playing' ? 'playing' : status === 'paused' ? 'paused' : status === 'error' ? 'error' : 'idle');
+    player.isPlaying.set(status === 'playing');
+    if (state?.title) player.currentTrackTitle.set(state.title);
+  }
+
   function setActivityState() {
     const now = Date.now();
     if (now - lastActivityNotifiedAt < 250) {
@@ -317,6 +324,10 @@
   }
 
   async function togglePlayback() {
+    if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
+      bridgeClient.sendMusicCommand($playerIsPlaying ? 'pause' : 'resume');
+      return;
+    }
     if (!$hasStarted) {
       await startExperience();
       return;
@@ -352,10 +363,18 @@
   }
 
   async function playNextTrack() {
+    if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
+      bridgeClient.sendMusicCommand('next');
+      return;
+    }
     await selectTrack($currentTrackIndex + 1);
   }
 
   async function playPreviousTrack() {
+    if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
+      bridgeClient.sendMusicCommand('prev');
+      return;
+    }
     await selectTrack($currentTrackIndex - 1);
   }
 
@@ -380,6 +399,13 @@
     rain.muted.set(clamped === 0);
     const { rainPlayer } = audio.getPlayers();
     rainPlayer?.setVolume(clamped);
+  }
+
+  function setMusicVolume(nextVolume) {
+    const volume = Math.max(0, Math.min(100, Math.round(nextVolume)));
+    if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
+      bridgeClient.sendMusicCommand('volume', [String(volume)]);
+    }
   }
 
   function setRainType(type) {
@@ -491,6 +517,7 @@
   onMount(() => {
     restoreState();
     claudeOrch.attachBridge(bridgeClient);
+    bridgeClient.onMusicState = handleMusicState;
     refreshClaudeState();
     unsubscribeBridgeSettings = ui.bridgeSettingsOpen.subscribe((open) => {
       if (open) {

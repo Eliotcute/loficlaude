@@ -13,10 +13,20 @@ function printHelp() {
 
 Commands:
   bridge    Start the local Claude Bridge
+  music setup  Configure the local NetEase Music CLI and mpv provider
 `);
 }
 
-if (process.argv[2] !== 'bridge') {
+if (process.argv[2] === 'music' && process.argv[3] === 'setup') {
+  const setup = spawn('ncm-cli', ['configure'], { stdio: 'inherit', env: process.env });
+  setup.once('error', (error) => {
+    console.error(`Unable to start ncm-cli: ${error.message}`);
+    process.exitCode = 1;
+  });
+  setup.once('exit', (code, signal) => {
+    process.exitCode = typeof code === 'number' ? code : signal ? 1 : 0;
+  });
+} else if (process.argv[2] !== 'bridge') {
   printHelp();
   process.exitCode = process.argv[2] ? 1 : 0;
 } else if (!existsSync(bridgeEntry)) {

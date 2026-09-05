@@ -9,7 +9,7 @@
 | V1.1.0 | 2026/07/15 | Codex | 基于 V1.0 实现 review、浏览器 QA 与 lofi.cafe 调研形成可靠性增强版 |
 | V1.1.0 | 2026/07/27 | Codex | 同步实现状态，确认本地雨声、SessionStorage token 与 7 天历史策略 |
 
-当前发布决策：V1.1 在用户手势后启用 YouTube lofi；YouTube 失败或超时不影响 Rainy Mood 与本地 fallback。音乐状态必须与雨声状态独立展示，第三方 iframe 不得阻塞房间启动。
+当前发布决策：LoFiClaude 是氛围感 lofi 播放器，Claw 陪伴和 Claude 连续对话是增强层。V1.1 在用户手势后启用 YouTube lofi；连接本机 Bridge 且配置 ncm-cli 时，播放器优先控制本机网易云/mpv。任一音乐 provider 失败都不影响 Rainy Mood 与本地 fallback，音乐状态必须与雨声状态独立展示。
 
 ## 一、概述（为什么做）
 
@@ -67,7 +67,7 @@ LoFiClaude 是一个会感知用户和 Claude 工作状态的本地 AI 专注房
 | Claw | 承载 Claude 状态、陪伴反馈和轻对话入口的像素角色 |
 | Session | 从 Start room 到主动结束、计时结束或页面关闭的一次陪伴使用过程 |
 | 活跃专注分钟 | Room 已启动、页面可见且用户未进入 idle 的累计分钟数 |
-| Station | 通过 YouTube iframe 播放的一条可切换直播频道 |
+| Music provider | 本机网易云/mpv 或 YouTube iframe 音乐后端 |
 | Audio fallback | 第三方雨声不可用时，由浏览器本地生成的环境雨声 |
 | Bridge | 连接本机 Claude CLI 的 WebSocket 服务 |
 
@@ -102,7 +102,7 @@ V1.1 聚焦“可靠、看得懂、有陪伴感”三个结果：
 
 本版本不做：
 
-- 不建设自有音乐版权库或音乐代理服务。
+- 不建设自有音乐版权库或音乐代理服务；本机网易云通过用户已配置的官方 CLI 播放。
 - 不复制 lofi.cafe 的视频、背景素材、源码或完整频道清单。
 - 不引入账号、云同步、多人房间和付费系统。
 - 不新增前端依赖，除非单独评审批准。
@@ -153,10 +153,11 @@ flowchart LR
     U[本地用户] --> UI[LoFiClaude UI]
     UI --> LS[LocalStorage 偏好/专注/历史]
     UI --> SS[SessionStorage Bridge token]
-    UI --> YT[YouTube iframe]
+    UI --> YT[YouTube iframe 或本机音乐状态]
     UI --> RM[Rainy Mood 或本地 fallback]
     UI --> WS[本机 Bridge]
     WS --> CLI[Claude CLI]
+    WS --> NCM[ncm-cli / mpv]
     CLI --> WS
     WS --> UI
 ```
@@ -505,6 +506,7 @@ V1.1 不引入服务端数据库。
 | 对接系统 | 接口方向 | 协议 | 说明 |
 |----------|----------|------|------|
 | YouTube | 前端加载 | iframe API | Station 播放，不代理音频 |
+| NetEase Music | Bridge 调用 | 本机 CLI | ncm-cli 控制 mpv；凭证不进入浏览器 |
 | Rainy Mood | 前端读取 | HTTPS Audio | 真实雨声默认来源；公开发布前完成授权确认 |
 | Browser AudioContext | 前端本地 | Web Audio API | 雨声 fallback 与强度处理 |
 | Claude Bridge | 双向 | ws://localhost | token 鉴权与流式对话 |
