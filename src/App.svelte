@@ -38,6 +38,7 @@
   const currentTrackTitle = player.currentTrackTitle;
   const playerIsPlaying = player.isPlaying;
   const musicStatus = player.musicStatus;
+  const musicProvider = player.musicProvider;
   const rainVolume = rain.volume;
   const rainType = rain.type;
   const rainMuted = rain.muted;
@@ -139,6 +140,10 @@
 
   function handleMusicState(state) {
     const status = state?.status ?? 'unavailable';
+    if (state?.provider === 'netease-local') {
+      player.musicProvider.set('netease-local');
+      audio.getPlayers().youtubePlayer?.pause();
+    }
     player.musicStatus.set(status === 'playing' ? 'playing' : status === 'paused' ? 'paused' : status === 'error' ? 'error' : 'idle');
     player.isPlaying.set(status === 'playing');
     if (state?.title) player.currentTrackTitle.set(state.title);
@@ -325,6 +330,7 @@
 
   async function togglePlayback() {
     if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
+      audio.getPlayers().youtubePlayer?.pause();
       bridgeClient.sendMusicCommand($playerIsPlaying ? 'pause' : 'resume');
       return;
     }
@@ -364,6 +370,7 @@
 
   async function playNextTrack() {
     if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
+      audio.getPlayers().youtubePlayer?.pause();
       bridgeClient.sendMusicCommand('next');
       return;
     }
@@ -372,6 +379,7 @@
 
   async function playPreviousTrack() {
     if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
+      audio.getPlayers().youtubePlayer?.pause();
       bridgeClient.sendMusicCommand('prev');
       return;
     }
@@ -517,7 +525,7 @@
   onMount(() => {
     restoreState();
     claudeOrch.attachBridge(bridgeClient);
-    bridgeClient.onMusicState = handleMusicState;
+      bridgeClient.onMusicState = handleMusicState;
     refreshClaudeState();
     unsubscribeBridgeSettings = ui.bridgeSettingsOpen.subscribe((open) => {
       if (open) {
@@ -613,6 +621,7 @@
 
   <MiniPlayer
     musicStatus={$musicStatus}
+    musicProvider={$musicProvider}
     onTogglePlay={togglePlayback}
     onPreviousTrack={playPreviousTrack}
     onNextTrack={playNextTrack}

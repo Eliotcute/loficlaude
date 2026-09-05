@@ -7,6 +7,7 @@ export const claudeForm = writable(0); // 0-12, claudepix preset form index
 export const player = {
   isPlaying: writable(false),
   musicStatus: writable('disabled'),
+  musicProvider: writable('youtube'), // youtube | netease-local | none
   currentTrackIndex: writable(0),
   currentTrackTitle: writable('lofi hip hop radio - beats'),
   isLoading: writable(false),

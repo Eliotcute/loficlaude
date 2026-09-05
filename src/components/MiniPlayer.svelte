@@ -12,6 +12,7 @@
   export let onMarkActivity = () => {};
   export let onAddCustomUrl = async () => false;
   export let musicStatus = 'disabled';
+  export let musicProvider = 'youtube';
 
   const trackTitle = player.currentTrackTitle;
   const playerIsPlaying = player.isPlaying;
@@ -66,6 +67,7 @@
     isPlaying={$playerIsPlaying}
     isLoading={$playerIsLoading}
     musicStatus={musicStatus}
+    musicProvider={musicProvider}
     error={$playerError}
     rainSourceStatus={$rainSourceStatus}
     rainType={$rainType}

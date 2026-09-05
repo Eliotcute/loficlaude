@@ -8,6 +8,7 @@
   export let isPlaying = false;
   export let isLoading = false;
   export let musicStatus = 'disabled';
+  export let musicProvider = 'youtube';
   export let error = null;
   export let rainSourceStatus = 'idle';
   export let rainType = 'medium';
@@ -138,7 +139,7 @@
     on:touchstart={handleTouchStart}
     on:touchend={handleTouchEnd}
   >
-    <span class="brand">Claude FM</span>
+      <span class="brand">{musicProvider === 'netease-local' ? 'NETEASE LOCAL' : 'Claude FM'}</span>
     <span class="actions">
       <span class="pause">{musicStatus === 'loading' ? '...' : isPlaying ? '❚❚' : '▶'}</span>
       <span>🌧{rainVolume}</span>
@@ -150,7 +151,7 @@
       <div class="label">{error ? 'AUDIO NOTICE' : musicStatus === 'disabled' ? 'LOFI OPTIONAL' : isLoading ? 'LOADING MUSIC' : musicStatus === 'playing' ? 'LOFI PLAYING' : 'LOFI PAUSED'}</div>
       <div class="title-row">
         <span class="genre-dot" style={`background: ${genreColor};`} aria-hidden="true"></span>
-        <div class="title" title={error || title}>{error || title}</div>
+        <div class="title" title={error || title}>{error || (musicProvider === 'netease-local' ? 'Local mpv player' : title)}</div>
       </div>
 
       <div class="controls">
