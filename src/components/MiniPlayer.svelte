@@ -10,7 +10,6 @@
   export let onSetRainVolume = () => {};
   export let onSelectTimer = () => {};
   export let onMarkActivity = () => {};
-  export let onAddCustomUrl = async () => false;
   export let musicStatus = 'disabled';
   export let musicProvider = 'youtube';
 
@@ -34,30 +33,9 @@
     custom: '#d4b874'
   };
 
-  let showCustomInput = false;
-  let customUrl = '';
-  let customError = '';
-
   $: currentGenre = PLAYLIST[$currentTrackIndex]?.genre ?? 'lofi';
   $: genreColor = GENRE_COLOR_MAP[currentGenre] ?? GENRE_COLOR_MAP.lofi;
 
-  async function submitCustomUrl() {
-    const clean = customUrl.trim();
-    if (!clean) {
-      return;
-    }
-
-    const ok = await onAddCustomUrl(clean);
-    if (!ok) {
-      customError = 'Invalid YouTube URL';
-      return;
-    }
-
-    customError = '';
-    customUrl = '';
-    showCustomInput = false;
-    onMarkActivity();
-  }
 </script>
 
 <div class="player-shell" style={`opacity: ${$uiChromeOpacity};`}>
@@ -82,47 +60,6 @@
     on:settimer={(event) => onSelectTimer(event.detail.minutes)}
     on:activity={onMarkActivity}
   />
-
-  <div class="custom-row">
-    <button
-      type="button"
-      class="custom-toggle"
-      aria-label="Add YouTube station"
-      title="Add YouTube station"
-      on:click={() => {
-        showCustomInput = !showCustomInput;
-        customError = '';
-        onMarkActivity();
-      }}
-    >
-      <span aria-hidden="true">+</span>
-    </button>
-
-    {#if showCustomInput}
-      <form
-        class="custom-form"
-        on:submit|preventDefault={submitCustomUrl}
-      >
-        <input
-          type="text"
-          placeholder="Add a YouTube station"
-          bind:value={customUrl}
-          on:input={() => {
-            if (customError) {
-              customError = '';
-            }
-            onMarkActivity();
-          }}
-          aria-label="YouTube station URL"
-        />
-        <button type="submit">Add station</button>
-      </form>
-    {/if}
-  </div>
-
-  {#if customError}
-    <p class="custom-error" role="status">{customError}</p>
-  {/if}
 
   {#if $playerError}
     <p class="player-status error" role="status">{$playerError}</p>
@@ -149,61 +86,6 @@
     gap: 6px;
   }
 
-  .custom-row {
-    position: absolute;
-    right: 0;
-    bottom: calc(100% + 8px);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    justify-content: flex-end;
-  }
-
-  .custom-toggle,
-  .custom-form button,
-  .custom-form input {
-    border: 1px solid rgba(212, 165, 116, 0.28);
-    border-radius: 8px;
-    background: rgba(10, 12, 15, 0.82);
-    color: #e8e0d8;
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 11px;
-    min-height: 44px;
-  }
-
-  .custom-toggle {
-    width: 44px;
-    padding: 0 10px;
-    cursor: pointer;
-  }
-
-  .custom-form button {
-    padding: 0 10px;
-    cursor: pointer;
-  }
-
-  .custom-form {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .custom-form input {
-    width: min(300px, calc(100vw - 140px));
-    padding: 0 8px;
-    outline: none;
-  }
-
-  .custom-error {
-    margin: 0;
-    position: absolute;
-    right: 0;
-    bottom: calc(100% + 42px);
-    text-align: right;
-    color: #e19c91;
-    font-size: 11px;
-  }
-
   .player-status {
     margin: 0;
     position: absolute;
@@ -225,11 +107,6 @@
       width: min(calc(100% - 24px), 420px);
     }
 
-    .custom-row {
-      left: 0;
-      justify-content: center;
-    }
-
     .player-status {
       right: 0;
       bottom: calc(100% + 42px);
@@ -237,8 +114,5 @@
       margin-inline: auto;
     }
 
-    .custom-form input {
-      width: min(220px, calc(100vw - 118px));
-    }
   }
 </style>

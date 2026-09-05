@@ -258,6 +258,7 @@
     gap: 10px;
     align-items: center;
     font-size: 13px;
+    min-height: 32px;
   }
 
   .pause {
@@ -320,7 +321,8 @@
     border-radius: 7px;
     background: rgba(12, 15, 18, 0.74);
     color: inherit;
-    min-height: 36px;
+    min-height: 40px;
+    padding: 0 12px;
     font-family: inherit;
     cursor: pointer;
     text-transform: lowercase;
@@ -357,7 +359,11 @@
   .source-badge {
     border: 1px solid rgba(232, 224, 216, 0.2);
     border-radius: 7px;
-    padding: 4px 6px;
+    min-height: 40px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 10px;
     color: rgba(232, 224, 216, 0.55);
     font-size: 9px;
     line-height: 1;
