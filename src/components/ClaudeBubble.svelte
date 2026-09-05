@@ -236,9 +236,9 @@
     line-height: 1;
     color: #e8e0d8;
     cursor: pointer;
-    width: 44px;
-    min-height: 44px;
-    height: 36px;
+    width: 32px;
+    min-height: 32px;
+    height: 32px;
     display: grid;
     place-items: center;
     padding: 0;
