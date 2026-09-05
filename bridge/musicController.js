@@ -14,6 +14,9 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
   function parseState(output) {
     try {
       const parsed = JSON.parse(output);
+      if (parsed?.success === false) {
+        return { status: 'error', message: parsed.message || '网易云音乐未能播放' };
+      }
       const value = parsed?.state ?? parsed;
       return {
         status: value?.status === 'playing' ? 'playing' : value?.status === 'paused' ? 'paused' : 'idle',
@@ -46,7 +49,16 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
           resolve(false);
           return;
         }
-        const next = action === 'state' ? parseState(stdout) : { status: action === 'pause' ? 'paused' : action === 'stop' ? 'idle' : action === 'play' || action === 'resume' ? 'playing' : state.status };
+        const next = action === 'state' ? parseState(stdout) : parseState(stdout);
+        if (next.status === 'error') {
+          publish(next);
+          onError(next.message || '网易云音乐未能播放');
+          resolve(false);
+          return;
+        }
+        if (action !== 'state') {
+          next.status = action === 'pause' ? 'paused' : action === 'stop' ? 'idle' : action === 'play' || action === 'resume' ? 'playing' : state.status;
+        }
         publish(next);
         resolve(true);
       });

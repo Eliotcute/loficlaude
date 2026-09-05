@@ -267,7 +267,6 @@
 
   .expanded-body {
     min-height: 180px;
-    max-height: 220px;
     padding: 12px 14px 14px;
     display: grid;
     gap: 9px;
@@ -401,7 +400,6 @@
 
   @media (max-width: 720px) {
     .expanded-body {
-      max-height: none;
       min-height: 200px;
     }
 
