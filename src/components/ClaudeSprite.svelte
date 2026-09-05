@@ -39,6 +39,9 @@
   let formMenuLeft = false;
   let motionSyncElapsedMs = 0;
   let lastPublishedMotion = null;
+  let lastPaintTimestamp = 0;
+  const targetFrameMs = 1000 / 30;
+  const storeSyncIntervalMs = 100;
 
   let motionState = {
     x: 0,
@@ -74,17 +77,20 @@
       return;
     }
 
+    const previous = lastPublishedMotion;
     lastPublishedMotion = nextMotion;
-    claude.x.set(motionState.x);
-    claude.y.set(motionState.y);
-    claude.direction.set(motionState.direction);
-    claude.mode.set(motionState.mode);
-    claude.targetX.set(motionState.x);
-    claude.targetY.set(motionState.y);
-    claude.idleTime.set(motionState.idleTime);
-    claude.frameTime.set(motionState.frameTime);
-    claude.frameIndex.set(motionState.frameIndex);
-    claude.bubbleAnchor.set({ x: motionState.x + 48, y: motionState.y - 12 });
+    if (!previous || nextMotion.x !== previous.x) claude.x.set(motionState.x);
+    if (!previous || nextMotion.y !== previous.y) claude.y.set(motionState.y);
+    if (!previous || nextMotion.direction !== previous.direction) claude.direction.set(motionState.direction);
+    if (!previous || nextMotion.mode !== previous.mode) claude.mode.set(motionState.mode);
+    if (!previous || nextMotion.x !== previous.x) claude.targetX.set(motionState.x);
+    if (!previous || nextMotion.y !== previous.y) claude.targetY.set(motionState.y);
+    if (!previous || nextMotion.idleTime !== previous.idleTime) claude.idleTime.set(motionState.idleTime);
+    if (!previous || nextMotion.frameIndex !== previous.frameIndex) claude.frameTime.set(motionState.frameTime);
+    if (!previous || nextMotion.frameIndex !== previous.frameIndex) claude.frameIndex.set(motionState.frameIndex);
+    if (!previous || nextMotion.x !== previous.x || nextMotion.y !== previous.y) {
+      claude.bubbleAnchor.set({ x: motionState.x + 48, y: motionState.y - 12 });
+    }
   }
 
   function setModeFromMood(mood) {
@@ -165,6 +171,12 @@
       return;
     }
 
+    if (lastPaintTimestamp && timestamp - lastPaintTimestamp < targetFrameMs) {
+      startAnimation();
+      return;
+    }
+    lastPaintTimestamp = timestamp;
+
     const dt = Math.min(0.05, (timestamp - (lastTime || timestamp)) / 1000);
     lastTime = timestamp;
 
@@ -177,8 +189,8 @@
     }
 
     motionSyncElapsedMs += dt * 1000;
-    syncStores({ force: motionSyncElapsedMs >= 33 });
-    if (motionSyncElapsedMs >= 33) {
+    if (motionSyncElapsedMs >= storeSyncIntervalMs) {
+      syncStores();
       motionSyncElapsedMs = 0;
     }
     const renderedForm = getAnimatedFormFrame(dt * 1000, $currentClaudeForm);
@@ -497,7 +509,6 @@
     border-radius: 8px;
     background: rgba(8, 10, 12, 0.96);
     box-shadow: 0 18px 38px rgba(0, 0, 0, 0.42);
-    backdrop-filter: blur(10px);
     z-index: 40;
     animation: form-menu-in 120ms ease;
   }

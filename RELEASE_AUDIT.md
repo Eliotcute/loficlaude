@@ -1,5 +1,7 @@
 # LoFiClaude V1.1 只读发布审计
 
+> 状态更新：本审计中的部分历史问题已被后续代码修复或重新决策。当前 V1.1 正式发布基线为：用户手势后启用 YouTube lofi，Rainy Mood/本地 fallback 独立运行；音乐与雨声状态独立展示；Clawd 形态加载包含生产 fallback。下方历史记录仍保留作为审计证据，不能直接视为当前阻塞清单。
+
 - 日期：2026-08-18
 - 仓库：`/Users/lieliot/Documents/eliot-codex/loficlaude`
 - 分支：`codex/core-reliability`

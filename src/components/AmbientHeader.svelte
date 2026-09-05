@@ -181,9 +181,8 @@
     gap: 6px;
     border: 1px solid rgba(116, 143, 212, 0.28);
     border-radius: 8px;
-    background: rgba(8, 10, 12, 0.58);
+    background: rgba(8, 10, 12, 0.86);
     color: rgba(232, 224, 216, 0.82);
-    backdrop-filter: blur(12px);
     font-family: 'IBM Plex Mono', monospace;
     font-size: 12px;
   }
@@ -197,9 +196,8 @@
   .timer-button {
     border: 1px solid rgba(212, 165, 116, 0.28);
     border-radius: 8px;
-    background: rgba(8, 10, 12, 0.58);
+    background: rgba(8, 10, 12, 0.86);
     color: #e8e0d8;
-    backdrop-filter: blur(12px);
     font-family: 'IBM Plex Mono', monospace;
     cursor: pointer;
     box-shadow: inset 0 1px 0 rgba(232, 224, 216, 0.04);

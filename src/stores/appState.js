@@ -6,6 +6,7 @@ export const claudeForm = writable(0); // 0-12, claudepix preset form index
 
 export const player = {
   isPlaying: writable(false),
+  musicStatus: writable('disabled'),
   currentTrackIndex: writable(0),
   currentTrackTitle: writable('lofi hip hop radio - beats'),
   isLoading: writable(false),

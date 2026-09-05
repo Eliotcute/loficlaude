@@ -184,7 +184,6 @@
     padding: 10px 12px 12px;
     z-index: 19;
     animation: bubble-in 140ms ease;
-    backdrop-filter: blur(10px);
   }
 
   .claude-bubble.passive {
@@ -237,7 +236,8 @@
     line-height: 1;
     color: #e8e0d8;
     cursor: pointer;
-    width: 36px;
+    width: 44px;
+    min-height: 44px;
     height: 36px;
     display: grid;
     place-items: center;

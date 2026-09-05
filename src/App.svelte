@@ -37,6 +37,7 @@
   const currentTrackIndex = player.currentTrackIndex;
   const currentTrackTitle = player.currentTrackTitle;
   const playerIsPlaying = player.isPlaying;
+  const musicStatus = player.musicStatus;
   const rainVolume = rain.volume;
   const rainType = rain.type;
   const rainMuted = rain.muted;
@@ -71,14 +72,18 @@
   let claudeBridgeStatus = 'disconnected';
   let claudeToolRunning = null;
   let claudeLastError = '';
+  // Formal V1.1 decision: ship the lofi station with explicit rain/music states.
+  const ENABLE_YOUTUBE_AUDIO = true;
 
   const audio = createAudioInitializer({
+    enableYouTube: ENABLE_YOUTUBE_AUDIO,
     mountId: 'youtube-player-host',
     getCurrentTrackIndex: () => $currentTrackIndex,
     getRainType: () => $rainType,
     getRainMuted: () => $rainMuted,
     getRainVolume: () => $rainVolume,
     onLoading: (loading) => player.isLoading.set(loading),
+    onMusicStatus: (status) => player.musicStatus.set(status),
     onError: (error) => player.error.set(error),
     onRainStatus: (status) => rain.sourceStatus.set(status)
   });
@@ -580,6 +585,7 @@
   <AmbientHeader />
 
   <MiniPlayer
+    musicStatus={$musicStatus}
     onTogglePlay={togglePlayback}
     onPreviousTrack={playPreviousTrack}
     onNextTrack={playNextTrack}
@@ -627,9 +633,11 @@
     />
   {/if}
 
-  <div class="youtube-host" aria-hidden="true" tabindex="-1" role="presentation">
-    <div id="youtube-player-host" class="youtube-player-mount"></div>
-  </div>
+  {#if ENABLE_YOUTUBE_AUDIO}
+    <div class="youtube-host" aria-hidden="true" tabindex="-1" role="presentation">
+      <div id="youtube-player-host" class="youtube-player-mount"></div>
+    </div>
+  {/if}
 </main>
 
 <style>

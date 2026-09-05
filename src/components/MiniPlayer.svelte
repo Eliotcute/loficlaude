@@ -11,6 +11,7 @@
   export let onSelectTimer = () => {};
   export let onMarkActivity = () => {};
   export let onAddCustomUrl = async () => false;
+  export let musicStatus = 'disabled';
 
   const trackTitle = player.currentTrackTitle;
   const playerIsPlaying = player.isPlaying;
@@ -64,6 +65,7 @@
     genreColor={genreColor}
     isPlaying={$playerIsPlaying}
     isLoading={$playerIsLoading}
+    musicStatus={musicStatus}
     error={$playerError}
     rainSourceStatus={$rainSourceStatus}
     rainType={$rainType}
@@ -121,8 +123,8 @@
 
   {#if $playerError}
     <p class="player-status error" role="status">{$playerError}</p>
-  {:else if $playerIsLoading}
-    <p class="player-status" role="status">loading audio...</p>
+  {:else if $playerIsLoading && musicStatus !== 'disabled'}
+    <p class="player-status" role="status">loading music...</p>
   {:else if $rainSourceStatus === 'rainy-mood'}
     <p class="player-status" role="status">Rainy Mood remote rain active</p>
   {:else if $rainSourceStatus === 'fallback'}

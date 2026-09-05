@@ -99,8 +99,7 @@
     width: 148px;
     border: 1px solid rgba(212, 165, 116, 0.3);
     border-radius: 8px;
-    background: rgba(8, 10, 12, 0.72);
-    backdrop-filter: blur(10px);
+    background: rgba(8, 10, 12, 0.92);
     padding: 8px;
     display: grid;
     gap: 6px;

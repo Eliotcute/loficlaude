@@ -193,7 +193,7 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
   }
 
   wss.on('connection', (socket, request) => {
-    if ((wss.clients?.size ?? 0) > maxWebSocketClients) {
+    if ((wss.clients?.size ?? 0) >= maxWebSocketClients) {
       socket.close(1013, 'Too many clients');
       return;
     }

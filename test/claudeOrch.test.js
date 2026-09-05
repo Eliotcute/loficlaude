@@ -93,6 +93,7 @@ test('Claude resting state keeps the most recent completed reply visible', async
   const rested = orchestrator.getState();
   assert.equal(rested.companionState, 'resting');
   assert.equal(rested.bubbleMessage, reply);
+  assert.equal(rested.bubblePassive, false);
 });
 
 test('Claude history opens only through the explicit panel action', async () => {

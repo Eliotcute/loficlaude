@@ -65,6 +65,8 @@ The Bridge starts Claude CLI in the project root with non-interactive `-p` mode,
 
 ## Audio
 
+V1.1 release decision: YouTube lofi playback is enabled after user gesture. If the station fails or times out, rain remains available independently and the player exposes a retryable music error. Rainy Mood rain and its local fallback remain available as the independent rain path.
+
 The room initializes YouTube lofi playback and real Rainy Mood rain audio only after a user gesture. `Start room` is the intended first gesture.
 
 Rainy Mood is the default rain source. If the remote audio fails, `RainPlayer` switches to local Web Audio fallback so the room remains usable. Rain intensity changes the effective gain and filter shape. Confirm Rainy Mood usage rights before public distribution.

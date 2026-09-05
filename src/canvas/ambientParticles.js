@@ -69,10 +69,13 @@ export function updateAmbientParticles(particles, dt, width, height) {
 }
 
 export function drawAmbientParticles(ctx, particles) {
+  const baseAlpha = ctx.globalAlpha;
+
   for (const p of particles) {
     if (p.type === 'rain') {
       const glow = 0.52 + ((Math.sin(p.phase) + 1) * 0.5) * 0.3;
-      ctx.fillStyle = `rgba(176,210,255,${glow.toFixed(3)})`;
+      ctx.fillStyle = 'rgb(176,210,255)';
+      ctx.globalAlpha = baseAlpha * glow;
       const x = Math.round(p.x);
       const y = Math.round(p.y);
       ctx.fillRect(x, y, 2, 2);
@@ -81,7 +84,8 @@ export function drawAmbientParticles(ctx, particles) {
       const progress = p.age / p.duration;
       const alpha = Math.max(0, 0.32 * (1 - progress));
       const width = Math.max(2, Math.round(progress * 12));
-      ctx.fillStyle = `rgba(164,196,220,${alpha.toFixed(3)})`;
+      ctx.fillStyle = 'rgb(164,196,220)';
+      ctx.globalAlpha = baseAlpha * alpha;
       const x = Math.round(p.x);
       const y = Math.round(p.y);
       ctx.fillRect(x - width, y, width * 2 + 1, 1);
@@ -90,10 +94,12 @@ export function drawAmbientParticles(ctx, particles) {
       }
     } else if (p.type === 'star') {
       const a = 0.3 + ((Math.sin(p.tw) + 1) * 0.5) * 0.65;
-      ctx.fillStyle = `rgba(245,236,220,${a.toFixed(3)})`;
+      ctx.fillStyle = 'rgb(245,236,220)';
+      ctx.globalAlpha = baseAlpha * a;
       ctx.fillRect(Math.round(p.x), Math.round(p.y), 2, 2);
     } else if (p.type === 'meteor') {
-      ctx.strokeStyle = 'rgba(255,241,198,0.55)';
+      ctx.strokeStyle = 'rgb(255,241,198)';
+      ctx.globalAlpha = baseAlpha * 0.55;
       ctx.lineWidth = 1.2;
       ctx.beginPath();
       ctx.moveTo(p.x, p.y);
@@ -101,4 +107,6 @@ export function drawAmbientParticles(ctx, particles) {
       ctx.stroke();
     }
   }
+
+  ctx.globalAlpha = baseAlpha;
 }

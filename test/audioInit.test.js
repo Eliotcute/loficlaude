@@ -119,6 +119,29 @@ test('preloaded audio stays silent until a later playback request', async () => 
   assert.equal(rainPlayer.playCalls, 1);
 });
 
+test('audio initializer can disable YouTube without creating a player', async () => {
+  let youtubeCreated = 0;
+  const rainPlayer = {
+    async init() {},
+    setVolume() {},
+    async play() { this.playCalls = (this.playCalls ?? 0) + 1; }
+  };
+  const audio = createAudioInitializer({
+    enableYouTube: false,
+    createYouTubePlayer: () => {
+      youtubeCreated += 1;
+      return {};
+    },
+    createRainPlayer: () => rainPlayer
+  });
+
+  const players = await audio.initAudio(true);
+
+  assert.equal(youtubeCreated, 0);
+  assert.equal(players.youtubePlayer, undefined);
+  assert.equal(rainPlayer.playCalls, 1);
+});
+
 test('audio initialization settles with rain and exposes a retryable music error when YouTube times out', async () => {
   const loadingStates = [];
   const errors = [];

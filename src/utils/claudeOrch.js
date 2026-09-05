@@ -322,11 +322,13 @@ export function createClaudeOrchestrator(options = {}) {
 
   function markResting() {
     if (!state.loading) {
+      const latestReply = getLastCompletedAssistantText();
       setVisualState('resting', 'idle_timeout');
       sync({
-        bubbleMessage: getLastCompletedAssistantText() || getCompanionStatusCopy('resting'),
+        bubbleMessage: latestReply || getCompanionStatusCopy('resting'),
         bubbleVisible: !state.panelOpen,
-        bubblePassive: true
+        // Keep the latest completed reply visible; only generic resting copy fades.
+        bubblePassive: !latestReply
       });
     }
     return state;
@@ -507,12 +509,22 @@ export function createClaudeOrchestrator(options = {}) {
   }
 
   function handleBridgeError(message) {
+    const rawMessage = `${message ?? ''}`;
+    const userMessage = rawMessage.includes('Unauthorized')
+      ? 'Bridge token 无效，请重新连接'
+      : rawMessage.includes('connection failed')
+        ? 'Bridge 未启动，请先运行 loficlaude bridge'
+        : rawMessage.includes('Claude session unavailable')
+          ? 'Claude 暂时不可用，请稍后重试'
+          : rawMessage.includes('Message too long')
+            ? '消息太长，请缩短后重试'
+            : rawMessage || 'Bridge 连接出现问题';
     markActiveReplyInterrupted();
-    lastError.set(message || 'Bridge error');
+    lastError.set(userMessage);
     toolRunning.set(null);
     streamingText.set('');
     activeAssistantId = null;
-    sync({ loading: false, canReconnect: true, bubbleMessage: message || 'Bridge error' });
+    sync({ loading: false, canReconnect: true, bubbleMessage: userMessage });
     setChatPaused(false);
     setVisualState('error', 'bridge_error');
   }

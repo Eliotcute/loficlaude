@@ -1,5 +1,5 @@
 <script>
-  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy, afterUpdate } from 'svelte';
   import { connectionStatus, toolRunning as bridgeToolRunning } from '../stores/bridgeState.js';
 
   export let sceneName = 'Lofi Night';
@@ -14,7 +14,10 @@
   const dispatch = createEventDispatcher();
 
   let root;
+  let messagesViewport;
   let inputValue = '';
+  let stickToBottom = true;
+  let previousMessageView = '';
 
   $: recentMessages = messages;
   $: bridgeConnected = $connectionStatus === 'connected';
@@ -73,9 +76,49 @@
     dispatch('clear');
   }
 
+  function handleMessagesScroll() {
+    if (!messagesViewport) {
+      return;
+    }
+
+    const distanceFromBottom = messagesViewport.scrollHeight - messagesViewport.scrollTop - messagesViewport.clientHeight;
+    stickToBottom = distanceFromBottom < 48;
+  }
+
+  function scrollMessagesToBottom(force = false) {
+    if (!messagesViewport || (!force && !stickToBottom)) {
+      return;
+    }
+
+    messagesViewport.scrollTop = messagesViewport.scrollHeight;
+  }
+
   onMount(() => {
     window.addEventListener('keydown', handleDocumentKeydown);
     window.addEventListener('pointerdown', handleDocumentPointerDown);
+  });
+
+  afterUpdate(() => {
+    const latest = recentMessages.at(-1);
+    const nextMessageView = [
+      recentMessages.length,
+      latest?.id ?? '',
+      latest?.text?.length ?? 0,
+      activeAssistantId ?? '',
+      loading,
+      $bridgeToolRunning ?? '',
+      lastError
+    ].join('|');
+    const hasNewContent = nextMessageView !== previousMessageView;
+    const shouldFollowNewContent = stickToBottom;
+    previousMessageView = nextMessageView;
+
+    if (hasNewContent && shouldFollowNewContent) {
+      scrollMessagesToBottom(true);
+      return;
+    }
+
+    scrollMessagesToBottom();
   });
 
   onDestroy(() => {
@@ -106,7 +149,7 @@
     </div>
   </header>
 
-  <div class="messages" aria-live="polite">
+  <div bind:this={messagesViewport} class="messages" aria-live="polite" on:scroll={handleMessagesScroll}>
     {#if recentMessages.length === 0}
       <div class="empty">今天想做点什么呢？</div>
     {/if}
@@ -173,8 +216,7 @@
     height: min(560px, calc(100vh - 184px));
     border: 1px solid rgba(212, 165, 116, 0.3);
     border-radius: var(--control-radius);
-    background: rgba(8, 10, 12, 0.72);
-    backdrop-filter: blur(10px);
+    background: rgba(8, 10, 12, 0.94);
     color: #e8e0d8;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;

@@ -7,6 +7,7 @@
   export let genreColor = '#d4a574';
   export let isPlaying = false;
   export let isLoading = false;
+  export let musicStatus = 'disabled';
   export let error = null;
   export let rainSourceStatus = 'idle';
   export let rainType = 'medium';
@@ -139,14 +140,14 @@
   >
     <span class="brand">Claude FM</span>
     <span class="actions">
-      <span class="pause">{isLoading ? '...' : isPlaying ? '❚❚' : '▶'}</span>
+      <span class="pause">{musicStatus === 'loading' ? '...' : isPlaying ? '❚❚' : '▶'}</span>
       <span>🌧{rainVolume}</span>
     </span>
   </button>
 
   {#if expanded}
     <div class="expanded-body" transition:slide={{ duration: 250, easing: (t) => 1 - Math.pow(1 - t, 3) }}>
-      <div class="label">{error ? 'AUDIO NOTICE' : isLoading ? 'LOADING AUDIO' : 'NOW PLAYING'}</div>
+      <div class="label">{error ? 'AUDIO NOTICE' : musicStatus === 'disabled' ? 'LOFI OPTIONAL' : isLoading ? 'LOADING MUSIC' : musicStatus === 'playing' ? 'LOFI PLAYING' : 'LOFI PAUSED'}</div>
       <div class="title-row">
         <span class="genre-dot" style={`background: ${genreColor};`} aria-hidden="true"></span>
         <div class="title" title={error || title}>{error || title}</div>
@@ -155,7 +156,7 @@
       <div class="controls">
         <button type="button" aria-label="Previous track" on:click={() => forward('previous')}>◀</button>
         <button type="button" aria-label={isPlaying ? 'Pause track' : 'Play track'} on:click={() => forward('toggleplay')}>
-          {isLoading ? '...' : isPlaying ? '❚❚' : '▶'}
+          {musicStatus === 'loading' ? '...' : isPlaying ? '❚❚' : '▶'}
         </button>
         <button type="button" aria-label="Next track" on:click={() => forward('next')}>▶</button>
       </div>
@@ -210,8 +211,7 @@
     width: 100%;
     border: 1px solid rgba(212, 165, 116, 0.28);
     border-radius: 10px;
-    background: linear-gradient(180deg, rgba(10, 12, 13, 0.86), rgba(7, 9, 10, 0.8));
-    backdrop-filter: blur(14px);
+    background: linear-gradient(180deg, rgba(10, 12, 13, 0.96), rgba(7, 9, 10, 0.94));
     box-shadow: 0 16px 44px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(232, 224, 216, 0.04);
     color: #e8e0d8;
     overflow: hidden;
