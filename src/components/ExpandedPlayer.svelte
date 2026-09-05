@@ -139,7 +139,7 @@
     on:touchstart={handleTouchStart}
     on:touchend={handleTouchEnd}
   >
-      <span class="brand">{musicProvider === 'netease-local' ? 'NETEASE LOCAL' : 'Claude FM'}</span>
+      <span class="brand">{musicProvider === 'netease-local' ? '网易云 · 本机' : 'YouTube · Claude FM'}</span>
     <span class="actions">
       <span class="pause">{musicStatus === 'loading' ? '...' : isPlaying ? '❚❚' : '▶'}</span>
       <span>🌧{rainVolume}</span>
@@ -148,10 +148,11 @@
 
   {#if expanded}
     <div class="expanded-body" transition:slide={{ duration: 250, easing: (t) => 1 - Math.pow(1 - t, 3) }}>
-      <div class="label">{error ? 'AUDIO NOTICE' : musicStatus === 'disabled' ? 'LOFI OPTIONAL' : isLoading ? 'LOADING MUSIC' : musicStatus === 'playing' ? 'LOFI PLAYING' : 'LOFI PAUSED'}</div>
+      <div class="section-heading">音乐</div>
+      <div class="label">{error ? '音频提示' : musicStatus === 'disabled' ? '音乐未启动' : isLoading ? '正在加载音乐' : musicStatus === 'playing' ? '正在播放' : '已暂停'}</div>
       <div class="title-row">
         <span class="genre-dot" style={`background: ${genreColor};`} aria-hidden="true"></span>
-        <div class="title" title={error || title}>{error || (musicProvider === 'netease-local' ? 'Local mpv player' : title)}</div>
+        <div class="title" title={error || title}>{error || (musicProvider === 'netease-local' ? '本机 mpv 播放器' : title)}</div>
       </div>
 
       <div class="controls">
@@ -163,9 +164,9 @@
       </div>
 
       <div class="section-row">
-        <span class="section-title">RAIN</span>
+        <span class="section-title">雨声</span>
         <span class="source-badge" class:remote={rainSourceStatus === 'rainy-mood'} class:fallback={rainSourceStatus === 'fallback'}>
-          {rainSourceStatus === 'rainy-mood' ? 'RAINY MOOD' : rainSourceStatus === 'fallback' ? 'LOCAL FALLBACK' : 'NOT STARTED'}
+          {rainSourceStatus === 'rainy-mood' ? 'RAINY MOOD' : rainSourceStatus === 'fallback' ? '本机备用' : '未启动'}
         </span>
         <div class="chip-row">
           {#each RAIN_TYPES as type}
@@ -180,7 +181,7 @@
       </div>
 
       <div class="section-row">
-        <span class="section-title">TIMER</span>
+        <span class="section-title">专注</span>
         <div class="chip-row">
           {#each TIMER_OPTIONS as minutes}
             <button
@@ -278,6 +279,13 @@
     font-size: 11px;
     letter-spacing: 0.08em;
     color: rgba(232, 224, 216, 0.75);
+  }
+
+  .section-heading {
+    color: #d4a574;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
 
   .title {

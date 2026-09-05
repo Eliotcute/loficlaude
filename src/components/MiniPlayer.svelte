@@ -87,14 +87,15 @@
     <button
       type="button"
       class="custom-toggle"
-      aria-label="Add custom YouTube stream"
+      aria-label="Add YouTube station"
+      title="Add YouTube station"
       on:click={() => {
         showCustomInput = !showCustomInput;
         customError = '';
         onMarkActivity();
       }}
     >
-      +
+      <span aria-hidden="true">+</span>
     </button>
 
     {#if showCustomInput}
@@ -104,7 +105,7 @@
       >
         <input
           type="text"
-          placeholder="Paste YouTube URL"
+          placeholder="Add a YouTube station"
           bind:value={customUrl}
           on:input={() => {
             if (customError) {
@@ -112,9 +113,9 @@
             }
             onMarkActivity();
           }}
-          aria-label="Custom YouTube URL"
+          aria-label="YouTube station URL"
         />
-        <button type="submit">Add</button>
+        <button type="submit">Add station</button>
       </form>
     {/if}
   </div>

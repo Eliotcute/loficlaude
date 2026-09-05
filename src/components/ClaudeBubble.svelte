@@ -239,9 +239,17 @@
     width: 32px;
     min-height: 32px;
     height: 32px;
+    position: relative;
     display: grid;
     place-items: center;
     padding: 0;
+  }
+
+  .icon-btn::before,
+  .close-btn::before {
+    content: '';
+    position: absolute;
+    inset: -6px;
   }
 
   .icon-btn {
