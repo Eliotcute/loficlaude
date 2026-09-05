@@ -321,7 +321,7 @@
     border-radius: 7px;
     background: rgba(12, 15, 18, 0.74);
     color: inherit;
-    min-height: 32px;
+    min-height: 36px;
     font-family: inherit;
     cursor: pointer;
     text-transform: lowercase;
@@ -357,7 +357,7 @@
 
   .source-badge {
     border: 1px solid rgba(232, 224, 216, 0.2);
-    border-radius: 8px;
+    border-radius: 7px;
     padding: 4px 6px;
     color: rgba(232, 224, 216, 0.55);
     font-size: 9px;
@@ -407,6 +407,11 @@
 
     .chip-row {
       flex-wrap: wrap;
+    }
+
+    .controls button,
+    .chip-row button {
+      min-height: 40px;
     }
   }
 </style>

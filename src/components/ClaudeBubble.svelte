@@ -133,9 +133,9 @@
     </div>
     <div class="bubble-actions">
       {#if messages.length > 0}
-        <button type="button" class="icon-btn" aria-label="Open Claude history" on:click={handleOpenHistory}>≡</button>
+        <button type="button" class="icon-btn" aria-label="Open Claude history" title="Open history" on:click={handleOpenHistory}>≡</button>
       {/if}
-      <button type="button" class="close-btn" aria-label="Close Claude bubble" on:click={close}>×</button>
+      <button type="button" class="close-btn" aria-label="Close Claude bubble" title="Close" on:click={close}>×</button>
     </div>
   </div>
 
@@ -315,7 +315,7 @@
   .send-btn:focus-visible,
   .close-btn:focus-visible,
   .icon-btn:focus-visible {
-    outline: 1px solid rgba(17, 17, 17, 0.38);
+    outline: 1px solid rgba(212, 165, 116, 0.9);
     outline-offset: 2px;
   }
 
@@ -326,7 +326,15 @@
     color: #e8e0d8;
     width: 40px;
     height: 40px;
+    min-width: 40px;
+    position: relative;
     cursor: pointer;
+  }
+
+  .send-btn::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
   }
 
   .send-btn:disabled {
