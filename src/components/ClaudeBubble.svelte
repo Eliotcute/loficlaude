@@ -397,7 +397,6 @@
 
   @media (max-height: 760px) {
     .claude-bubble {
-      top: 14px !important;
       max-height: calc(100vh - 28px);
       overflow: hidden;
     }

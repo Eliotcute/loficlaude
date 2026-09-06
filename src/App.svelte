@@ -334,6 +334,7 @@
   }
 
   async function startExperience() {
+    if (get(connectionStatus) !== 'connected') player.musicProvider.set('youtube');
     const wasStarted = get(hasStarted);
     hasStarted.set(true);
     uiMode.set('default');
@@ -362,6 +363,12 @@
   }
 
   async function togglePlayback() {
+    if (get(connectionStatus) !== 'connected' && $musicProvider !== 'youtube') {
+      player.musicProvider.set('youtube');
+      player.isPlaying.set(false);
+      player.musicStatus.set('idle');
+      player.currentTrackTitle.set(normalizeTrackTitle($currentTrackIndex, PLAYLIST));
+    }
     if (!$hasStarted) {
       await startExperience();
       if (get(connectionStatus) !== 'connected') return;

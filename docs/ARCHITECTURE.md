@@ -52,6 +52,7 @@ flowchart TB
 Header、ScenePopover、持久化和轮换顺序均从目录读取；`appPersistence.js` 保留原有导出以兼容调用方。
 `ambientParticles.js` 按场景声明创建效果，不再另外维护场景 key 白名单。未知 key（包括继承属性名）统一回退到 `lofiNight`。
 本轮保持现有对象布局与 Canvas 路径，不增加依赖或自动更改音频来源。
+静态场景仅在初始化、调整尺寸和换景渐变时绘制；稳定状态不再逐帧复制背景。粒子继续独立以最高约 30fps 更新，隐藏页面/降低动态模式遵循原有暂停策略。
 
 ## 状态所有权
 

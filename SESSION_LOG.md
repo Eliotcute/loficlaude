@@ -1,5 +1,7 @@
 # SESSION_LOG.md
 
+> 历史记录，仅供追溯。这里的状态、测试数字和方案不作为当前开发依据；最新目标、Phase 进展、验证与待办以 HANDOFF.md / TODO.md 为准。原始内容保留，不删除。
+
 ## 2026-05-21 — v0.9 Chat UX + Music + Forms
 
 - M1: 气泡→面板渐进对话、Claude 走动暂停、打字机 CSS、断连保护

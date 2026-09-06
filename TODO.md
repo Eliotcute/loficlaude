@@ -16,7 +16,16 @@
 - [x] Verify 5 music choices and rain particles at 1440x900, 768x1024, 375x812 in isolated Chromium; no page errors or horizontal overflow.
 
 ## P2: Continuity And Handoff
-- [ ] Persist the user's last selected playlist locally without credentials.
-- [ ] Verify scene/companion behavior without expanding renderer dependencies.
-- [ ] Mark historical logs as non-authoritative; keep current status in HANDOFF/TODO.
-- [ ] Final test/build/verify:build/diff checks and phase completion record.
+- [x] Persist the last confirmed playlist metadata locally; restore only on explicit click, never autoplay on reload.
+- [x] Verify 11 scenes, 13 form options, real form pixel change, patrol and drag/fall; stable background does not repaint every frame.
+- [x] Protect local music state from late YouTube callbacks and new chat from stale ritual timers.
+- [x] Mark historical logs as non-authoritative; keep current status in HANDOFF/TODO.
+- [x] Final validation: 152 tests pass, 0 fail/skip; build, verify:build, diff checks and sequential browser QA pass.
+
+## User Acceptance (Not Claimed Complete)
+- [ ] Real ncm-cli listening, search and playback controls; real Claude session continuity.
+- [ ] Safari, Firefox, physical devices and long-session thermal/power behavior.
+- [ ] Audio usage rights before any public release.
+
+## Later Roadmap (Outside This Goal)
+- Weekly focus statistics and semantic scene mapping.

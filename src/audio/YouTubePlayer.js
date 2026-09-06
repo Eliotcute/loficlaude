@@ -1,4 +1,5 @@
 import { player } from '../stores/appState.js';
+import { get } from 'svelte/store';
 
 const CUSTOM_TRACKS_STORAGE_KEY = 'loficlaude-custom-tracks';
 
@@ -383,7 +384,7 @@ export class YouTubePlayer {
   }
 
   handleError(event) {
-    if (this.failedAll) {
+    if (this.failedAll || get(player.musicProvider) !== 'youtube') {
       return;
     }
 
@@ -394,6 +395,7 @@ export class YouTubePlayer {
     if (this.skipCount < PLAYLIST.length) {
       player.error.set(`YouTube playback error (${event?.data ?? 'unknown'}), skipping...`);
       window.setTimeout(() => {
+        if (get(player.musicProvider) !== 'youtube') return;
         this.loadTrack(this.currentIndex + 1, { fromFailover: true });
         if (!this.ready) {
           this.init(this.currentIndex);
@@ -408,7 +410,7 @@ export class YouTubePlayer {
   }
 
   handleStateChange(event) {
-    if (!window.YT?.PlayerState) {
+    if (get(player.musicProvider) !== 'youtube' || !window.YT?.PlayerState) {
       return;
     }
 

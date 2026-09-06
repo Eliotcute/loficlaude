@@ -6,6 +6,26 @@ import { get } from 'svelte/store';
 import { isolateYouTubeFrame, PLAYLIST, YouTubePlayer } from '../src/audio/YouTubePlayer.js';
 import { player as playerStore } from '../src/stores/appState.js';
 
+test('late YouTube events cannot overwrite the local provider state', () => {
+  const originalWindow = globalThis.window;
+  globalThis.window = { YT: { PlayerState: { PAUSED: 2, PLAYING: 1, BUFFERING: 3, ENDED: 0 } }, setTimeout() { throw new Error('must not retry inactive source'); } };
+  playerStore.musicProvider.set('netease-local');
+  playerStore.isPlaying.set(true);
+  playerStore.error.set(null);
+  try {
+    const youtube = new YouTubePlayer();
+    youtube.handleStateChange({ data: 2 });
+    youtube.handleStateChange({ data: 0 });
+    youtube.handleError({ data: 150 });
+    assert.equal(get(playerStore.isPlaying), true);
+    assert.equal(get(playerStore.error), null);
+  } finally {
+    globalThis.window = originalWindow;
+    playerStore.musicProvider.set('youtube');
+    playerStore.isPlaying.set(false);
+  }
+});
+
 test('YouTube iframe accessibility isolation unfocuses the frame without hiding it', () => {
   const attributes = new Map();
   const frame = {

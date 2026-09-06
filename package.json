@@ -13,6 +13,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "verify:build": "node scripts/verifyProductionBuild.js",
+    "qa:browser": "node scripts/qaSceneBrowser.mjs && node scripts/qaMusicBrowser.mjs",
     "ci": "npm test && npm run build && npm run verify:build && git diff --check"
   },
   "devDependencies": {

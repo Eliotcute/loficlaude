@@ -29,6 +29,7 @@
   let resizeFrame;
   let resizeObserver;
   let lastPaintTimestamp = 0;
+  let staticNeedsPaint = true;
   const targetFrameMs = 1000 / 30;
   const transitionDuration = 1000;
 
@@ -49,6 +50,7 @@
     previousStaticCanvas = null;
     previousParticles = [];
     transitionStart = 0;
+    staticNeedsPaint = true;
   }
 
   function resize() {
@@ -82,6 +84,7 @@
       rebuildStatic();
     }
     ctx.drawImage(staticCanvas, 0, 0);
+    staticNeedsPaint = false;
     particleCtx.clearRect(0, 0, width, height);
     drawAmbientParticles(particleCtx, particles);
   }
@@ -185,8 +188,11 @@
       }
 
       updateAmbientParticles(particles, ambientFactor, width, height);
-      ctx.globalAlpha = progress;
-      ctx.drawImage(staticCanvas, 0, 0);
+      if (hasTransition || staticNeedsPaint) {
+        ctx.globalAlpha = progress;
+        ctx.drawImage(staticCanvas, 0, 0);
+        staticNeedsPaint = false;
+      }
       particleCtx.globalAlpha = progress;
       drawAmbientParticles(particleCtx, particles);
       ctx.globalAlpha = 1;

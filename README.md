@@ -91,6 +91,8 @@ The bubble keeps music feedback separate from Claude replies. Confirmed playlist
 
 Current execution evidence and remaining checks live in `HANDOFF.md` and `TODO.md`. Older audit text and session logs are historical, not an active backlog. Local validation is `npm test`, `npm run build`, and `npm run verify:build`; remote CI is outside this product's current scope.
 
+`npm run qa:browser` runs the scene and music UI checks sequentially in isolated Chromium browsers, saving screenshots in ignored `output/playwright/`. Start the local room first. This optional check uses an existing Playwright installation: set `PLAYWRIGHT_MODULE` to its module entry when it is supplied by your tooling, and `QA_BASE_URL` if the room uses another port. No Playwright dependency is added to the product. The music check uses a test Bridge and never invokes real Claude or ncm-cli; it is not a substitute for real listening and session acceptance.
+
 ## Troubleshooting
 
 - Header shows `bridge disconnected`:

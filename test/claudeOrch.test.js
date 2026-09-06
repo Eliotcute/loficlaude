@@ -289,6 +289,28 @@ test('Claude click keeps transient status copy ahead of history', async () => {
   }
 });
 
+test('sending a message cancels an older ritual timer that would close the reply', async () => {
+  resetBridgeState();
+  const originalWindow = globalThis.window;
+  const timers = new Map();
+  let timerId = 0;
+  globalThis.window = {
+    localStorage: { getItem: () => null, setItem() {} },
+    setTimeout(callback) { timers.set(++timerId, callback); return timerId; },
+    clearTimeout(id) { timers.delete(id); }
+  };
+  try {
+    const orchestrator = createClaudeOrchestrator();
+    orchestrator.showTransientBubble('Starting room', 4200);
+    const ritualTimer = timerId;
+    await orchestrator.sendMessage('hello');
+    assert.equal(timers.has(ritualTimer), false);
+    assert.equal(orchestrator.getState().bubbleVisible, true);
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});
+
 test('Claude history restore drops entries older than seven days', () => {
   resetBridgeState();
   const originalWindow = globalThis.window;

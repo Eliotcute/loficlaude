@@ -631,6 +631,7 @@ export function createClaudeOrchestrator(options = {}) {
       return state;
     }
 
+    clearTransientBubbleTimer();
     pushMessage('user', clean, 'browser');
 
     clearTypingVisualTimer();
