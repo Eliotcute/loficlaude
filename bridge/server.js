@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const { WebSocketServer } = require('ws');
 const { createClaudeSession } = require('./claude');
 const { createMusicController } = require('./musicController');
+const { parseMusicIntent } = require('./musicIntent');
 const { CLIENT_TYPES, SERVER_TYPES, STATUS, safeParse, serialize } = require('./protocol');
 
 const DEFAULT_MAX_PAYLOAD_BYTES = 64 * 1024;
@@ -159,6 +160,13 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
     }
 
     try {
+      const intent = parseMusicIntent(clean);
+      if (intent && intent.action !== 'play_playlist') {
+        broadcast({ type: 'music_intent', status: 'started', action: intent.action });
+        music.command(intent.action).then((ok) => {
+          broadcast({ type: 'music_intent', status: ok ? 'completed' : 'failed', action: intent.action });
+        });
+      }
       return ensureClaudeSession().sendUserMessage(clean, source) !== false;
     } catch (error) {
       console.error(`Claude session unavailable: ${error.message}`);

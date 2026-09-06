@@ -1,6 +1,6 @@
 const { execFile } = require('node:child_process');
 
-const COMMANDS = new Set(['play', 'pause', 'resume', 'stop', 'next', 'prev', 'state', 'volume']);
+const COMMANDS = new Set(['play', 'pause', 'resume', 'stop', 'next', 'prev', 'state', 'volume', 'search']);
 
 function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', onState = () => {}, onError = () => {} } = {}) {
   let state = { provider: 'netease-local', status: 'unavailable', title: '', volume: null };
@@ -36,12 +36,13 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
       onError('Invalid music volume');
       return Promise.resolve(false);
     }
-    if (action !== 'volume' && args.length > 0) {
+    if (!['volume', 'search'].includes(action) && args.length > 0) {
       onError('Music command arguments are not allowed');
       return Promise.resolve(false);
     }
     return new Promise((resolve) => {
-      execFileImpl(command, [action, ...args, '--output', 'json'], { timeout: 8000, maxBuffer: 128 * 1024 }, (error, stdout = '') => {
+      const cliArgs = action === 'search' ? ['playlist', '--keyword', args[0] ?? 'lofi'] : [action, ...args];
+      execFileImpl(command, [...cliArgs, '--output', 'json'], { timeout: 8000, maxBuffer: 128 * 1024 }, (error, stdout = '') => {
         if (error) {
           const message = error.code === 'ENOENT' ? '网易云音乐 CLI 未安装' : '网易云音乐暂时不可用';
           publish({ status: 'error' });
