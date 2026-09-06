@@ -341,6 +341,12 @@ export function createClaudeOrchestrator(options = {}) {
     return state;
   }
 
+  function markMusicChange() {
+    if (state.loading || ['typing', 'listening'].includes(state.companionState)) return state;
+    setVisualState('done', 'music_change');
+    return state;
+  }
+
   function pushMessage(role, text, source = role === 'user' ? 'browser' : 'assistant') {
     messageId += 1;
     const entry = {
@@ -768,6 +774,7 @@ export function createClaudeOrchestrator(options = {}) {
     markUserTyping,
     markListening,
     markResting,
+    markMusicChange,
     markActive
   };
 }

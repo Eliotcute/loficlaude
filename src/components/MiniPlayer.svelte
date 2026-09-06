@@ -65,10 +65,12 @@
     <p class="player-status error" role="status">{$playerError}</p>
   {:else if $playerIsLoading && musicStatus !== 'disabled'}
     <p class="player-status" role="status">loading music...</p>
+  {:else if $rainSourceStatus === 'local-recording'}
+    <p class="player-status" role="status">Local rain recording</p>
   {:else if $rainSourceStatus === 'rainy-mood'}
-    <p class="player-status" role="status">Rainy Mood remote rain active</p>
+    <p class="player-status" role="status">Rainy Mood rain source</p>
   {:else if $rainSourceStatus === 'fallback'}
-    <p class="player-status" role="status">Local fallback rain active; Rainy Mood unavailable</p>
+    <p class="player-status" role="status">Synthesized rain fallback</p>
   {/if}
 </div>
 

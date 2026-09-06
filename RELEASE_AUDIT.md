@@ -1,6 +1,18 @@
 # LoFiClaude V1.1 只读发布审计
 
-> 状态更新：本审计中的部分历史问题已被后续代码修复或重新决策。当前 V1.1 正式发布基线为：用户手势后启用 YouTube lofi，Rainy Mood/本地 fallback 独立运行；音乐与雨声状态独立展示；Clawd 形态加载包含生产 fallback。下方历史记录仍保留作为审计证据，不能直接视为当前阻塞清单。
+> 历史审计：下方原始观察、测试数字、行号与评分只对应审计当时的版本，保留用于追溯，不作为当前阻塞清单。当前执行状态以 HANDOFF.md / TODO.md 为准。
+
+## 当前产品决策（2026-09-06）
+
+- 本机氛围播放器是核心，Clawd 陪伴和 Claude 文本会话是增强层。
+- 连接 Bridge 时控制本机 ncm-cli；未连接时使用手势触发的 YouTube。CLI 错误不能伪装成播放成功。
+- 默认雨声为同源真实录音 `/0.m4a`；Rainy Mood 仅为可选远端源；合成 fallback 只用于音源失败。音频授权仍需公开发布前确认。
+- Claude 固定 `--permission-mode dontAsk --tools ""`。音乐由 Bridge 规则识别并执行固定白名单，不是 Claude 任意命令执行。
+- Bridge token 启动打印一次已确认，自动配对只在本机进行；不得写入 URL、聊天历史或截图。
+- 不使用远端 CI，本机 Git 与本地验证为当前工作流。Safari、Firefox、真机和真实听音由用户验收。
+- 本轮各 Phase 的验证结果记录在 HANDOFF.md，未实测项目不能标记通过。
+
+## 原始审计记录（历史）
 
 - 日期：2026-08-18
 - 仓库：`/Users/lieliot/Documents/eliot-codex/loficlaude`

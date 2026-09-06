@@ -166,7 +166,7 @@
       <div class="section-row">
         <span class="section-title">雨声</span>
         <span class="source-badge" class:remote={rainSourceStatus === 'rainy-mood'} class:fallback={rainSourceStatus === 'fallback'}>
-          {rainSourceStatus === 'rainy-mood' ? 'RAINY MOOD' : rainSourceStatus === 'fallback' ? '本机备用' : rainSourceStatus === 'stopped' ? '已停止' : '未启动'}
+          {rainSourceStatus === 'local-recording' ? '本机录音' : rainSourceStatus === 'rainy-mood' ? 'RAINY MOOD' : rainSourceStatus === 'fallback' ? '合成备用' : rainSourceStatus === 'stopped' ? '已停止' : '未启动'}
         </span>
         <div class="chip-row">
           {#each RAIN_TYPES as type}

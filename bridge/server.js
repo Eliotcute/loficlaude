@@ -297,9 +297,16 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
       if (data.type === CLIENT_TYPES.MUSIC_COMMAND) {
         const action = typeof data.command === 'string' ? data.command : '';
         const args = Array.isArray(data.args) ? data.args.filter((value) => typeof value === 'string').slice(0, 2) : [];
-        Promise.resolve().then(() => music.command(action, args)).then((accepted) => {
+        send(socket, { type: 'music_intent', status: 'started', action });
+        Promise.resolve().then(() => action === 'play_playlist'
+          ? music.playPlaylistById(data.playlist)
+          : music.command(action, args)).then((accepted) => {
+          send(socket, { type: 'music_intent', status: accepted ? 'completed' : 'failed', action });
           if (!accepted) send(socket, { type: 'music_error', message: 'Music command was not accepted' });
-        }).catch(() => send(socket, { type: 'music_error', message: 'Music command was not accepted' }));
+        }).catch(() => {
+          send(socket, { type: 'music_intent', status: 'failed', action });
+          send(socket, { type: 'music_error', message: 'Music command was not accepted' });
+        });
         return;
       }
 

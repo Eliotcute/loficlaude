@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { SCENES, getSceneDefinition } from '../src/canvas/asciiScenes.js';
-import { SCENE_NAME_MAP, SCENE_ORDER, getSceneName } from '../src/utils/appPersistence.js';
+import { SCENES, SCENE_CATALOG, getSceneDefinition } from '../src/canvas/asciiScenes.js';
+import { SCENE_NAME_MAP, SCENE_ORDER, getSceneName, parsePersistedSnapshot } from '../src/utils/appPersistence.js';
 
 test('Claude FM reference scenes are available as original procedural layouts', () => {
   assert.deepEqual(SCENE_ORDER, [
@@ -29,4 +29,19 @@ test('Claude FM reference scenes are available as original procedural layouts', 
 
 test('unknown scenes fall back to the original night scene', () => {
   assert.equal(getSceneDefinition('unknown').objects, SCENES.lofiNight.objects);
+  assert.equal(getSceneDefinition('__proto__'), SCENES.lofiNight);
+  assert.equal(getSceneName('constructor'), 'Lofi Night');
+});
+
+test('catalog keeps picker, header, persistence and renderer metadata consistent', () => {
+  assert.deepEqual(SCENE_CATALOG.map(({ key }) => key), Object.keys(SCENES));
+  const playlist = [{ name: 'test station' }];
+  for (const item of SCENE_CATALOG) {
+    assert.ok(item.label.length > 0);
+    assert.ok(item.icon.length > 0);
+    assert.equal(item.icon, getSceneDefinition(item.key).icon);
+    assert.equal(item.name, getSceneName(item.key));
+    const restored = parsePersistedSnapshot(JSON.stringify({ currentScene: item.key }), playlist);
+    assert.equal(restored.currentScene, item.key);
+  }
 });

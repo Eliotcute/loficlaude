@@ -3,15 +3,7 @@
   import TimerPopover from './TimerPopover.svelte';
   import ConnectionStatus from './ConnectionStatus.svelte';
   import { focus, scene, timer, timerLabel, ui, uiChromeOpacity } from '../stores/appState.js';
-
-  const SCENES = [
-    { key: 'lofiNight', icon: '🌙' },
-    { key: 'softRain', icon: '🌧' },
-    { key: 'starDrift', icon: '⭐' },
-    { key: 'fmStudio', icon: '📻' },
-    { key: 'recordRoom', icon: '💿' },
-    { key: 'focusConsole', icon: '⌘' }
-  ];
+  import { getSceneDefinition } from '../canvas/asciiScenes.js';
   const currentScene = scene.current;
   const sceneLocked = scene.locked;
   const focusTodayMinutes = focus.todayMinutes;
@@ -21,7 +13,7 @@
   const timerPopoverOpen = ui.timerPopoverOpen;
   const bridgeSettingsOpen = ui.bridgeSettingsOpen;
 
-  $: sceneIcon = SCENES.find((item) => item.key === $currentScene)?.icon ?? '🌙';
+  $: sceneIcon = getSceneDefinition($currentScene).icon;
 
   function toggleScenePopover() {
     ui.scenePopoverOpen.update((open) => {

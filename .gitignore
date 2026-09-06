@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 .gstack/
 .playwright-cli/
+output/playwright/
 
 # Environment
 .env

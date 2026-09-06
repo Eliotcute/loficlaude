@@ -13,6 +13,26 @@ const expressionWinkIndex = FORMS.findIndex((form) => form.id === 'expression_wi
 const expressionSleepIndex = FORMS.findIndex((form) => form.id === 'expression_sleep');
 const idleBreatheIndex = FORMS.findIndex((form) => form.id === 'idle_breathe');
 
+test('music companion feedback preserves completed replies and never interrupts active replies', async () => {
+  resetBridgeState();
+  const orchestrator = createClaudeOrchestrator();
+  await orchestrator.sendMessage('hello');
+  const reply = orchestrator.getState().bubbleMessage;
+  orchestrator.markMusicChange();
+  assert.equal(orchestrator.getState().bubbleMessage, reply);
+  orchestrator.markResting();
+  assert.equal(orchestrator.getState().bubbleMessage, reply);
+  const client = { sendMessage: () => true };
+  orchestrator.attachBridge(client);
+  client.onStatus('connected');
+  await orchestrator.sendMessage('continue my conversation');
+  const pending = orchestrator.getState();
+  orchestrator.markMusicChange();
+  assert.equal(orchestrator.getState().companionState, pending.companionState);
+  assert.equal(orchestrator.getState().loading, true);
+  client.onStatus('done');
+});
+
 test('Claude orchestrator uses an existing form while talking and streaming', () => {
   resetBridgeState();
   const bridgeClient = {

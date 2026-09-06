@@ -1,10 +1,12 @@
 import { seedRandom } from './asciiRenderer.js';
+import { getSceneDefinition } from './asciiScenes.js';
 
 export function createAmbientParticles(sceneKey, width, height) {
   const rng = seedRandom(`particles-${sceneKey}`);
   const particles = [];
+  const effects = getSceneDefinition(sceneKey).particles;
 
-  if (['softRain', 'rainWindow', 'nightStreet'].includes(sceneKey)) {
+  if (effects.includes('rain')) {
     for (let i = 0; i < 180; i += 1) {
       particles.push({
         type: 'rain',
@@ -15,7 +17,7 @@ export function createAmbientParticles(sceneKey, width, height) {
         phase: rng() * Math.PI * 2
       });
     }
-    for (let i = 0; i < 24; i += 1) {
+    for (let i = 0; i < (effects.includes('waterRipples') ? 24 : 0); i += 1) {
       particles.push({
         type: 'ripple',
         x: rng() * width,
@@ -24,11 +26,12 @@ export function createAmbientParticles(sceneKey, width, height) {
         duration: 1.4 + rng() * 0.8
       });
     }
-  } else {
+  }
+  if (effects.includes('stars')) {
     for (let i = 0; i < 80; i += 1) {
       particles.push({ type: 'star', x: rng() * width, y: rng() * height * 0.8, tw: rng() * Math.PI * 2, tws: 1 + rng() * 3 });
     }
-    if (sceneKey === 'starDrift') {
+    if (effects.includes('meteors')) {
       for (let i = 0; i < 5; i += 1) {
         particles.push({ type: 'meteor', x: rng() * width, y: rng() * height * 0.4, vx: 180 + rng() * 120, vy: 85 + rng() * 65 });
       }

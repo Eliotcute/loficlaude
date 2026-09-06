@@ -105,7 +105,7 @@ export class RainPlayer {
       });
       this.loadRainyMoodSources();
       this.setVolume(this.volume);
-      this.onStatus('rainy-mood');
+      this.onStatus(this.sources.every(({ src }) => src.startsWith('/')) ? 'local-recording' : 'rainy-mood');
     } else if (!this.audio) {
       this.startFallback(false);
     }

@@ -36,6 +36,7 @@ export function createAudioInitializer(options = {}) {
     createYouTubePlayer = (playerOptions) => new YouTubePlayer(playerOptions),
     createRainPlayer = (playerOptions) => new RainPlayer(playerOptions),
     enableYouTube = true,
+    shouldUseYouTube = () => true,
     youtubeInitializationTimeoutMs = DEFAULT_YOUTUBE_INITIALIZATION_TIMEOUT_MS
   } = options;
   const youtubeTimeoutMs =
@@ -60,11 +61,12 @@ export function createAudioInitializer(options = {}) {
   };
 
   function initAudio(autoplay = false) {
+    const useYouTube = enableYouTube && shouldUseYouTube();
     autoplayRequested ||= autoplay;
 
-    if (audioReady && youtubeReady && rainReady) {
-      if (autoplay && youtubePlayer) {
-        youtubePlayer.play();
+    if (audioReady && (!useYouTube || youtubeReady) && rainReady) {
+      if (autoplay) {
+        if (useYouTube) youtubePlayer?.play();
         rainPlayer?.play();
       }
       return Promise.resolve({ youtubePlayer, rainPlayer });
@@ -76,10 +78,10 @@ export function createAudioInitializer(options = {}) {
 
     const generation = ++initializationGeneration;
     setLoading(true);
-    setMusicStatus(enableYouTube ? 'loading' : 'disabled');
+    if (useYouTube || !enableYouTube) setMusicStatus(useYouTube ? 'loading' : 'disabled');
 
     initializationPromise = (async () => {
-      if (enableYouTube && !youtubePlayer) {
+      if (useYouTube && !youtubePlayer) {
         youtubePlayer = createYouTubePlayer({ mountId });
       }
       if (!rainPlayer) {
@@ -100,7 +102,7 @@ export function createAudioInitializer(options = {}) {
         }
       })();
 
-      const initializeYouTube = enableYouTube
+      const initializeYouTube = useYouTube
         ? (async () => {
             try {
               await withTimeout(
@@ -110,11 +112,13 @@ export function createAudioInitializer(options = {}) {
               );
               youtubePlayer.setVolume(60);
               youtubeReady = true;
-              setMusicStatus('paused');
+              if (shouldUseYouTube()) setMusicStatus('paused');
             } catch (error) {
               youtubeReady = false;
-              setMusicStatus('error');
-              onError(`Music unavailable: ${error?.message ?? 'Unknown error.'} Retry from player.`);
+              if (shouldUseYouTube()) {
+                setMusicStatus('error');
+                onError(`Music unavailable: ${error?.message ?? 'Unknown error.'} Retry from player.`);
+              }
             }
           })()
         : Promise.resolve();
@@ -131,7 +135,7 @@ export function createAudioInitializer(options = {}) {
         }
 
         if (autoplayRequested) {
-          if (youtubeReady && youtubePlayer) {
+          if (useYouTube && shouldUseYouTube() && youtubeReady && youtubePlayer) {
             youtubePlayer.play();
             setMusicStatus('playing');
           }

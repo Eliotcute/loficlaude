@@ -2,7 +2,7 @@
 
 版本号：V1.1.0
 
-状态：实现完成，YouTube lofi 默认启用，雨声与音乐状态独立
+状态：V1.1 产品契约；当前 P0/P1/P2 执行与验收状态以根目录 HANDOFF.md / TODO.md 为准，不以历史完成声明代替验收。
 
 | 版本 | 时间 | 修订人 | 备注 |
 |------|------|--------|------|
@@ -10,6 +10,8 @@
 | V1.1.0 | 2026/07/27 | Codex | 同步实现状态，确认本地雨声、SessionStorage token 与 7 天历史策略 |
 
 当前发布决策：LoFiClaude 是氛围感 lofi 播放器，Claw 陪伴和 Claude 连续对话是增强层。V1.1 在用户手势后启用 YouTube lofi；连接本机 Bridge 且配置 ncm-cli 时，播放器优先控制本机网易云/mpv。默认雨声为项目内 `public/0.m4a`，Rainy Mood 为可选远端来源；任一音乐 provider 失败都不影响雨声，音乐状态必须与雨声状态独立展示。
+
+本轮音乐契约：Bridge 保守规则识别浏览器音乐请求，Claude 保持文本会话（`--permission-mode dontAsk --tools ""`）；终端输入只续接文本，不复用浏览器歌单候选。候选为连接私有，重连后重新搜索。气泡独立展示 5 个以内候选及操作状态，不覆盖回复。确认播放后仅将歌单 ID/名称保存在本机 LocalStorage；刷新不自动播放，点击最近歌单才恢复。场景目录统一在 `src/canvas/asciiScenes.js`。不使用远端 CI；真实听音、Safari/Firefox/真机由用户验收。
 
 ## 一、概述（为什么做）
 
@@ -154,7 +156,7 @@ flowchart LR
     UI --> LS[LocalStorage 偏好/专注/历史]
     UI --> SS[SessionStorage Bridge token]
     UI --> YT[YouTube iframe 或本机音乐状态]
-    UI --> RM[Rainy Mood 或本地 fallback]
+    UI --> RM[本机真实录音 /0.m4a 或可选 Rainy Mood]
     UI --> WS[本机 Bridge]
     WS --> CLI[Claude CLI]
     WS --> NCM[ncm-cli / mpv]
@@ -295,7 +297,7 @@ flowchart TD
 | music_status | Enum | 是 | idle/loading/playing/paused/error | playing |
 | station_index | Integer | 是 | 当前频道索引 | 2 |
 | station_fail_count | Integer | 是 | 当前 failover 次数 | 1 |
-| rain_source | Enum | 是 | remote/fallback/off | remote |
+| rain_source | Enum | 是 | 音源状态；默认 /0.m4a，加载失败使用 fallback | ready |
 | rain_volume | Integer | 是 | 0-100 | 55 |
 | rain_intensity | Enum | 是 | light/medium/heavy | medium |
 
@@ -462,7 +464,7 @@ Claw 使用独立状态机表达用户输入、Claude 工作和空闲陪伴，�
 | Token 展示 | 不进入 URL、浏览器 console、错误文案、埋点、分享图和测试快照；Bridge 启动时仅在本机终端 stdout 显示一次，供本机用户手动复制到前端设置 |
 | 对话隐私 | 历史只保存在本地，不发送到分析服务 |
 | 历史生命周期 | **[假设]** 最多 50 条、默认 7 天，提供清空入口；需产品确认 |
-| 音频合规 | Rainy Mood 热链发布前必须确认授权；运行时默认使用真实远端音频，失败时切换本地 fallback |
+| 音频合规 | 默认使用用户提供的真实录音 /0.m4a；Rainy Mood 仅可选远端源，失败时切换合成 fallback；公开发布前确认音源授权 |
 | Station 合规 | 仅嵌入允许播放的公开 YouTube 内容，保留来源和自动失效处理 |
 | 外部请求 | 不把 token、对话、专注记录作为第三方请求参数 |
 
@@ -507,7 +509,8 @@ V1.1 不引入服务端数据库。
 |----------|----------|------|------|
 | YouTube | 前端加载 | iframe API | Station 播放，不代理音频 |
 | NetEase Music | Bridge 调用 | 本机 CLI | ncm-cli 控制 mpv；凭证不进入浏览器 |
-| Rainy Mood | 前端读取 | HTTPS Audio | 真实雨声默认来源；公开发布前完成授权确认 |
+| 本机录音 /0.m4a | 前端读取 | 同源 Audio | 默认真实雨声；公开发布前确认授权 |
+| Rainy Mood | 前端读取 | HTTPS Audio | 可选远端雨声；启用并公开发布前完成授权确认 |
 | Browser AudioContext | 前端本地 | Web Audio API | 雨声 fallback 与强度处理 |
 | Claude Bridge | 双向 | ws://localhost | token 鉴权与流式对话 |
 | Claude CLI | Bridge 调用 | 本地进程 | 真实 Claude 会话 |
@@ -525,7 +528,7 @@ V1.1 不引入服务端数据库。
 | 自动换台 | 单频道失败跳下一台；全部失败后停止循环并显示重试 | P0 |
 | 计时淡出 | 计时结束后音乐与雨声均在 4 秒内平滑归零 | P0 |
 | Claw 状态 | listening/typing/thinking/speaking/resting/error/idle 均可复现并回落正确 | P0 |
-| 气泡优先级 | 有历史记录时，启动仪式、typing 和 resting 文案仍显示当前内容 | P0 |
+| 气泡优先级 | 完成回复不被 idle/resting 覆盖；音乐状态和候选独立展示，不与 Claude 流式回复竞争 | P0 |
 | 本地对话 | Bridge 离线时输入与发送可用，回复后回到 idle | P0 |
 | 专注首日 | 清空专注数据后首次启动显示 streak=1 | P1 |
 | 专注后台 | 页面隐藏超过 2 分钟，active_minutes 不增加 | P1 |
@@ -539,9 +542,9 @@ V1.1 不引入服务端数据库。
 
 #### 必须确认（阻塞发布）
 
-1. [已决定] V1.1 默认使用 Rainy Mood 真实雨声音频，失败时切换本地 fallback；公开发布前仍需确认 Rainy Mood 使用授权。见 4.1。
+1. [已决定] 默认使用本机真实录音 /0.m4a；Rainy Mood 为可选远端源；音源失败才使用合成 fallback。公开发布前仍需确认音源使用授权。见 4.1。
 2. [已决定] Bridge token 默认只保存在 SessionStorage。见 4.1、4.4。
-3. [已决定] Bridge 启动时允许在本机终端 stdout 显示一次 token；前端不会自动读取或显示明文，仅显示受控掩码输入。见 4.1。
+3. [已决定] Bridge 启动时允许在本机终端 stdout 显示一次自动生成的连接 token（非 Claude API key）；前端通过受控 loopback 配对端点自动读取并仅存 SessionStorage，不在 URL 或 UI 中显示明文。见 4.1。
 4. [已决定] 对话历史最多 50 条、默认保存 7 天，并提供清空入口。见 4.1、4.4。
 
 #### 建议确认（影响完整度）

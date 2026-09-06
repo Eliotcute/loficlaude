@@ -96,6 +96,31 @@ test('bridge client authenticates, forwards messages, and emits callbacks', () =
   ]);
 });
 
+test('music callbacks are separate from Claude errors and ignore old sockets', () => {
+  const client = new BridgeClient({ WebSocketImpl: FakeWebSocket, storage: null });
+  const music = [];
+  const chatErrors = [];
+  client.onMusicIntent = (event) => music.push(event.type);
+  client.onMusicSearchResults = (event) => music.push(event.type);
+  client.onMusicState = (state) => music.push(state.status);
+  client.onMusicError = (event) => music.push(event.type);
+  client.onError = (message) => chatErrors.push(message);
+  client.connect('test-only');
+  const first = client.socket;
+  first.open();
+  for (const event of [{ type: 'music_intent', status: 'started' }, { type: 'music_search_results', choices: [] },
+    { type: 'music_error', message: 'music unavailable' }, { type: 'music_state', value: { status: 'playing' } }]) {
+    first.dispatch('message', { data: JSON.stringify(event) });
+  }
+  assert.deepEqual(music, ['music_intent', 'music_search_results', 'music_error', 'playing']);
+  assert.deepEqual(chatErrors, []);
+  client.disconnect();
+  client.connect('test-only');
+  first.dispatch('message', { data: JSON.stringify({ type: 'music_search_results', choices: [{ name: 'stale' }] }) });
+  assert.equal(music.length, 4);
+  client.disconnect();
+});
+
 test('bridge client cannot reuse a token after an explicit credential clear', () => {
   const client = new BridgeClient({ WebSocketImpl: FakeWebSocket, autoReconnect: false });
   const errors = [];

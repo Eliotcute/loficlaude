@@ -124,7 +124,7 @@ test('RainPlayer initializes the bundled local rain audio source', async () => {
   assert.equal(FakeAudio.instance.volume, 0.4675);
   assert.equal(FakeAudio.instance.playCalls, 1);
   assert.equal(player.usingFallback, false);
-  assert.deepEqual(statuses, ['rainy-mood']);
+  assert.deepEqual(statuses, ['local-recording']);
 
   FakeAudio.instance.volume = 0;
   await player.play();
@@ -214,7 +214,7 @@ test('RainPlayer starts fallback after a remote stream error even after remote p
     assert.equal(player.remoteStarted, false);
     assert.equal(player.fallbackStarted, true);
     assert.equal(player.ctx.source.started, true);
-    assert.deepEqual(statuses, ['rainy-mood', 'fallback']);
+    assert.deepEqual(statuses, ['local-recording', 'fallback']);
   } finally {
     globalThis.AudioContext = originalAudioContext;
   }
@@ -233,7 +233,7 @@ test('RainPlayer ignores a delayed remote error after playback is stopped', asyn
     player.fadeOut(4000);
     FakeAudio.instance.listeners.error();
 
-    assert.deepEqual(statuses, ['rainy-mood']);
+    assert.deepEqual(statuses, ['local-recording']);
     player.destroy();
   } finally {
     globalThis.AudioContext = originalAudioContext;
@@ -253,7 +253,7 @@ test('RainPlayer falls back to generated rain when Rainy Mood playback fails', a
     assert.equal(RejectingAudio.instance.playCalls, 1);
     assert.equal(player.usingFallback, true);
     assert.equal(player.started, true);
-    assert.deepEqual(statuses, ['rainy-mood', 'fallback']);
+    assert.deepEqual(statuses, ['local-recording', 'fallback']);
 
     player.setVolume(0);
     assert.equal(player.ctx.state, 'suspended');

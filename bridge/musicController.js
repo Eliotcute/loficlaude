@@ -136,7 +136,7 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
             resolve(false);
             return;
           }
-          publish({ title: playlist.name, playlist: playlist.name });
+          publish({ title: playlist.name, playlist: playlist.name, playlistRecord: playlist });
           resolve(true);
         });
       }));

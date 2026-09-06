@@ -8,7 +8,7 @@ Current product and implementation documents are indexed in [`docs/README.md`](d
 
 - Svelte 5 + Vite single-screen room
 - Local bridge in `bridge/` for authenticated Claude CLI streaming
-- Streaming assistant deltas and tool activity in the UI
+- Streaming text replies with local companion states
 - User-gesture-gated audio startup for browser autoplay compliance
 
 ## Run room
@@ -73,13 +73,23 @@ The Bridge starts Claude CLI in the project root with non-interactive `-p` mode,
 
 ## Audio
 
-V1.1 release decision: YouTube lofi playback is enabled after user gesture. If the station fails or times out, rain remains available independently and the player exposes a retryable music error. Rainy Mood rain and its local fallback remain available as the independent rain path.
+YouTube lofi playback is enabled after a user gesture when using browser playback. Music and rain report independent states; a music failure never blocks rain startup.
 
-The room initializes YouTube lofi playback and real Rainy Mood rain audio only after a user gesture. `Start room` is the intended first gesture.
+Browser audio starts only after a user gesture. `Start room` is the intended first gesture.
 
 The bundled `public/0.m4a` is the default rain source. Rainy Mood remains an optional remote source when configured. If the selected audio fails, `RainPlayer` keeps the room usable with its local fallback path. Rain intensity changes the effective gain and filter shape.
 
-When the local Bridge is connected and `ncm-cli` is configured, the player controls the local NetEase Music `mpv` session. Credentials stay in the local `ncm-cli` configuration; the browser receives only music state. YouTube remains the browser fallback when the local provider is unavailable.
+When the local Bridge is connected, the player controls the local NetEase Music `mpv` session. Configure and log into `ncm-cli` first. A CLI failure is reported, not silently replaced with YouTube playback. Without a Bridge connection, the controls use YouTube.
+
+### Conversation and music
+
+Music requests are parsed by conservative Bridge rules, not Claude tool calling. Claude receives the original text for conversation continuity but has no command execution tools. Only fixed, validated music actions reach `ncm-cli`.
+
+Search with `播放 lofi`. Multiple matches require a numbered selection (`播放第 2 个`); one match can start directly. Candidate lists belong to the requesting browser connection and expire on reconnect. The actual local player is shared, so playback changes are visible to every connected browser.
+
+The bubble keeps music feedback separate from Claude replies. Confirmed playlists are remembered locally using only their IDs and name; refresh restores a recent-playlist button but never starts playback. With an empty local player, the play button restores the recent playlist or searches for `lofi`. Browser audio is not initialized before the first gesture, and a connected local provider does not create a competing YouTube player.
+
+Current execution evidence and remaining checks live in `HANDOFF.md` and `TODO.md`. Older audit text and session logs are historical, not an active backlog. Local validation is `npm test`, `npm run build`, and `npm run verify:build`; remote CI is outside this product's current scope.
 
 ## Troubleshooting
 

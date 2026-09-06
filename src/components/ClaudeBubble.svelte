@@ -10,6 +10,8 @@
   export let passive = false;
   export let loading = false;
   export let anchor = { x: 0, y: 0 };
+  export let musicFeedback = { status: 'idle', message: '', choices: [] };
+  export let recentPlaylist = null;
 
   const dispatch = createEventDispatcher();
 
@@ -32,7 +34,8 @@
       fallbackWidth - bubbleWidth - 14
     )
   );
-  $: bubbleTop = Math.max(72, Math.min(anchorY - 186, fallbackHeight - 290));
+  let bubbleHeight = 290;
+  $: bubbleTop = Math.max(12, Math.min(Math.max(72, anchorY - 186), fallbackHeight - bubbleHeight - (fallbackHeight > 600 ? 112 : 12)));
   $: latestAssistant = [...messages].reverse().find((item) => item.role === 'assistant');
   $: activeAssistant = activeAssistantId
     ? messages.find((item) => item.id === activeAssistantId && item.role === 'assistant')
@@ -96,6 +99,7 @@
   function handleOpenHistory() {
     dispatch('history');
   }
+  function chooseMusic(index) { dispatch('musicChoice', { index }); }
 
   onMount(() => {
     resetPassiveTimeout();
@@ -120,6 +124,7 @@
 
 <div
   bind:this={root}
+  bind:clientHeight={bubbleHeight}
   class:passive
   class="claude-bubble"
   role="dialog"
@@ -145,6 +150,29 @@
 
   {#if !bridgeConnected}
     <div class="bridge-hint">Local companion mode</div>
+  {/if}
+
+  {#if musicFeedback.message}
+    <div class="music-feedback" aria-live="polite" aria-label="Music feedback">
+      <div class:music-error={musicFeedback.status === 'error'}>{musicFeedback.message}</div>
+      {#if musicFeedback.choices.length}
+        <div class="music-choices">
+          {#each musicFeedback.choices as choice, index}
+            <button type="button" title={choice.name} disabled={loading || !bridgeConnected || musicFeedback.status === 'pending'} on:click={() => chooseMusic(index + 1)}>
+              <span class="choice-number">{index + 1}.</span><span class="choice-name">{choice.name}</span>
+            </button>
+          {/each}
+        </div>
+        <button type="button" class="music-cancel" disabled={loading || !bridgeConnected} on:click={() => dispatch('musicCancel')}>取消</button>
+      {/if}
+    </div>
+  {/if}
+
+  {#if recentPlaylist && !musicFeedback.choices.length}
+    <button type="button" class="recent-playlist" title={recentPlaylist.name}
+      disabled={!bridgeConnected || musicFeedback.status === 'pending'} on:click={() => dispatch('playRecent')}>
+      <span aria-hidden="true">▶</span><span>{recentPlaylist.name}</span>
+    </button>
   {/if}
 
   <form class="input-row" on:submit={handleSubmit}>
@@ -185,6 +213,18 @@
     z-index: 19;
     animation: bubble-in 140ms ease;
   }
+  .music-feedback { margin: 6px 0 10px; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+  .music-choices { display: grid; gap: 4px; margin-top: 6px; }
+  .music-choices button, .music-cancel { height: 36px; width: 100%; min-width: 0; background: rgba(212,165,116,.08); color: inherit; border: 1px solid rgba(212,165,116,.28); border-radius: 8px; text-align: left; padding: 4px 8px; font: inherit; cursor: pointer; }
+  .music-choices button { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; }
+  .choice-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .music-cancel { margin-top: 4px; text-align: center; }
+  .music-feedback button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .music-feedback button:focus-visible { outline: 2px solid #d4a574; outline-offset: 1px; }
+  .music-error { color: #e89b87; }
+  .recent-playlist { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 4px; width: 100%; height: 36px; margin: 0 0 8px; padding: 4px 8px; text-align: left; border: 1px solid rgba(212,165,116,.28); border-radius: 8px; color: #e8e0d8; background: rgba(212,165,116,.08); cursor: pointer; font-family: inherit; font-size: 11px; line-height: 1.4; }
+  .recent-playlist span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .recent-playlist:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .claude-bubble.passive {
     animation: bubble-in 140ms ease, bubble-fade 320ms ease 7.68s forwards;

@@ -10,10 +10,10 @@
 - [x] Derive scene names, icons, picker order and particles from one catalog.
 - [x] Test every catalog entry through persistence and particle generation.
 - [x] Validate CLI business results, playlist IDs and actual playback state; add six controller regressions.
-- [ ] Complete server and frontend integration coverage (existing tests do not prove this).
-- [ ] Make music feedback/candidates visible independently of stale Claude reply text.
-- [ ] Reconcile README, PRD, release audit and architecture documentation.
-- [ ] Verify scene picker and music choices visually in desktop/mobile layouts.
+- [x] Complete server/client callback integration and independent music feedback tests.
+- [x] Make music feedback/candidates visible independently of stale Claude reply text.
+- [x] Reconcile README, PRD, release audit and architecture documentation.
+- [x] Verify 5 music choices and rain particles at 1440x900, 768x1024, 375x812 in isolated Chromium; no page errors or horizontal overflow.
 
 ## P2: Continuity And Handoff
 - [ ] Persist the user's last selected playlist locally without credentials.

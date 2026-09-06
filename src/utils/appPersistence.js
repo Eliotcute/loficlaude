@@ -1,22 +1,14 @@
+import { DEFAULT_SCENE, SCENE_NAME_MAP, SCENE_ORDER, getSceneDefinition } from '../canvas/asciiScenes.js';
+
+export { SCENE_NAME_MAP, SCENE_ORDER };
+
 const DEFAULT_TRACK_TITLE = 'lofi hip hop radio - beats';
-const DEFAULT_SCENE = 'lofiNight';
-const DEFAULT_SCENE_NAME = 'Lofi Night';
 const DEFAULT_RAIN_VOLUME = 60;
 const DEFAULT_RAIN_TYPE = 'medium';
 const VALID_RAIN_TYPES = ['light', 'medium', 'heavy'];
 
 export const PERSIST_KEY = 'lofi-claude-phase4-state';
 export const FOCUS_KEY = 'lofi-claude-focus-state';
-export const SCENE_NAME_MAP = {
-  lofiNight: 'Lofi Night',
-  softRain: 'Soft Rain',
-  starDrift: 'Star Drift',
-  fmStudio: 'FM Studio',
-  recordRoom: 'Record Room',
-  focusConsole: 'Focus Console'
-  ,coffeeShop: 'Coffee Shop', library: 'Library', rainWindow: 'Rain Window', nightStreet: 'Night Street', sunsetRoom: 'Sunset Room'
-};
-export const SCENE_ORDER = ['lofiNight', 'softRain', 'starDrift', 'fmStudio', 'recordRoom', 'focusConsole', 'coffeeShop', 'library', 'rainWindow', 'nightStreet', 'sunsetRoom'];
 
 export function readStorageValue(storage, key) {
   try {
@@ -36,7 +28,7 @@ export function writeStorageValue(storage, key, value) {
 }
 
 export function getSceneName(key) {
-  return SCENE_NAME_MAP[key] ?? DEFAULT_SCENE_NAME;
+  return getSceneDefinition(key).name;
 }
 
 export function normalizeTrackIndex(index, playlistLength) {

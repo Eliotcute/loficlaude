@@ -18,7 +18,7 @@ export const rain = {
   volume: writable(60), // 0-100
   type: writable('medium'), // light | medium | heavy
   muted: writable(false),
-  sourceStatus: writable('idle') // idle | rainy-mood | fallback
+  sourceStatus: writable('idle') // idle | local-recording | rainy-mood | fallback | stopped
 };
 
 export const scene = {

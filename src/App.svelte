@@ -33,6 +33,8 @@
     writeStorageValue
   } from './utils/appPersistence.js';
   import { createSessionSummary, getStartRitualCopy } from './utils/rituals.js';
+  import { emptyMusicFeedback, updateMusicFeedback } from './utils/musicFeedback.js';
+  import { normalizeRecentPlaylist, readRecentPlaylist, saveRecentPlaylist } from './utils/recentPlaylist.js';
 
   const currentTrackIndex = player.currentTrackIndex;
   const currentTrackTitle = player.currentTrackTitle;
@@ -73,11 +75,14 @@
   let claudeBridgeStatus = 'disconnected';
   let claudeToolRunning = null;
   let claudeLastError = '';
+  let musicFeedback = emptyMusicFeedback();
+  let recentPlaylist = null;
   // Formal V1.1 decision: ship the lofi station with explicit rain/music states.
   const ENABLE_YOUTUBE_AUDIO = true;
 
   const audio = createAudioInitializer({
     enableYouTube: ENABLE_YOUTUBE_AUDIO,
+    shouldUseYouTube: () => get(connectionStatus) !== 'connected',
     mountId: 'youtube-player-host',
     getCurrentTrackIndex: () => $currentTrackIndex,
     getRainType: () => $rainType,
@@ -146,20 +151,35 @@
     }
     player.musicStatus.set(status === 'playing' ? 'playing' : status === 'paused' ? 'paused' : status === 'error' ? 'error' : 'idle');
     player.isPlaying.set(status === 'playing');
+    if (status !== 'error') player.error.set(null);
     if (state?.title) player.currentTrackTitle.set(state.title);
+    if (status === 'playing') {
+      const record = normalizeRecentPlaylist(state?.playlistRecord);
+      if (record) {
+        recentPlaylist = record;
+        saveRecentPlaylist(record);
+      }
+    }
   }
 
   function handleMusicIntent(event) {
-    const labels = { play_playlist: '网易云 lofi', pause: '音乐', resume: '音乐', next: '下一首', prev: '上一首', stop: '音乐' };
-    if (event?.status === 'started') claudeBubbleMessage = `正在处理：${labels[event.action] ?? '音乐'}…`;
-    if (event?.status === 'completed') claudeBubbleMessage = `已完成：${labels[event.action] ?? '音乐'}`;
-    if (event?.status === 'failed') claudeBubbleMessage = `音乐操作失败，请检查网易云登录和网络。`;
+    musicFeedback = updateMusicFeedback(musicFeedback, event);
+    if (event?.status === 'started') player.error.set(null);
+    if (event?.status === 'completed' && event.action !== 'cancel_selection' && !musicFeedback.choices.length) {
+      claudeOrch.markMusicChange();
+    }
+  }
+
+  function playRecentPlaylist() {
+    if (!recentPlaylist || get(connectionStatus) !== 'connected') return;
+    audio.getPlayers().youtubePlayer?.pause();
+    if (!bridgeClient.sendMusicCommand('play_playlist', [], recentPlaylist)) {
+      musicFeedback = updateMusicFeedback(musicFeedback, { type: 'music_error', message: 'Bridge 未连接，请重新连接后重试。' });
+    }
   }
 
   function handleMusicSearchResults(event) {
-    const choices = Array.isArray(event?.choices) ? event.choices : [];
-    if (!choices.length) return;
-    claudeBubbleMessage = `找到 ${choices.length} 个网易云歌单：\n${choices.map((choice, index) => `${index + 1}. ${choice.name}`).join('\n')}\n请回复“播放第几个”。`;
+    musicFeedback = updateMusicFeedback(musicFeedback, event);
   }
 
   function setActivityState() {
@@ -342,9 +362,19 @@
   }
 
   async function togglePlayback() {
+    if (!$hasStarted) {
+      await startExperience();
+      if (get(connectionStatus) !== 'connected') return;
+    }
     if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
       audio.getPlayers().youtubePlayer?.pause();
-      bridgeClient.sendMusicCommand($playerIsPlaying ? 'pause' : 'resume');
+      if ($playerIsPlaying || $musicStatus === 'paused') {
+        bridgeClient.sendMusicCommand($playerIsPlaying ? 'pause' : 'resume');
+      } else if (recentPlaylist) {
+        playRecentPlaylist();
+      } else {
+        await sendClaudeMessage('播放 lofi');
+      }
       return;
     }
     if (!$hasStarted) {
@@ -527,10 +557,20 @@
 
   onMount(() => {
     restoreState();
+    recentPlaylist = readRecentPlaylist();
     claudeOrch.attachBridge(bridgeClient);
-      bridgeClient.onMusicState = handleMusicState;
-      bridgeClient.onMusicIntent = handleMusicIntent;
-      bridgeClient.onMusicSearchResults = handleMusicSearchResults;
+    bridgeClient.onMusicState = handleMusicState;
+    bridgeClient.onMusicIntent = handleMusicIntent;
+    bridgeClient.onMusicSearchResults = handleMusicSearchResults;
+    bridgeClient.onMusicError = (event) => {
+      musicFeedback = updateMusicFeedback(musicFeedback, event);
+      player.error.set(musicFeedback.message);
+    };
+    const handleChatDisconnect = bridgeClient.onDisconnect;
+    bridgeClient.onDisconnect = (info) => {
+      musicFeedback = emptyMusicFeedback();
+      handleChatDisconnect(info);
+    };
     refreshClaudeState();
     unsubscribeBridgeSettings = ui.bridgeSettingsOpen.subscribe((open) => {
       if (open) {
@@ -579,10 +619,6 @@
     if ($rainVolume > 0) {
       lastNonZeroRainVolume = $rainVolume;
     }
-
-    // Prepare the players before the first gesture without starting playback.
-    // This keeps the eventual play() call inside the user's click path.
-    audio.initAudio(false);
 
     startIdleTimer();
     startSceneRotation();
@@ -645,13 +681,18 @@
       messages={claudeHistory}
       activeAssistantId={claudeActiveAssistantId}
       anchor={$claudeBubbleAnchor}
-      passive={claudeBubblePassive}
+      passive={claudeBubblePassive && !musicFeedback.choices.length && musicFeedback.status !== 'pending'}
       loading={claudeLoading}
+      {musicFeedback}
+      {recentPlaylist}
       on:close={closeClaudeBubble}
       on:send={(event) => sendClaudeMessage(event.detail.text)}
       on:history={openClaudeHistory}
       on:typing={markClaudeTyping}
       on:listening={markClaudeListening}
+      on:musicChoice={(event) => sendClaudeMessage(`播放第 ${event.detail.index} 个`)}
+      on:musicCancel={() => sendClaudeMessage('取消')}
+      on:playRecent={playRecentPlaylist}
     />
   {/if}
 

@@ -206,6 +206,18 @@ test('music failures do not emit Claude errors or interrupt shared chat', async 
   assert.ok(h.chats.some((c) => c.text === '播放 lofi'));
 });
 
+test('saved playlists use the validated music adapter without invoking Claude', async (t) => {
+  const h = musicHarness();
+  t.after(() => h.server.close());
+  const socket = connectAuthenticatedClient(h.fakeWss);
+  const playlist = choices('1')[0];
+  socket.emit('message', Buffer.from(JSON.stringify({ type: 'music_command', command: 'play_playlist', playlist })));
+  await flushMusic();
+  assert.deepEqual(h.plays, [playlist]);
+  assert.deepEqual(h.chats, []);
+  assert.ok(parsedMessages(socket).some((e) => e.type === 'music_intent' && e.status === 'completed'));
+});
+
 test('bridge server exposes websocket broadcast for authenticated user messages', () => {
   const { fakeWss, server } = createTestServer();
   const socket = connectAuthenticatedClient(fakeWss);

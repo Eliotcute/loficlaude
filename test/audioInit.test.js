@@ -13,6 +13,42 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
+test('local music startup skips YouTube and rain-only playback can resume', async () => {
+  let useBrowser = false;
+  let youtubeCreations = 0;
+  let rainPlays = 0;
+  const audio = createAudioInitializer({
+    shouldUseYouTube: () => useBrowser,
+    createRainPlayer: () => ({ async init() {}, setVolume() {}, play() { rainPlays++; }, destroy() {} }),
+    createYouTubePlayer: () => { youtubeCreations++; return { async init() {}, setVolume() {}, play() {}, destroy() {} }; }
+  });
+  await audio.initAudio(true);
+  await audio.initAudio(true);
+  assert.equal(youtubeCreations, 0);
+  assert.equal(rainPlays, 2);
+  useBrowser = true;
+  await audio.initAudio(true);
+  assert.equal(youtubeCreations, 1);
+  audio.destroy();
+});
+
+test('a late YouTube initialization cannot autoplay over the local music provider', async () => {
+  let useBrowser = true;
+  let playCalls = 0;
+  const pending = deferred();
+  const audio = createAudioInitializer({
+    shouldUseYouTube: () => useBrowser,
+    createRainPlayer: () => ({ async init() {}, setVolume() {}, play() {}, destroy() {} }),
+    createYouTubePlayer: () => ({ init: () => pending.promise, setVolume() {}, play() { playCalls++; }, destroy() {} })
+  });
+  const initialization = audio.initAudio(true);
+  useBrowser = false;
+  pending.resolve();
+  await initialization;
+  assert.equal(playCalls, 0);
+  audio.destroy();
+});
+
 test('audio initialization shares one in-flight result and honors a later autoplay request', async () => {
   const youtubeReady = deferred();
   let rainOptions;

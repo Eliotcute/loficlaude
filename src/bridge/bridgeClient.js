@@ -54,6 +54,7 @@ export class BridgeClient {
     this.onMusicState = () => {};
     this.onMusicIntent = () => {};
     this.onMusicSearchResults = () => {};
+    this.onMusicError = () => {};
     this.restoreReplayState();
   }
 
@@ -253,6 +254,8 @@ export class BridgeClient {
         this.onMusicIntent(payload);
       } else if (payload.type === 'music_search_results') {
         this.onMusicSearchResults(payload);
+      } else if (payload.type === 'music_error') {
+        this.onMusicError(payload);
       }
 
       this.markEventProcessed(payload);
@@ -322,10 +325,10 @@ export class BridgeClient {
     }
   }
 
-  sendMusicCommand(command, args = []) {
+  sendMusicCommand(command, args = [], playlist = undefined) {
     if (!this.socket || this.socket.readyState !== this.WebSocketImpl.OPEN) return false;
     try {
-      this.socket.send(JSON.stringify({ type: 'music_command', command, args }));
+      this.socket.send(JSON.stringify({ type: 'music_command', command, args, ...(command === 'play_playlist' ? { playlist } : {}) }));
       return true;
     } catch {
       return false;
