@@ -12,6 +12,7 @@
 ## Progress
 - 已有 `musicController` 支持基础播放控制和 `music_state` 回传。
 - 已加入自然语言意图解析、歌单搜索/播放、多结果选择、intent 状态广播和 Clawd 反馈文案。
+- Phase P0 已完成：歌单候选状态改为浏览器连接级隔离，避免多个连接互相覆盖；Claude 仍保持无 shell/file tools。
 
 ## Acceptance
 - 对话“切换到网易云，播放 lofi”可触发本机 ncm-cli。

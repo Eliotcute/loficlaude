@@ -1,6 +1,7 @@
 # TODO
 
 ## P0
+- [x] Isolate playlist choices per browser session.
 - [x] Add constrained music intent parser.
 - [x] Add ncm-cli playlist search and playback.
 - [x] Broadcast intent progress and real music state.
