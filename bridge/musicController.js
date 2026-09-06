@@ -70,6 +70,24 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
     getState: () => ({ ...state }),
     command(action, args) { return run(action, args); },
     refresh() { return run('state'); },
+    searchPlaylists(query = 'lofi') {
+      return new Promise((resolve) => {
+        execFileImpl(command, ['search', 'playlist', '--keyword', query, '--output', 'json'], { timeout: 8000, maxBuffer: 512 * 1024 }, (error, stdout = '') => {
+          if (error) { onError('网易云音乐暂时不可用'); resolve([]); return; }
+          try {
+            const records = JSON.parse(stdout)?.data?.records;
+            resolve(Array.isArray(records) ? records.slice(0, 5).filter((r) => r?.id && r?.originalId).map((r) => ({ id: String(r.id), originalId: String(r.originalId), name: String(r.name || '未命名歌单') })) : []);
+          } catch { resolve([]); }
+        });
+      });
+    },
+    playPlaylistById(record) {
+      if (!record?.id || !record?.originalId) return Promise.resolve(false);
+      return new Promise((resolve) => execFileImpl(command, ['play', '--playlist', '--encrypted-id', record.id, '--original-id', record.originalId, '--output', 'json'], { timeout: 8000, maxBuffer: 128 * 1024 }, (error) => {
+        if (error) { onError('网易云歌单播放失败'); resolve(false); return; }
+        publish({ status: 'playing', title: record.name, playlist: record.name }); resolve(true);
+      }));
+    },
     playPlaylist(query = 'lofi') {
       return new Promise((resolve) => {
         execFileImpl(command, ['search', 'playlist', '--keyword', query, '--output', 'json'], { timeout: 8000, maxBuffer: 512 * 1024 }, (error, stdout = '') => {

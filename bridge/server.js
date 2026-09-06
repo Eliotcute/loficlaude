@@ -46,6 +46,7 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
   let claudeSession = null;
   let sessionStatus = STATUS.DISCONNECTED;
   let closing = false;
+  let playlistChoices = [];
   const music = createMusicController({
     onState: (value) => broadcast({ type: SERVER_TYPES.MUSIC_STATE, value }),
     onError: (message) => broadcast({ type: SERVER_TYPES.ERROR, message })
@@ -163,7 +164,17 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
       const intent = parseMusicIntent(clean);
       if (intent) {
         broadcast({ type: 'music_intent', status: 'started', action: intent.action });
-        const operation = intent.action === 'play_playlist' ? music.playPlaylist(intent.query) : music.command(intent.action);
+        const operation = intent.action === 'play_playlist'
+          ? music.searchPlaylists(intent.query).then((choices) => {
+            playlistChoices = choices;
+            if (choices.length === 0) return false;
+            if (choices.length === 1) return music.playPlaylistById(choices[0]);
+            broadcast({ type: 'music_search_results', query: intent.query, choices });
+            return true;
+          })
+          : intent.action === 'select_playlist' && playlistChoices[intent.index]
+            ? music.playPlaylistById?.(playlistChoices[intent.index]) ?? Promise.resolve(false)
+            : music.command(intent.action);
         operation.then((ok) => {
           broadcast({ type: 'music_intent', status: ok ? 'completed' : 'failed', action: intent.action });
         });

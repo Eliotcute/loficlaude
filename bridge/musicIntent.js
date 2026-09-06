@@ -10,6 +10,8 @@ const RULES = [
 function parseMusicIntent(text) {
   const clean = `${text ?? ''}`.trim();
   if (!clean) return null;
+  const choice = clean.match(/(?:播放|选择)第?\s*([1-5])\s*个?/i);
+  if (choice) return { action: 'select_playlist', index: Number(choice[1]) - 1 };
   const match = RULES.find((rule) => rule.pattern.test(clean));
   return match ? { action: match.action, ...(match.query ? { query: match.query } : {}) } : null;
 }
