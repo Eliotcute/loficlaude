@@ -52,6 +52,7 @@ export class BridgeClient {
     this.onSessionReset = () => {};
     this.onReplayGap = () => {};
     this.onMusicState = () => {};
+    this.onMusicIntent = () => {};
     this.restoreReplayState();
   }
 
@@ -247,6 +248,8 @@ export class BridgeClient {
         this.onError(payload.message ?? 'Unknown bridge error');
       } else if (payload.type === 'music_state') {
         this.onMusicState(payload.value ?? {});
+      } else if (payload.type === 'music_intent') {
+        this.onMusicIntent(payload);
       }
 
       this.markEventProcessed(payload);

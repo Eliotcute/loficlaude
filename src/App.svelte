@@ -149,6 +149,13 @@
     if (state?.title) player.currentTrackTitle.set(state.title);
   }
 
+  function handleMusicIntent(event) {
+    const labels = { play_playlist: '网易云 lofi', pause: '音乐', resume: '音乐', next: '下一首', prev: '上一首', stop: '音乐' };
+    if (event?.status === 'started') claudeBubbleMessage = `正在处理：${labels[event.action] ?? '音乐'}…`;
+    if (event?.status === 'completed') claudeBubbleMessage = `已完成：${labels[event.action] ?? '音乐'}`;
+    if (event?.status === 'failed') claudeBubbleMessage = `音乐操作失败，请检查网易云登录和网络。`;
+  }
+
   function setActivityState() {
     const now = Date.now();
     if (now - lastActivityNotifiedAt < 250) {
@@ -516,6 +523,7 @@
     restoreState();
     claudeOrch.attachBridge(bridgeClient);
       bridgeClient.onMusicState = handleMusicState;
+      bridgeClient.onMusicIntent = handleMusicIntent;
     refreshClaudeState();
     unsubscribeBridgeSettings = ui.bridgeSettingsOpen.subscribe((open) => {
       if (open) {
