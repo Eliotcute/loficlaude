@@ -46,7 +46,6 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
   let claudeSession = null;
   let sessionStatus = STATUS.DISCONNECTED;
   let closing = false;
-  let playlistChoices = [];
   const music = createMusicController({
     onState: (value) => broadcast({ type: SERVER_TYPES.MUSIC_STATE, value }),
     onError: (message) => broadcast({ type: SERVER_TYPES.ERROR, message })
@@ -154,7 +153,7 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
     return claudeSession;
   }
 
-  function sendUserMessage(text, source = 'browser') {
+  function sendUserMessage(text, source = 'browser', context = null) {
     const clean = `${text ?? ''}`.trim();
     if (!clean || !isUserMessageWithinLimit(clean) || closing) {
       return false;
@@ -166,14 +165,14 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
         broadcast({ type: 'music_intent', status: 'started', action: intent.action });
         const operation = intent.action === 'play_playlist'
           ? music.searchPlaylists(intent.query).then((choices) => {
-            playlistChoices = choices;
+            if (context) context.playlistChoices = choices;
             if (choices.length === 0) return false;
             if (choices.length === 1) return music.playPlaylistById(choices[0]);
             broadcast({ type: 'music_search_results', query: intent.query, choices });
             return true;
           })
-          : intent.action === 'select_playlist' && playlistChoices[intent.index]
-            ? music.playPlaylistById?.(playlistChoices[intent.index]) ?? Promise.resolve(false)
+          : intent.action === 'select_playlist' && context?.playlistChoices?.[intent.index]
+            ? music.playPlaylistById?.(context.playlistChoices[intent.index]) ?? Promise.resolve(false)
             : music.command(intent.action);
         operation.then((ok) => {
           broadcast({ type: 'music_intent', status: ok ? 'completed' : 'failed', action: intent.action });
@@ -229,6 +228,7 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
     }
 
     let authenticated = false;
+    const musicContext = { playlistChoices: [] };
     const authTimer = setTimeout(() => {
       if (!authenticated) {
         send(socket, { type: SERVER_TYPES.ERROR, message: 'Auth timeout' });
@@ -294,7 +294,7 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
           send(socket, { type: SERVER_TYPES.ERROR, message: 'Message required' });
         } else if (!isUserMessageWithinLimit(clean)) {
           send(socket, { type: SERVER_TYPES.ERROR, message: 'Message too long' });
-        } else if (!sendUserMessage(clean, 'browser')) {
+        } else if (!sendUserMessage(clean, 'browser', musicContext)) {
           send(socket, { type: SERVER_TYPES.ERROR, message: 'Message was not accepted' });
         }
         return;
