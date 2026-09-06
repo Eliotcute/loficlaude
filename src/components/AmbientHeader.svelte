@@ -153,7 +153,7 @@
 
   .header-status {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: flex-end;
     gap: 10px;
     pointer-events: auto;
@@ -165,6 +165,9 @@
     align-items: center;
     gap: 10px;
     min-width: 0;
+    height: 44px;
+    align-self: flex-start;
+    flex-shrink: 0;
   }
 
   .scene-picker,

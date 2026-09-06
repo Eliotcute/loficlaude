@@ -316,6 +316,8 @@
     display: grid;
     gap: 6px;
     min-width: 0;
+    min-height: 44px;
+    align-content: start;
   }
 
   .status-row,
