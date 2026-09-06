@@ -4,7 +4,7 @@ export function createAmbientParticles(sceneKey, width, height) {
   const rng = seedRandom(`particles-${sceneKey}`);
   const particles = [];
 
-  if (sceneKey === 'softRain') {
+  if (['softRain', 'rainWindow', 'nightStreet'].includes(sceneKey)) {
     for (let i = 0; i < 180; i += 1) {
       particles.push({
         type: 'rain',

@@ -11,7 +11,12 @@ test('Claude FM reference scenes are available as original procedural layouts', 
     'starDrift',
     'fmStudio',
     'recordRoom',
-    'focusConsole'
+    'focusConsole',
+    'coffeeShop',
+    'library',
+    'rainWindow',
+    'nightStreet',
+    'sunsetRoom'
   ]);
 
   for (const key of SCENE_ORDER) {

@@ -11,6 +11,11 @@
     { key: 'fmStudio', icon: '📻', label: 'FM Studio' },
     { key: 'recordRoom', icon: '💿', label: 'Records' },
     { key: 'focusConsole', icon: '⌘', label: 'Console' }
+    ,{ key: 'coffeeShop', icon: '☕', label: 'Coffee' }
+    ,{ key: 'library', icon: '📚', label: 'Library' }
+    ,{ key: 'rainWindow', icon: '🪟', label: 'Rain Window' }
+    ,{ key: 'nightStreet', icon: '🌃', label: 'Night Street' }
+    ,{ key: 'sunsetRoom', icon: '🌇', label: 'Sunset' }
   ];
   const currentScene = scene.current;
   const sceneLocked = scene.locked;

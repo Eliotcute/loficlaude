@@ -57,6 +57,26 @@ export const SCENES = {
       { type: 'plant', x: 0.18, y: 0.68 }
     ],
     particles: ['stars', 'meteors']
+  },
+  coffeeShop: {
+    objects: [{ type: 'shelf', x: 0.05, y: 0.12, w: 0.25, h: 0.5 }, { type: 'desk', x: 0, y: 0.78, w: 1, h: 0.2 }, { type: 'lamp', x: 0.72, y: 0.7 }],
+    particles: ['stars']
+  },
+  library: {
+    objects: [{ type: 'shelf', x: 0.05, y: 0.1, w: 0.4, h: 0.58 }, { type: 'desk', x: 0, y: 0.8, w: 1, h: 0.18 }, { type: 'lamp', x: 0.55, y: 0.72 }],
+    particles: ['stars']
+  },
+  rainWindow: {
+    objects: [{ type: 'window', x: 0.18, y: 0.1, w: 0.64, h: 0.56 }, { type: 'desk', x: 0, y: 0.8, w: 1, h: 0.18 }, { type: 'lamp', x: 0.82, y: 0.72 }],
+    particles: ['rain', 'waterRipples']
+  },
+  nightStreet: {
+    objects: [{ type: 'city', baseY: 0.76 }, { type: 'lamp', x: 0.72, y: 0.62 }, { type: 'cloud', x: 0.3, y: 0.18 }],
+    particles: ['rain', 'stars']
+  },
+  sunsetRoom: {
+    objects: [{ type: 'window', x: 0.12, y: 0.12, w: 0.34, h: 0.42 }, { type: 'plant', x: 0.72, y: 0.66 }, { type: 'desk', x: 0, y: 0.8, w: 1, h: 0.18 }],
+    particles: ['stars']
   }
 };
 

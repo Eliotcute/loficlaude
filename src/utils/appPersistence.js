@@ -14,8 +14,9 @@ export const SCENE_NAME_MAP = {
   fmStudio: 'FM Studio',
   recordRoom: 'Record Room',
   focusConsole: 'Focus Console'
+  ,coffeeShop: 'Coffee Shop', library: 'Library', rainWindow: 'Rain Window', nightStreet: 'Night Street', sunsetRoom: 'Sunset Room'
 };
-export const SCENE_ORDER = ['lofiNight', 'softRain', 'starDrift', 'fmStudio', 'recordRoom', 'focusConsole'];
+export const SCENE_ORDER = ['lofiNight', 'softRain', 'starDrift', 'fmStudio', 'recordRoom', 'focusConsole', 'coffeeShop', 'library', 'rainWindow', 'nightStreet', 'sunsetRoom'];
 
 export function readStorageValue(storage, key) {
   try {
