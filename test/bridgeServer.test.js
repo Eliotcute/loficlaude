@@ -52,7 +52,7 @@ class FakeWebSocketServer {
   }
 }
 
-function createTestServer() {
+function createTestServer(overrides = {}) {
   const fakeWss = new FakeWebSocketServer();
 
   const server = createBridgeServer({
@@ -72,7 +72,8 @@ function createTestServer() {
     sessionFactory: () => ({
       sendUserMessage() {},
       close() {}
-    })
+    }),
+    ...overrides
   });
 
   return { fakeWss, server };
@@ -89,6 +90,121 @@ function connectAuthenticatedClient(fakeWss, auth = {}) {
 function parsedMessages(socket) {
   return socket.sent.map((payload) => JSON.parse(payload));
 }
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+
+const flushMusic = () => new Promise((resolve) => setImmediate(resolve));
+const sendChat = (socket, text) => socket.emit('message', Buffer.from(JSON.stringify({ type: 'user_message', text })));
+const choices = (prefix) => [1, 2].map((id) => ({ id: `${prefix}${id}`, originalId: `${prefix}${id}`, name: `Playlist ${prefix}-${id}` }));
+
+function musicHarness() {
+  const searches = [];
+  const plays = [];
+  const commands = [];
+  const chats = [];
+  let callbacks;
+  const harness = createTestServer({
+    musicControllerFactory(options) {
+      callbacks = options;
+      return {
+        getState: () => ({ provider: 'netease-local', status: 'idle' }),
+        searchPlaylists() { const pending = deferred(); searches.push(pending); return pending.promise; },
+        playPlaylistById(record) { plays.push(record); return Promise.resolve(true); },
+        command(action) { commands.push(action); return Promise.resolve(true); }
+      };
+    },
+    sessionFactory: () => ({ sendUserMessage(text, source) { chats.push({ text, source }); return true; }, close() {} })
+  });
+  return { ...harness, searches, plays, commands, chats, callbacks };
+}
+
+test('music choices are private across simultaneous browser searches and replay', async (t) => {
+  const h = musicHarness();
+  t.after(() => h.server.close());
+  const a = connectAuthenticatedClient(h.fakeWss);
+  const b = connectAuthenticatedClient(h.fakeWss);
+  sendChat(a, '播放 lofi');
+  sendChat(b, '播放 lofi');
+  h.searches[1].resolve(choices('2'));
+  h.searches[0].resolve(choices('1'));
+  await flushMusic();
+  assert.deepEqual(parsedMessages(a).filter((e) => e.type === 'music_search_results').map((e) => e.choices), [choices('1')]);
+  assert.deepEqual(parsedMessages(b).filter((e) => e.type === 'music_search_results').map((e) => e.choices), [choices('2')]);
+  sendChat(a, '播放第二个');
+  sendChat(b, '播放第一个');
+  await flushMusic();
+  assert.deepEqual(h.plays, [choices('1')[1], choices('2')[0]]);
+  const c = connectAuthenticatedClient(h.fakeWss);
+  assert.equal(parsedMessages(c).some((e) => ['music_search_results', 'music_intent'].includes(e.type)), false);
+});
+
+test('new searches, cancellation and disconnection invalidate pending search results', async (t) => {
+  const h = musicHarness();
+  t.after(() => h.server.close());
+  const a = connectAuthenticatedClient(h.fakeWss);
+  sendChat(a, '播放 lofi');
+  sendChat(a, '播放 lofi');
+  h.searches[1].resolve(choices('2'));
+  await flushMusic();
+  const currentCount = a.sent.length;
+  h.searches[0].resolve([choices('1')[0]]);
+  await flushMusic();
+  assert.equal(a.sent.length, currentCount, 'stale result must not emit completion');
+  assert.deepEqual(h.plays, []);
+  sendChat(a, '播放第二个');
+  await flushMusic();
+  assert.deepEqual(h.plays, [choices('2')[1]]);
+  sendChat(a, '播放 lofi');
+  sendChat(a, '取消');
+  const cancelledCount = a.sent.length;
+  h.searches[2].resolve([choices('3')[0]]);
+  await flushMusic();
+  assert.equal(a.sent.length, cancelledCount, 'cancelled result must stay silent');
+  sendChat(a, '播放 lofi');
+  a.close();
+  h.searches[3].resolve([choices('4')[0]]);
+  await flushMusic();
+  assert.deepEqual(h.plays, [choices('2')[1]]);
+  assert.ok(h.chats.some((c) => c.text === '取消'));
+});
+
+test('reconnect, invalid selection and terminal text cannot reuse browser candidates', async (t) => {
+  const h = musicHarness();
+  t.after(() => h.server.close());
+  const a = connectAuthenticatedClient(h.fakeWss);
+  sendChat(a, '播放 lofi');
+  h.searches[0].resolve(choices('1'));
+  await flushMusic();
+  h.server.sendUserMessage('播放第二个', 'terminal');
+  h.server.sendUserMessage('暂停音乐', 'terminal');
+  a.close();
+  const b = connectAuthenticatedClient(h.fakeWss);
+  sendChat(b, '播放第二个');
+  await flushMusic();
+  assert.deepEqual(h.plays, []);
+  assert.deepEqual(h.commands, []);
+  assert.equal(parsedMessages(b).at(-1).status, 'failed');
+  assert.equal(h.chats.filter((c) => c.source === 'terminal').length, 2);
+});
+
+test('music failures do not emit Claude errors or interrupt shared chat', async (t) => {
+  const h = musicHarness();
+  t.after(() => h.server.close());
+  const a = connectAuthenticatedClient(h.fakeWss);
+  sendChat(a, '播放 lofi');
+  h.searches[0].reject(new Error('simulated music failure'));
+  h.callbacks.onError('网易云暂时不可用');
+  await flushMusic();
+  assert.ok(parsedMessages(a).some((e) => e.type === 'music_intent' && e.status === 'failed'));
+  assert.ok(parsedMessages(a).some((e) => e.type === 'music_error'));
+  assert.equal(parsedMessages(a).some((e) => e.type === 'error'), false);
+  assert.ok(h.chats.some((c) => c.text === '播放 lofi'));
+});
 
 test('bridge server exposes websocket broadcast for authenticated user messages', () => {
   const { fakeWss, server } = createTestServer();

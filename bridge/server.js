@@ -30,7 +30,7 @@ function isLoopbackOrigin(request) {
   }
 }
 
-function createBridgeServer({ config, tokenManager, sessionFactory = createClaudeSession, WebSocketServerImpl = WebSocketServer }) {
+function createBridgeServer({ config, tokenManager, sessionFactory = createClaudeSession, WebSocketServerImpl = WebSocketServer, musicControllerFactory = createMusicController }) {
   const authenticatedClients = new Set();
   const eventHistory = [];
   const instanceId = crypto.randomUUID();
@@ -46,9 +46,9 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
   let claudeSession = null;
   let sessionStatus = STATUS.DISCONNECTED;
   let closing = false;
-  const music = createMusicController({
+  const music = musicControllerFactory({
     onState: (value) => broadcast({ type: SERVER_TYPES.MUSIC_STATE, value }),
-    onError: (message) => broadcast({ type: SERVER_TYPES.ERROR, message })
+    onError: (message) => broadcast({ type: 'music_error', message })
   });
 
   function isUserMessageWithinLimit(text) {
@@ -160,23 +160,38 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
     }
 
     try {
-      const intent = parseMusicIntent(clean);
+      const intent = source === 'browser' ? parseMusicIntent(clean) : null;
       if (intent) {
-        broadcast({ type: 'music_intent', status: 'started', action: intent.action });
-        const operation = intent.action === 'play_playlist'
-          ? music.searchPlaylists(intent.query).then((choices) => {
-            if (context) context.playlistChoices = choices;
-            if (choices.length === 0) return false;
-            if (choices.length === 1) return music.playPlaylistById(choices[0]);
-            broadcast({ type: 'music_search_results', query: intent.query, choices });
-            return true;
-          })
-          : intent.action === 'select_playlist' && context?.playlistChoices?.[intent.index]
-            ? music.playPlaylistById?.(context.playlistChoices[intent.index]) ?? Promise.resolve(false)
-            : music.command(intent.action);
-        operation.then((ok) => {
-          broadcast({ type: 'music_intent', status: ok ? 'completed' : 'failed', action: intent.action });
-        });
+        const searchVersion = context ? ++context.searchVersion : 0;
+        const isCurrent = () => !closing && context?.active && context.searchVersion === searchVersion;
+        const emit = (payload) => isCurrent() ? send(context.socket, payload) : false;
+        emit({ type: 'music_intent', status: 'started', action: intent.action });
+        if (intent.action === 'cancel_selection') {
+          if (context) context.playlistChoices = [];
+          emit({ type: 'music_intent', status: 'completed', action: intent.action });
+        } else {
+          if (intent.action === 'play_playlist' && context) context.playlistChoices = [];
+          (async () => {
+            if (!isCurrent()) return false;
+            if (intent.action === 'play_playlist') {
+              const choices = await music.searchPlaylists(intent.query);
+              if (!isCurrent() || choices.length === 0) return false;
+              if (choices.length === 1) return music.playPlaylistById(choices[0]);
+              context.playlistChoices = choices;
+              emit({ type: 'music_search_results', query: intent.query, choices });
+              return true;
+            }
+            if (intent.action === 'select_playlist') {
+              const selected = context.playlistChoices[intent.index];
+              if (!selected) return false;
+              context.playlistChoices = [];
+              return music.playPlaylistById(selected);
+            }
+            return music.command(intent.action);
+          })().then((ok) => {
+            emit({ type: 'music_intent', status: ok ? 'completed' : 'failed', action: intent.action });
+          }).catch(() => emit({ type: 'music_intent', status: 'failed', action: intent.action }));
+        }
       }
       return ensureClaudeSession().sendUserMessage(clean, source) !== false;
     } catch (error) {
@@ -228,7 +243,7 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
     }
 
     let authenticated = false;
-    const musicContext = { playlistChoices: [] };
+    const musicContext = { playlistChoices: [], socket, active: true, searchVersion: 0 };
     const authTimer = setTimeout(() => {
       if (!authenticated) {
         send(socket, { type: SERVER_TYPES.ERROR, message: 'Auth timeout' });
@@ -282,9 +297,9 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
       if (data.type === CLIENT_TYPES.MUSIC_COMMAND) {
         const action = typeof data.command === 'string' ? data.command : '';
         const args = Array.isArray(data.args) ? data.args.filter((value) => typeof value === 'string').slice(0, 2) : [];
-        music.command(action, args).then((accepted) => {
-          if (!accepted) send(socket, { type: SERVER_TYPES.ERROR, message: 'Music command was not accepted' });
-        });
+        Promise.resolve().then(() => music.command(action, args)).then((accepted) => {
+          if (!accepted) send(socket, { type: 'music_error', message: 'Music command was not accepted' });
+        }).catch(() => send(socket, { type: 'music_error', message: 'Music command was not accepted' }));
         return;
       }
 
@@ -306,6 +321,9 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
     const removeClient = () => {
       clearTimeout(authTimer);
       authenticatedClients.delete(socket);
+      musicContext.active = false;
+      musicContext.playlistChoices = [];
+      musicContext.searchVersion += 1;
     };
     socket.on('close', removeClient);
     socket.on('error', removeClient);
