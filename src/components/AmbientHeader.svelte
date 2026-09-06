@@ -174,6 +174,7 @@
 
   .focus-chip {
     height: 44px;
+    box-sizing: border-box;
     min-width: 46px;
     display: flex;
     align-items: center;
@@ -202,6 +203,7 @@
     cursor: pointer;
     box-shadow: inset 0 1px 0 rgba(232, 224, 216, 0.04);
     transition: border-color 140ms ease, background 140ms ease;
+    box-sizing: border-box;
   }
 
   .icon-button:hover,

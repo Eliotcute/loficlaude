@@ -341,6 +341,10 @@
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
+  .token-row {
+    align-items: end;
+  }
+
   .settings-panel {
     position: absolute;
     z-index: 30;
@@ -402,6 +406,7 @@
     min-height: 44px;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 11px;
+    box-sizing: border-box;
   }
 
   input {
