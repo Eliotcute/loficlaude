@@ -9,7 +9,7 @@
 | V1.1.0 | 2026/07/15 | Codex | 基于 V1.0 实现 review、浏览器 QA 与 lofi.cafe 调研形成可靠性增强版 |
 | V1.1.0 | 2026/07/27 | Codex | 同步实现状态，确认本地雨声、SessionStorage token 与 7 天历史策略 |
 
-当前发布决策：LoFiClaude 是氛围感 lofi 播放器，Claw 陪伴和 Claude 连续对话是增强层。V1.1 在用户手势后启用 YouTube lofi；连接本机 Bridge 且配置 ncm-cli 时，播放器优先控制本机网易云/mpv。任一音乐 provider 失败都不影响 Rainy Mood 与本地 fallback，音乐状态必须与雨声状态独立展示。
+当前发布决策：LoFiClaude 是氛围感 lofi 播放器，Claw 陪伴和 Claude 连续对话是增强层。V1.1 在用户手势后启用 YouTube lofi；连接本机 Bridge 且配置 ncm-cli 时，播放器优先控制本机网易云/mpv。默认雨声为项目内 `public/0.m4a`，Rainy Mood 为可选远端来源；任一音乐 provider 失败都不影响雨声，音乐状态必须与雨声状态独立展示。
 
 ## 一、概述（为什么做）
 

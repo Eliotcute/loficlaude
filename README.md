@@ -77,7 +77,7 @@ V1.1 release decision: YouTube lofi playback is enabled after user gesture. If t
 
 The room initializes YouTube lofi playback and real Rainy Mood rain audio only after a user gesture. `Start room` is the intended first gesture.
 
-Rainy Mood is the default rain source. If the remote audio fails, `RainPlayer` switches to local Web Audio fallback so the room remains usable. Rain intensity changes the effective gain and filter shape. Confirm Rainy Mood usage rights before public distribution.
+The bundled `public/0.m4a` is the default rain source. Rainy Mood remains an optional remote source when configured. If the selected audio fails, `RainPlayer` keeps the room usable with its local fallback path. Rain intensity changes the effective gain and filter shape.
 
 When the local Bridge is connected and `ncm-cli` is configured, the player controls the local NetEase Music `mpv` session. Credentials stay in the local `ncm-cli` configuration; the browser receives only music state. YouTube remains the browser fallback when the local provider is unavailable.
 
