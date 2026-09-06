@@ -161,9 +161,10 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
 
     try {
       const intent = parseMusicIntent(clean);
-      if (intent && intent.action !== 'play_playlist') {
+      if (intent) {
         broadcast({ type: 'music_intent', status: 'started', action: intent.action });
-        music.command(intent.action).then((ok) => {
+        const operation = intent.action === 'play_playlist' ? music.playPlaylist(intent.query) : music.command(intent.action);
+        operation.then((ok) => {
           broadcast({ type: 'music_intent', status: ok ? 'completed' : 'failed', action: intent.action });
         });
       }
