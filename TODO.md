@@ -7,7 +7,7 @@
 
 ## P1
 - [ ] Show concise music action feedback in Clawd bubble.
-- [ ] Add automated tests for intent and playlist flow.
+- [x] Add automated tests for intent and playlist flow.
 
 ## P2
 - [ ] Support selecting among multiple playlist results.
