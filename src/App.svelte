@@ -156,6 +156,12 @@
     if (event?.status === 'failed') claudeBubbleMessage = `音乐操作失败，请检查网易云登录和网络。`;
   }
 
+  function handleMusicSearchResults(event) {
+    const choices = Array.isArray(event?.choices) ? event.choices : [];
+    if (!choices.length) return;
+    claudeBubbleMessage = `找到 ${choices.length} 个网易云歌单：\n${choices.map((choice, index) => `${index + 1}. ${choice.name}`).join('\n')}\n请回复“播放第几个”。`;
+  }
+
   function setActivityState() {
     const now = Date.now();
     if (now - lastActivityNotifiedAt < 250) {
@@ -524,6 +530,7 @@
     claudeOrch.attachBridge(bridgeClient);
       bridgeClient.onMusicState = handleMusicState;
       bridgeClient.onMusicIntent = handleMusicIntent;
+      bridgeClient.onMusicSearchResults = handleMusicSearchResults;
     refreshClaudeState();
     unsubscribeBridgeSettings = ui.bridgeSettingsOpen.subscribe((open) => {
       if (open) {

@@ -271,6 +271,7 @@
     -webkit-line-clamp: 5;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    white-space: pre-line;
   }
 
   .streaming-text::after {

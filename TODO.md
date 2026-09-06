@@ -6,9 +6,9 @@
 - [x] Broadcast intent progress and real music state.
 
 ## P1
-- [ ] Show concise music action feedback in Clawd bubble.
+- [x] Show concise music action feedback in Clawd bubble.
 - [x] Add automated tests for intent and playlist flow.
 
 ## P2
-- [ ] Support selecting among multiple playlist results.
+- [x] Support selecting among multiple playlist results.
 - [ ] Persist the user's last selected playlist locally.

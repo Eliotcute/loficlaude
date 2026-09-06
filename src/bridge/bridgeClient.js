@@ -53,6 +53,7 @@ export class BridgeClient {
     this.onReplayGap = () => {};
     this.onMusicState = () => {};
     this.onMusicIntent = () => {};
+    this.onMusicSearchResults = () => {};
     this.restoreReplayState();
   }
 
@@ -250,6 +251,8 @@ export class BridgeClient {
         this.onMusicState(payload.value ?? {});
       } else if (payload.type === 'music_intent') {
         this.onMusicIntent(payload);
+      } else if (payload.type === 'music_search_results') {
+        this.onMusicSearchResults(payload);
       }
 
       this.markEventProcessed(payload);
