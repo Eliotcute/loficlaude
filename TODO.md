@@ -1,9 +1,9 @@
 # TODO
 
 ## P0
-- [ ] Add constrained music intent parser.
-- [ ] Add ncm-cli playlist search and playback.
-- [ ] Broadcast intent progress and real music state.
+- [x] Add constrained music intent parser.
+- [x] Add ncm-cli playlist search and playback.
+- [x] Broadcast intent progress and real music state.
 
 ## P1
 - [ ] Show concise music action feedback in Clawd bubble.
