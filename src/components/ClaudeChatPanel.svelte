@@ -184,26 +184,28 @@
     {/if}
   </div>
 
-  <form class="input-row" on:submit={handleSubmit}>
-    <input
-      type="text"
-      placeholder="ask something..."
-      value={inputValue}
-      on:input={(event) => (inputValue = event.currentTarget.value)}
-      aria-label="Ask Claude"
-      disabled={loading}
-    />
-    <button type="submit" disabled={loading || !inputValue.trim()}>{loading ? '...' : 'Send'}</button>
-  </form>
+  <div class="panel-footer">
+    <form class="input-row" on:submit={handleSubmit}>
+      <input
+        type="text"
+        placeholder="ask something..."
+        value={inputValue}
+        on:input={(event) => (inputValue = event.currentTarget.value)}
+        aria-label="Ask Claude"
+        disabled={loading}
+      />
+      <button type="submit" disabled={loading || !inputValue.trim()}>{loading ? '...' : 'Send'}</button>
+    </form>
 
-  {#if !bridgeConnected}
-    <div class="hint-row">
-      <p class="hint">Local companion mode. Connect bridge for Claude CLI.</p>
-      {#if canReconnect}
-        <button type="button" class="reconnect-btn" on:click={handleReconnect}>Reconnect</button>
-      {/if}
-    </div>
-  {/if}
+    {#if !bridgeConnected}
+      <div class="hint-row">
+        <p class="hint">Local companion mode. Connect bridge for Claude CLI.</p>
+        {#if canReconnect}
+          <button type="button" class="reconnect-btn" on:click={handleReconnect}>Reconnect</button>
+        {/if}
+      </div>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -349,6 +351,12 @@
     gap: 8px;
   }
 
+  .panel-footer {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+
   .hint {
     margin: 0;
     font-size: 11px;
@@ -361,16 +369,19 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    min-height: 40px;
   }
 
   .reconnect-btn {
-    height: 36px;
+    flex: 0 0 auto;
+    height: 40px;
     font-size: 11px;
     white-space: nowrap;
   }
 
   input,
   button {
+    box-sizing: border-box;
     border: 1px solid rgba(212, 165, 116, 0.28);
     border-radius: var(--control-radius);
     background: rgba(10, 12, 15, 0.82);
@@ -382,6 +393,10 @@
   input {
     padding: 0 10px;
     outline: none;
+  }
+
+  .hint {
+    min-width: 0;
   }
 
   button {
