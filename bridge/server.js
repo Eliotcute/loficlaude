@@ -347,6 +347,7 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
     const session = claudeSession;
     claudeSession = null;
     session?.close();
+    music.close?.();
     for (const client of wss.clients ?? []) {
       if (typeof client.terminate === 'function') {
         client.terminate();

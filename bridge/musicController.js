@@ -1,4 +1,5 @@
 const { execFile } = require('node:child_process');
+const { createNeteasePlayer } = require('./neteasePlayer');
 
 const COMMANDS = new Set(['play', 'pause', 'resume', 'stop', 'next', 'prev', 'state', 'volume', 'search']);
 
@@ -22,7 +23,10 @@ function readReply(output) {
   return parsed;
 }
 
-function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', onState = () => {}, onError = () => {} } = {}) {
+function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', onState = () => {}, onError = () => {}, player = null } = {}) {
+  const playback = player || (execFileImpl === execFile
+    ? createNeteasePlayer({ command })
+    : { ensureStarted: () => Promise.resolve(true), close() {} });
   let state = { provider: 'netease-local', status: 'unavailable', title: '', volume: null };
 
   function publish(next) {
@@ -62,7 +66,13 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
       onError('Music command arguments are not allowed');
       return Promise.resolve(false);
     }
-    return new Promise((resolve) => {
+    return Promise.resolve(['play', 'pause', 'resume', 'next', 'prev'].includes(action) ? playback.ensureStarted() : true).then((playerReady) => new Promise((resolve) => {
+      if (!playerReady && ['play', 'pause', 'resume', 'next', 'prev'].includes(action)) {
+        publish({ status: 'error' });
+        onError('网易云播放器未启动，请确认当前系统支持本机播放');
+        resolve(false);
+        return;
+      }
       const cliArgs = action === 'search' ? ['search', 'playlist', '--keyword', args[0] ?? 'lofi'] : [action, ...args];
       execFileImpl(command, [...cliArgs, '--output', 'json'], { timeout: 8000, maxBuffer: 128 * 1024 }, (error, stdout = '') => {
         if (error) {
@@ -101,7 +111,7 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
         publish(next);
         resolve(true);
       });
-    });
+    }));
   }
 
   return {
@@ -124,7 +134,13 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
     playPlaylistById(record) {
       const playlist = normalizePlaylist(record);
       if (!playlist) { onError('Invalid playlist'); return Promise.resolve(false); }
-      return new Promise((resolve) => execFileImpl(command, ['play', '--playlist', '--encrypted-id', playlist.id, '--original-id', playlist.originalId, '--output', 'json'], { timeout: 8000, maxBuffer: 128 * 1024 }, (error, stdout = '') => {
+      return playback.ensureStarted().then((playerReady) => {
+        if (!playerReady) {
+          publish({ status: 'error' });
+          onError('网易云播放器未启动，请确认当前系统支持本机播放');
+          return false;
+        }
+        return new Promise((resolve) => execFileImpl(command, ['play', '--playlist', '--encrypted-id', playlist.id, '--original-id', playlist.originalId, '--output', 'json'], { timeout: 8000, maxBuffer: 128 * 1024 }, (error, stdout = '') => {
         if (error) { onError('网易云歌单播放失败'); resolve(false); return; }
         try {
           const reply = readReply(stdout);
@@ -139,12 +155,14 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
           publish({ title: playlist.name, playlist: playlist.name, playlistRecord: playlist });
           resolve(true);
         });
-      }));
+        }));
+      });
     },
     async playPlaylist(query = 'lofi') {
       const choices = await this.searchPlaylists(query);
       return choices.length > 0 ? this.playPlaylistById(choices[0]) : false;
-    }
+    },
+    close() { playback.close(); }
   };
 }
 

@@ -81,6 +81,8 @@ The bundled `public/0.m4a` is the default rain source. Rainy Mood remains an opt
 
 When the local Bridge is connected, the player controls the local NetEase Music `mpv` session. Configure and log into `ncm-cli` first. A CLI failure is reported, not silently replaced with YouTube playback. Without a Bridge connection, the controls use YouTube.
 
+The Bridge lazily starts `ncm-cli tui` behind a hidden macOS `script` pseudo-terminal before the first NetEase playback command. This keeps the CLI's required player service alive without asking users to open a second terminal. The service is stopped with the Bridge; Linux and other platforms report an explicit local-player-unavailable state instead of pretending playback started.
+
 ### Conversation and music
 
 Music requests are parsed by conservative Bridge rules, not Claude tool calling. Claude receives the original text for conversation continuity but has no command execution tools. Only fixed, validated music actions reach `ncm-cli`.
