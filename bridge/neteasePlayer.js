@@ -12,8 +12,8 @@ function createNeteasePlayer({ command = 'ncm-cli', spawnImpl = spawn, platform 
     if (platform !== 'darwin') return Promise.resolve(false);
 
     starting = new Promise((resolve) => {
-      const child = spawnImpl('/usr/bin/script', ['-q', '/dev/null', command, 'tui'], {
-        stdio: ['pipe', 'ignore', 'ignore'],
+      const child = spawnImpl('/bin/sh', ['-c', `tail -f /dev/null | /usr/bin/script -q /dev/null ${command} tui`], {
+        stdio: ['ignore', 'ignore', 'ignore'],
         detached: false
       });
       processHandle = child;
@@ -37,7 +37,6 @@ function createNeteasePlayer({ command = 'ncm-cli', spawnImpl = spawn, platform 
     processHandle = null;
     starting = null;
     if (!child || child.killed) return;
-    child.stdin?.end();
     child.kill('SIGTERM');
   }
 

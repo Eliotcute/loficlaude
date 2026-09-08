@@ -20,12 +20,12 @@ test('netease player uses macOS script to keep the TUI service alive', async () 
 
   assert.equal(await player.ensureStarted(), true);
   assert.deepEqual(calls[0], {
-    command: '/usr/bin/script',
-    args: ['-q', '/dev/null', 'ncm-cli', 'tui'],
-    options: { stdio: ['pipe', 'ignore', 'ignore'], detached: false }
+    command: '/bin/sh',
+    args: ['-c', 'tail -f /dev/null | /usr/bin/script -q /dev/null ncm-cli tui'],
+    options: { stdio: ['ignore', 'ignore', 'ignore'], detached: false }
   });
   player.close();
-  assert.deepEqual(calls.slice(1), ['stdin.end', 'SIGTERM']);
+  assert.deepEqual(calls.slice(1), ['SIGTERM']);
 });
 
 test('netease player is unavailable on non-macOS hosts', async () => {
