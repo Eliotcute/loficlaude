@@ -55,6 +55,8 @@
     on:toggleplay={onTogglePlay}
     on:previous={onPreviousTrack}
     on:next={onNextTrack}
+    on:useyoutube={() => onTogglePlay('youtube')}
+    on:usենetease={() => onTogglePlay('netease-local')}
     on:setraintype={(event) => onSetRainType(event.detail.type)}
     on:setrainvolume={(event) => onSetRainVolume(event.detail.value)}
     on:settimer={(event) => onSelectTimer(event.detail.minutes)}

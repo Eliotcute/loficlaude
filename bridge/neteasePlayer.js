@@ -14,7 +14,7 @@ function createNeteasePlayer({ command = 'ncm-cli', spawnImpl = spawn, platform 
     starting = new Promise((resolve) => {
       const child = spawnImpl('/bin/sh', ['-c', `tail -f /dev/null | /usr/bin/script -q /dev/null ${command} tui`], {
         stdio: ['ignore', 'ignore', 'ignore'],
-        detached: false
+        detached: true
       });
       processHandle = child;
       let settled = false;
@@ -37,7 +37,13 @@ function createNeteasePlayer({ command = 'ncm-cli', spawnImpl = spawn, platform 
     processHandle = null;
     starting = null;
     if (!child || child.killed) return;
-    child.kill('SIGTERM');
+    // The TUI starts ncm-cli and mpv as descendants; terminate the whole
+    // detached process group so closing the last browser client cannot leave
+    // audio running in the background.
+    try { process.kill(-child.pid, 'SIGTERM'); } catch { child.kill('SIGTERM'); }
+    setTimeout(() => {
+      try { process.kill(-child.pid, 'SIGKILL'); } catch { /* already exited */ }
+    }, 1500).unref();
   }
 
   return { ensureStarted, close };

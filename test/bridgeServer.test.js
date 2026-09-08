@@ -170,7 +170,7 @@ test('new searches, cancellation and disconnection invalidate pending search res
   h.searches[3].resolve([choices('4')[0]]);
   await flushMusic();
   assert.deepEqual(h.plays, [choices('2')[1]]);
-  assert.ok(h.chats.some((c) => c.text === '取消'));
+  assert.equal(h.chats.some((c) => c.text === '取消'), false);
 });
 
 test('reconnect, invalid selection and terminal text cannot reuse browser candidates', async (t) => {
@@ -203,7 +203,7 @@ test('music failures do not emit Claude errors or interrupt shared chat', async 
   assert.ok(parsedMessages(a).some((e) => e.type === 'music_intent' && e.status === 'failed'));
   assert.ok(parsedMessages(a).some((e) => e.type === 'music_error'));
   assert.equal(parsedMessages(a).some((e) => e.type === 'error'), false);
-  assert.ok(h.chats.some((c) => c.text === '播放 lofi'));
+  assert.equal(h.chats.some((c) => c.text === '播放 lofi'), false);
 });
 
 test('saved playlists use the validated music adapter without invoking Claude', async (t) => {

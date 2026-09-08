@@ -362,7 +362,20 @@
     refreshClaudeState();
   }
 
-  async function togglePlayback() {
+  async function togglePlayback(source = null) {
+    if (source === 'youtube') {
+      player.musicProvider.set('youtube');
+      player.isPlaying.set(false);
+      player.musicStatus.set('idle');
+      await audio.initAudio(true);
+      return;
+    }
+    if (source === 'netease-local' && get(connectionStatus) === 'connected') {
+      player.musicProvider.set('netease-local');
+      audio.getPlayers().youtubePlayer?.pause();
+      await sendClaudeMessage('播放网易云 lofi');
+      return;
+    }
     if (get(connectionStatus) !== 'connected' && $musicProvider !== 'youtube') {
       player.musicProvider.set('youtube');
       player.isPlaying.set(false);

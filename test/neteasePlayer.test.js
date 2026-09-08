@@ -22,7 +22,7 @@ test('netease player uses macOS script to keep the TUI service alive', async () 
   assert.deepEqual(calls[0], {
     command: '/bin/sh',
     args: ['-c', 'tail -f /dev/null | /usr/bin/script -q /dev/null ncm-cli tui'],
-    options: { stdio: ['ignore', 'ignore', 'ignore'], detached: false }
+    options: { stdio: ['ignore', 'ignore', 'ignore'], detached: true }
   });
   player.close();
   assert.deepEqual(calls.slice(1), ['SIGTERM']);

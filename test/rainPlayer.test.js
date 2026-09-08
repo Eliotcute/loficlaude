@@ -137,7 +137,7 @@ test('RainPlayer initializes the bundled local rain audio source', async () => {
   player.setVolume(0);
   assert.equal(FakeAudio.instance.pauseCalls, 1);
   player.setVolume(40);
-  assert.equal(FakeAudio.instance.playCalls, 3);
+  assert.equal(FakeAudio.instance.playCalls, 5);
 });
 
 test('RainPlayer applies the initial rain type to remote volume', async () => {

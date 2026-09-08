@@ -142,6 +142,10 @@
   {#if expanded}
     <div class="expanded-body" transition:slide={{ duration: 250, easing: (t) => 1 - Math.pow(1 - t, 3) }}>
       <div class="section-heading">音乐</div>
+      <div class="chip-row source-switch" aria-label="音乐来源">
+        <button type="button" class:active={musicProvider === 'youtube'} on:click={() => forward('useyoutube')}>YouTube</button>
+        <button type="button" class:active={musicProvider === 'netease-local'} on:click={() => forward('usেনetease')}>网易云</button>
+      </div>
       <div class="label">{error ? '音频提示' : musicStatus === 'disabled' ? '音乐未启动' : isLoading ? '正在加载音乐' : musicStatus === 'playing' ? '正在播放' : '已暂停'}</div>
       <div class="title-row">
         <span class="genre-dot" style={`background: ${genreColor};`} aria-hidden="true"></span>

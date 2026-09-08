@@ -40,10 +40,14 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
       const parsed = readReply(output);
       const value = parsed?.state ?? parsed;
       if (!['playing', 'paused', 'stopped', 'idle'].includes(value?.status)) throw new Error('Missing player state');
-      return {
+      const next = {
         status: value?.status === 'playing' ? 'playing' : value?.status === 'paused' ? 'paused' : 'idle',
         volume: Number.isFinite(value?.volume) ? value.volume : null
       };
+      if (typeof value?.title === 'string') next.title = value.title;
+      if (Number.isFinite(value?.position)) next.position = value.position;
+      if (Number.isFinite(value?.duration)) next.duration = value.duration;
+      return next;
     } catch {
       return { status: 'error', message: '无法确认网易云播放状态' };
     }

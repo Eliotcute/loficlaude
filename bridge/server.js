@@ -46,6 +46,8 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
   let claudeSession = null;
   let sessionStatus = STATUS.DISCONNECTED;
   let closing = false;
+  let orphanStopTimer = null;
+  const orphanStopDelay = config.orphanStopDelay ?? 3000;
   const music = musicControllerFactory({
     onState: (value) => broadcast({ type: SERVER_TYPES.MUSIC_STATE, value }),
     onError: (message) => broadcast({ type: 'music_error', message })
@@ -162,6 +164,7 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
     try {
       const intent = source === 'browser' ? parseMusicIntent(clean) : null;
       if (intent) {
+        broadcast({ type: SERVER_TYPES.USER_MESSAGE, text: clean, source });
         const searchVersion = context ? ++context.searchVersion : 0;
         const isCurrent = () => !closing && context?.active && context.searchVersion === searchVersion;
         const emit = (payload) => isCurrent() ? send(context.socket, payload) : false;
@@ -192,6 +195,10 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
             emit({ type: 'music_intent', status: ok ? 'completed' : 'failed', action: intent.action });
           }).catch(() => emit({ type: 'music_intent', status: 'failed', action: intent.action }));
         }
+        // Music controls are handled locally; don't send them to Claude, whose
+        // restricted session cannot execute the player command and would emit
+        // a misleading "no tools" response.
+        return true;
       }
       return ensureClaudeSession().sendUserMessage(clean, source) !== false;
     } catch (error) {
@@ -275,6 +282,7 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
 
         authenticated = true;
         authenticatedClients.add(socket);
+        if (orphanStopTimer) { clearTimeout(orphanStopTimer); orphanStopTimer = null; }
         clearTimeout(authTimer);
         send(socket, {
           type: SERVER_TYPES.READY,
@@ -331,6 +339,12 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
       musicContext.active = false;
       musicContext.playlistChoices = [];
       musicContext.searchVersion += 1;
+      if (authenticated && authenticatedClients.size === 0 && !closing) {
+        orphanStopTimer = setTimeout(() => {
+          orphanStopTimer = null;
+          if (!closing && authenticatedClients.size === 0) music.command('stop');
+        }, orphanStopDelay);
+      }
     };
     socket.on('close', removeClient);
     socket.on('error', removeClient);
@@ -344,6 +358,7 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
     }
 
     closing = true;
+    if (orphanStopTimer) { clearTimeout(orphanStopTimer); orphanStopTimer = null; }
     const session = claudeSession;
     claudeSession = null;
     session?.close();
