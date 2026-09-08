@@ -193,10 +193,13 @@ export class RainPlayer {
     }
     if (this.usingFallback && this.fallbackStarted) {
       this.applyPreset(type);
+      this.play().catch(() => {});
       return;
     }
 
     this.applyPreset(type);
+    // Selecting a rain preset after Stop is an explicit resume action.
+    this.play().catch(() => {});
   }
 
   stop() {
