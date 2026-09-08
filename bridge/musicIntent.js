@@ -4,7 +4,7 @@ const RULES = [
   { pattern: /^(下一首|next song)$/i, action: 'next' },
   { pattern: /^(上一首|prev(?:ious)? song)$/i, action: 'prev' },
   { pattern: /^(停止音乐|停止播放|stop music)$/i, action: 'stop' },
-  { pattern: /^(?:切换到网易云(?:播放)?|网易云播放|播放网易云)(?:[，,]?\s*(?:播放)?(?:一些|一下)?\s*lofi)?$/i, action: 'play_playlist', query: 'lofi' },
+  { pattern: /^(?:切换到网易云(?:音乐)?(?:播放)?|网易云(?:音乐)?播放|播放网易云(?:音乐)?)(?:[，,]?\s*(?:播放)?(?:一些|一下)?\s*lofi)?$/i, action: 'play_playlist', query: 'lofi' },
   { pattern: /^播放(?:一些|一下)?\s*lofi$/i, action: 'play_playlist', query: 'lofi' },
   { pattern: /^play lofi$/i, action: 'play_playlist', query: 'lofi' }
 ];
