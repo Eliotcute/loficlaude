@@ -37,15 +37,8 @@
 
   function resetInactivityTimer() {
     clearInactivityTimer();
-    if (!expanded) {
-      return;
-    }
-
-    inactivityTimeout = setTimeout(() => {
-      inactivityTimeout = null;
-      expanded = false;
-      ui.miniPlayerExpanded.set(false);
-    }, 5000);
+    // Keep the drawer open while the user is interacting with Clawd or the
+    // chat input; closing after a timer can detach the conversation target.
   }
 
   function openExpanded() {
