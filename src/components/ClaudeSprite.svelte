@@ -1,7 +1,7 @@
 <script>
   import { createEventDispatcher, onMount } from 'svelte';
   import { claude, claudeForm, ui } from '../stores/appState.js';
-  import { FORM_NAMES, getForm, getFormName, getPaletteForForm } from '../canvas/claudepixForms.js';
+  import { FORM_NAMES, FORMS, getForm, getFormName, getFormSelectionFrame, getPaletteForForm } from '../canvas/claudepixForms.js';
   import { createClaudeMotionState, getPatrolBounds, updateClaudeMotion } from '../canvas/claudeMotion.js';
 
   const dispatch = createEventDispatcher();
@@ -271,9 +271,11 @@
   function selectForm(index) {
     const nextFormIndex = ((Number(index) || 0) % FORM_NAMES.length + FORM_NAMES.length) % FORM_NAMES.length;
     claudeForm.set(nextFormIndex);
-    resetFormAnimation(nextFormIndex);
-    const form = getForm(nextFormIndex);
-    drawGrid(form.frames[0]?.grid ?? form.baseGrid, getPaletteForForm(nextFormIndex));
+    const selected = getFormSelectionFrame(nextFormIndex);
+    activeFormIndex = nextFormIndex;
+    formFrameIndex = selected.index;
+    formFrameElapsedMs = 0;
+    drawGrid(selected.frame.grid, getPaletteForForm(nextFormIndex));
     formMenuOpen = false;
     dispatch('formchange', {
       index: nextFormIndex,
@@ -464,6 +466,8 @@
             type="button"
             role="menuitem"
             class:selected={index === $currentClaudeForm}
+            aria-label={`${name} (${FORMS[index].id})`}
+            title={FORMS[index].name}
             on:pointerdown|stopPropagation
             on:click|stopPropagation={() => selectForm(index)}
           >
