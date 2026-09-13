@@ -4,6 +4,8 @@ function clamp(value, min, max) {
 
 const PATROL_SPEED = 34;
 const IDLE_PAUSE_MS = 1000;
+const GRAVITY = 1800;
+const TERMINAL_VELOCITY = 1100;
 export let chatPaused = false;
 
 export function setChatPaused(value) {
@@ -38,13 +40,34 @@ export function createClaudeMotionState(viewportWidth, viewportHeight) {
     idleTime: IDLE_PAUSE_MS,
     frameTime: 0,
     frameIndex: 0,
-    isDragging: false
+    isDragging: false,
+    isFalling: false,
+    velocityY: 0
   };
 }
 
 export function updateClaudeMotion(claudeState, viewport, dt) {
   const bounds = getPatrolBounds(viewport.width, viewport.height, viewport.playerExpanded);
   claudeState.x = clamp(claudeState.x, bounds.left, bounds.right);
+
+  if (claudeState.isDragging) {
+    return;
+  }
+
+  if (claudeState.isFalling) {
+    claudeState.velocityY = Math.min(TERMINAL_VELOCITY, claudeState.velocityY + GRAVITY * dt);
+    claudeState.y += claudeState.velocityY * dt;
+
+    if (claudeState.y >= bounds.y) {
+      claudeState.y = bounds.y;
+      claudeState.velocityY = 0;
+      claudeState.isFalling = false;
+      claudeState.mode = 'idle';
+      claudeState.idleTime = IDLE_PAUSE_MS;
+    }
+    return;
+  }
+
   claudeState.y = bounds.y;
 
   claudeState.frameTime += dt;
@@ -61,10 +84,6 @@ export function updateClaudeMotion(claudeState, viewport, dt) {
     claudeState.mode === 'blocked' ||
     claudeState.mode === 'happy'
   ) {
-    return;
-  }
-
-  if (claudeState.isDragging) {
     return;
   }
 

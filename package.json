@@ -1,13 +1,20 @@
 {
-  "name": "phase1-init",
+  "name": "loficlaude",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.1.0",
   "type": "module",
+  "bin": {
+    "loficlaude": "bin/loficlaude.js"
+  },
   "scripts": {
     "dev": "vite",
+    "bridge": "node bin/loficlaude.js bridge",
     "test": "node --test",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:build": "node scripts/verifyProductionBuild.js",
+    "qa:browser": "node scripts/qaSceneBrowser.mjs && node scripts/qaMusicBrowser.mjs",
+    "ci": "npm test && npm run build && npm run verify:build && git diff --check"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.1.2",

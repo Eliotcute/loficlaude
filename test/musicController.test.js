@@ -1,0 +1,120 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { createMusicController } from '../bridge/musicController.js';
+
+const playlist = { id: 'A'.repeat(32), originalId: '2540031947', name: 'Lofi study' };
+
+test('music controller only executes whitelisted commands and parses state', async () => {
+  const calls = [];
+  const controller = createMusicController({
+    execFileImpl(command, args, options, callback) {
+      calls.push({ command, args, options });
+      callback(null, JSON.stringify({ state: { status: 'playing', volume: 65 } }));
+    }
+  });
+
+  assert.equal(await controller.command('state'), true);
+  assert.deepEqual(controller.getState(), {
+    provider: 'netease-local',
+    status: 'playing',
+    title: '',
+    volume: 65
+  });
+  assert.equal(await controller.command('shell', ['rm', '-rf']), false);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].args, ['state', '--output', 'json']);
+});
+
+test('playlist playback rejects CLI business failures even with exit code zero', async () => {
+  const states = [];
+  const controller = createMusicController({
+    onState: (state) => states.push(state),
+    execFileImpl(command, args, options, callback) {
+      callback(null, JSON.stringify({ success: false, message: 'private diagnostic detail' }));
+    }
+  });
+  assert.equal(await controller.playPlaylistById(playlist), false);
+  assert.equal(states.some((state) => state.status === 'playing'), false);
+});
+
+test('playlist success requires a confirmed playing state', async () => {
+  const calls = [];
+  const controller = createMusicController({
+    execFileImpl(command, args, options, callback) {
+      calls.push(args);
+      callback(null, JSON.stringify(args[0] === 'state'
+        ? { success: true, state: { status: 'stopped', volume: 60 } }
+        : { success: true }));
+    }
+  });
+  assert.equal(await controller.playPlaylistById(playlist), false);
+  assert.deepEqual(calls.map((args) => args[0]), ['play', 'state']);
+  assert.equal(controller.getState().status, 'idle');
+});
+
+test('selected playlist passes validated IDs and publishes only confirmed state', async () => {
+  const calls = [];
+  const controller = createMusicController({
+    execFileImpl(command, args, options, callback) {
+      calls.push(args);
+      callback(null, JSON.stringify(args[0] === 'state'
+        ? { success: true, state: { status: 'playing', volume: 55 } }
+        : { success: true }));
+    }
+  });
+  assert.equal(await controller.playPlaylistById(playlist), true);
+  assert.deepEqual(calls[0], ['play', '--playlist', '--encrypted-id', playlist.id, '--original-id', playlist.originalId, '--output', 'json']);
+  assert.equal(controller.getState().title, playlist.name);
+  assert.equal(controller.getState().volume, 55);
+  assert.equal(controller.getState().status, 'playing');
+});
+
+test('invalid playlist IDs and invalid search arguments never reach the CLI', async () => {
+  let calls = 0;
+  const controller = createMusicController({
+    execFileImpl(command, args, options, callback) { calls++; callback(null, '{}'); }
+  });
+  for (const record of [null, {}, { ...playlist, id: '--help' }, { ...playlist, originalId: '../file' }]) {
+    assert.equal(await controller.playPlaylistById(record), false);
+  }
+  assert.deepEqual(await controller.searchPlaylists({ query: 'lofi' }), []);
+  assert.equal(await controller.command('search', ['lofi', '--help']), false);
+  assert.equal(calls, 0);
+});
+
+test('search accepts the verified records schema and strips unrelated fields', async () => {
+  const controller = createMusicController({
+    execFileImpl(command, args, options, callback) {
+      callback(null, JSON.stringify({ code: 200, data: { records: [
+        { ...playlist, originalId: Number(playlist.originalId), describe: 'not for UI', extMap: {} },
+        { id: '--help', originalId: 1, name: 'invalid' }
+      ] } }));
+    }
+  });
+  assert.deepEqual(await controller.searchPlaylists('lofi'), [playlist]);
+});
+
+test('invalid JSON cannot be mistaken for an idle player', async () => {
+  const controller = createMusicController({
+    execFileImpl(command, args, options, callback) { callback(null, 'not JSON'); }
+  });
+  assert.equal(await controller.refresh(), false);
+  assert.equal(controller.getState().status, 'error');
+});
+
+test('music controller reports missing CLI without exposing command details', async () => {
+  const errors = [];
+  const controller = createMusicController({
+    onError: (message) => errors.push(message),
+    execFileImpl(command, args, options, callback) {
+      const error = new Error('missing');
+      error.code = 'ENOENT';
+      callback(error);
+    }
+  });
+
+  assert.equal(await controller.command('resume'), false);
+  assert.deepEqual(errors, ['网易云音乐 CLI 未安装']);
+  assert.equal(controller.getState().status, 'error');
+});

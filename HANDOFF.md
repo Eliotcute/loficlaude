@@ -1,94 +1,36 @@
-# LoFiClaude — Handoff
+# LoFiClaude Handoff
 
-> 最后更新：2026-05-24
-> 当前版本：v1.0.0
-> 分支：`master`
-> 项目目录：`/Users/lieliot/Documents/eliot-codex/loficlaude`
+## Goal
+全面体检后的 P0/P1/P2 工程优化与本轮自动验收完成（2026-09-06）。真实第三方听音/会话和跨浏览器人工验收单列，不视为已通过。以下状态优先于历史对话和旧审计评分。
 
-## 项目一句话
+## Decisions
+- Claude session 继续使用 `--permission-mode dontAsk --tools ""`。
+- Bridge 只执行固定音乐白名单，不执行模型生成的任意命令。
+- 当前实现为 Bridge 固定规则预解析，用户原文同时进入 Claude 文本会话；不是 Claude tool calling。此边界不应在文档中混称。
+- 搜索有多个歌单时等待选择，单个结果时调用该歌单；选择状态属于浏览器连接，重连需要重新搜索。
+- 凭证只留在本机 ncm-cli 配置，浏览器只接收状态。
 
-一个在 ASCII 雨夜里陪你和本地 Claude 一起编码的 lofi 空间。浏览器和终端是同一个 Claude 的两个窗口。
+## Progress And Evidence
+- P0 完成（2026-09-06）：候选与意图事件只发请求连接、不重放；新搜索/取消/断开会使旧异步结果与状态失效；终端保持文本会话，不执行浏览器音乐意图；CLI 假成功与错误 JSON 被拒绝。26 项 bridgeServer/musicIntent/musicController 专项测试通过，独立规格复核通过。
+- P0 本地提交：`288d8f4`。
+- 场景目录统一在 asciiScenes.js；Header/选择器/持久化/粒子共用。controller 校验业务失败、未播放、非法参数和损坏 JSON。
+- P1 完成（2026-09-06）：音乐反馈/候选独立于 Claude 回复，5 个候选可见且等高，取消/新搜索/断线清空；music_error 不走 Claude 错误通道。本机录音状态不再冒充 Rainy Mood。13 项 client/feedback 专项测试通过；Chromium 1440x900、768x1024、375x812 交互和雨点像素检查通过，截图在 output/playwright（已忽略）。最近歌单恢复的基础代码随前端契约一同提交，P2 再做行为验收。
+- P1 本地提交：`0d4b503`。
+- P2 完成：确认播放后仅保存歌单 ID/名称，刷新不自动播放，点击恢复；Clawd 音乐动作不打断回复；旧启动提示计时器不能关闭新回复；YouTube 延迟回调不能覆盖网易云状态。
+- P2 渲染：静态背景只在尺寸变化/换景时重绘，雨点层独立。Chromium 检查 11 场景有实际像素、13 形态选项可见、切换形态改变像素、自主巡游及拖拽下落正常；稳定场景采样窗口内静态重绘 0 次。
+- 可重复浏览器检查：`npm run qa:browser`（需已有 Playwright，见 README）。音乐使用测试 Bridge，不调用真实 Claude/ncm-cli。四档对话视口：1440x900、768x1024、375x812、375x667；5 候选等高、无横向溢出、无 pageerror。截图与 JSON 位于忽略的 `output/playwright/`。
 
-## 版本标签
+## Acceptance
+- `npm test`：152 通过、0 失败、0 跳过；含本机 Socket 与 pairing 测试（经允许在沙箱外运行）。
+- `npm run build`、`npm run verify:build`、`git diff --check`：通过。
+- 不新增运行时依赖，不迁移 p5.js/Three.js，不改 Claude 工具权限，不使用远端 CI。
 
-```bash
-git checkout v0.3   # Canvas MVP
-git checkout v0.4   # ASCII + DOM Claude
-git checkout v0.6   # ASCII 场景 + Bridge + Claude companion
-git checkout v0.7   # Bridge E2E + Streaming Companion
-git checkout v0.9   # Chat UX + Music + Forms
-git checkout v1.0   # Terminal Companion (最新)
-```
+## Remaining Manual Acceptance
+- 用户验收真实 ncm-cli 搜索/播放/暂停/切歌、音频听感和 Claude 终端/浏览器续聊。本轮只验证 adapter/协议和测试替身，不伪造真实服务结果。
+- Safari、Firefox、真机与长期温度/功耗检查由用户完成；短时像素与绘制预算不等于全天性能保证。
+- 公开发布前确认本机雨声录音及可选远端音源授权。
 
-## 当前状态
-
-### 已完成
-
-| 模块 | 说明 |
-|---|---|
-| ASCII 场景 | Canvas 3 场景（`lofi-night` / `soft-rain` / `star-drift`） |
-| 音乐 | 8 个 lofi 频道，带 genre 色点、自动切歌、兜底和自定义 URL |
-| 雨声 | Web Audio 程序化粉红噪声，3 档强度 |
-| Claude Sprite | DOM/CSS transform 定位，支持走动、点击、拖拽 |
-| 形态系统 | `claudepix` 形态库 + 三击切换 |
-| 播放器 | 底部 Drawer 的 collapsed / expanded 状态 |
-| 对话体验 | 气泡到面板的渐进式对话，支持流式输出 |
-| Bridge | WebSocket `:9120` + Unix Socket `/tmp/loficlaude-claude.sock` |
-| 终端 Companion | `socat` 直连 socket，实时双向 Claude 会话 |
-| 安全 | token 认证、socket 0600、无硬编码密钥 |
-
-## 最近修复
-
-- 修掉了黑屏启动问题：`src/canvas/claudepixForms.js` 的浏览器侧加载改为 `import.meta.glob`，不再在前端路径里误走 `node:fs/promises`。
-- 修复后应用恢复渲染。
-- 验证结果：`npm test` 通过，`npm run build` 通过。
-- 浏览器复核结果：页面壳、Claude 按钮、头部、折叠态播放器都正常显示，控制台干净。
-
-## 仍要盯的点
-
-- 底部播放器折叠 / 展开时，Claude 小人要始终站在播放器上方，并随播放器升降联动。
-- 这块在桌面和移动端都要再看一遍，尤其是展开播放器后的垂直定位。
-- Vite 还有警告，主要围绕 `new URL('../../archive/misc/claudepix_presets/', import.meta.url)` 和 `node:fs/promises` 路径提示；目前不影响运行，但后面可以继续收敛。
-
-## 技术栈
-
-| 层 | 技术 |
-|---|---|
-| 框架 | Svelte 5 + Vite 8 |
-| 音频 | YouTube iframe API + Web Audio API |
-| Canvas | 原生 Canvas 2D |
-| 桥接 | WebSocket + Unix Domain Socket |
-| 字体 | Press Start 2P + IBM Plex Mono |
-
-## 关键文件
-
-- `src/App.svelte`
-- `src/canvas/claudepixForms.js`
-- `src/canvas/claudeMotion.js`
-- `src/components/ClaudeSprite.svelte`
-- `src/components/ExpandedPlayer.svelte`
-- `src/components/ClaudeChatPanel.svelte`
-- `src/bridge/bridgeClient.js`
-- `src/stores/bridgeState.js`
-- `bridge/server.js`
-- `bridge/claude.js`
-- `test/claudepixForms.test.js`
-
-## 运行
-
-```bash
-cd /Users/lieliot/Documents/eliot-codex/loficlaude
-npm run dev
-node bridge/index.js
-npm test
-npm run build
-
-./bridge/loficlaude-cli
-# 或: socat - UNIX-CONNECT:/tmp/loficlaude-claude.sock
-```
-
-## 下一步建议
-
-1. 把 Claude 与播放器的垂直联动再做一次桌面 / 移动端 QA。
-2. 如果还要继续收尾，再清一轮 Vite 警告。
-3. 保持 lofi-only 播放列表，不再往电台里加非 lofi 频道。
+## Next
+1. 按上方人工验收清单使用产品，发现问题后开具体修复项。
+2. 周统计、语义场景仍为后续产品路线图，不计入本轮 Goal。
+3. 只以本文件与 TODO.md 继续；SESSION_LOG/archive 保留为历史，不重新执行旧方案。

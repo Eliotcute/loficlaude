@@ -6,6 +6,8 @@ export const claudeForm = writable(0); // 0-12, claudepix preset form index
 
 export const player = {
   isPlaying: writable(false),
+  musicStatus: writable('disabled'),
+  musicProvider: writable('youtube'), // youtube | netease-local | none
   currentTrackIndex: writable(0),
   currentTrackTitle: writable('lofi hip hop radio - beats'),
   isLoading: writable(false),
@@ -15,11 +17,12 @@ export const player = {
 export const rain = {
   volume: writable(60), // 0-100
   type: writable('medium'), // light | medium | heavy
-  muted: writable(false)
+  muted: writable(false),
+  sourceStatus: writable('idle') // idle | local-recording | rainy-mood | fallback | stopped
 };
 
 export const scene = {
-  current: writable('lofiNight'), // lofiNight | softRain | starDrift
+  current: writable('lofiNight'), // lofiNight | softRain | starDrift | fmStudio | recordRoom | focusConsole
   locked: writable(false),
   transitionProgress: writable(0)
 };
@@ -28,6 +31,13 @@ export const timer = {
   active: writable(false),
   minutes: writable(45),
   remainingSeconds: writable(2700)
+};
+
+export const focus = {
+  todayMinutes: writable(0),
+  streakDays: writable(0),
+  sessionCount: writable(0),
+  lastSummary: writable('')
 };
 
 export const claude = {
@@ -54,6 +64,7 @@ export const ui = {
   rainPopoverOpen: writable(false),
   timerPopoverOpen: writable(false),
   scenePopoverOpen: writable(false),
+  bridgeSettingsOpen: writable(false),
   shortcutVisible: writable(false)
 };
 

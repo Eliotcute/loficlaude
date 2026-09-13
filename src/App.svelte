@@ -8,8 +8,8 @@
   import KeyboardHint from './components/KeyboardHint.svelte';
   import AsciiBackground from './components/AsciiBackground.svelte';
   import ClaudeSprite from './components/ClaudeSprite.svelte';
-  import { PLAYLIST, addCustomTrackFromUrl } from './audio/YouTubePlayer.js';
-  import { hasStarted, uiMode, player, rain, scene, timer, claude, ui } from './stores/appState.js';
+  import { PLAYLIST } from './audio/YouTubePlayer.js';
+  import { hasStarted, uiMode, player, rain, scene, timer, claude, ui, focus } from './stores/appState.js';
   import { bridgeClient } from './bridge/bridgeClient.js';
   import { connectionStatus } from './stores/bridgeState.js';
   import { setupKeyboardShortcuts } from './utils/keyboard.js';
@@ -18,17 +18,29 @@
   import { createClaudeOrchestrator } from './utils/claudeOrch.js';
   import {
     PERSIST_KEY,
+    FOCUS_KEY,
     SCENE_ORDER,
+    createFocusSnapshot,
+    createStartedFocusSnapshot,
     createPersistedSnapshot,
     getSceneName,
+    incrementActiveFocusMinute,
     normalizeTrackIndex,
     normalizeTrackTitle,
-    parsePersistedSnapshot
+    parseFocusSnapshot,
+    parsePersistedSnapshot,
+    readStorageValue,
+    writeStorageValue
   } from './utils/appPersistence.js';
+  import { createSessionSummary, getStartRitualCopy } from './utils/rituals.js';
+  import { emptyMusicFeedback, updateMusicFeedback } from './utils/musicFeedback.js';
+  import { normalizeRecentPlaylist, readRecentPlaylist, saveRecentPlaylist } from './utils/recentPlaylist.js';
 
   const currentTrackIndex = player.currentTrackIndex;
   const currentTrackTitle = player.currentTrackTitle;
   const playerIsPlaying = player.isPlaying;
+  const musicStatus = player.musicStatus;
+  const musicProvider = player.musicProvider;
   const rainVolume = rain.volume;
   const rainType = rain.type;
   const rainMuted = rain.muted;
@@ -43,12 +55,17 @@
   let suppressPersist = false;
   let unsubscribePersist = [];
   let unsubscribeScene;
+  let unsubscribeBridgeSettings;
   let teardownKeyboard = () => {};
+  let focusInterval;
+  let restoredFocusSnapshot = null;
   let lastNonZeroRainVolume = 60;
+  let lastActivityNotifiedAt = 0;
 
   let claudeBubbleVisible = false;
   let claudeBubblePassive = false;
   let claudeBubbleMessage = '今天想做点什么呢？';
+  let claudeCompanionState = 'resting';
   let claudePanelOpen = false;
   let claudeLoading = false;
   let claudeCanReconnect = false;
@@ -58,27 +75,30 @@
   let claudeBridgeStatus = 'disconnected';
   let claudeToolRunning = null;
   let claudeLastError = '';
+  let musicFeedback = emptyMusicFeedback();
+  let recentPlaylist = null;
+  // Formal V1.1 decision: ship the lofi station with explicit rain/music states.
+  const ENABLE_YOUTUBE_AUDIO = true;
 
   const audio = createAudioInitializer({
+    enableYouTube: ENABLE_YOUTUBE_AUDIO,
+    shouldUseYouTube: () => get(connectionStatus) !== 'connected',
     mountId: 'youtube-player-host',
     getCurrentTrackIndex: () => $currentTrackIndex,
     getRainType: () => $rainType,
     getRainMuted: () => $rainMuted,
     getRainVolume: () => $rainVolume,
     onLoading: (loading) => player.isLoading.set(loading),
-    onError: (error) => player.error.set(error)
+    onMusicStatus: (status) => player.musicStatus.set(status),
+    onError: (error) => player.error.set(error),
+    onRainStatus: (status) => rain.sourceStatus.set(status)
   });
 
   const claudeOrch = createClaudeOrchestrator({
-    apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY ?? '',
-    getChatContext: () => ({
-      trackName: $currentTrackTitle,
-      sceneName: getSceneName($currentScene),
-      rainVolume: $rainVolume
-    }),
     onMood: (mood) => claude.mood.set(mood),
     onBubbleVisible: (visible) => claude.bubbleVisible.set(visible),
-    onPanelVisible: (open) => claude.chatOpen.set(open)
+    onPanelVisible: (open) => claude.chatOpen.set(open),
+    onStateChange: applyClaudeState
   });
 
   const session = createSessionController({
@@ -96,16 +116,18 @@
       if ($hasStarted) {
         uiMode.set('default');
       }
+      claudeOrch.markActive();
+      refreshClaudeState();
     },
     isSceneLocked: () => $sceneLocked,
     onSceneRotate: rotateScene
   });
 
-  function refreshClaudeState() {
-    const state = claudeOrch.getState();
+  function applyClaudeState(state) {
     claudeBubbleVisible = state.bubbleVisible;
     claudeBubblePassive = state.bubblePassive;
     claudeBubbleMessage = state.bubbleMessage;
+    claudeCompanionState = state.companionState ?? 'resting';
     claudePanelOpen = state.panelOpen;
     claudeLoading = state.loading;
     claudeCanReconnect = state.canReconnect;
@@ -117,7 +139,55 @@
     claudeLastError = state.lastError ?? '';
   }
 
+  function refreshClaudeState() {
+    applyClaudeState(claudeOrch.getState());
+  }
+
+  function handleMusicState(state) {
+    const status = state?.status ?? 'unavailable';
+    if (state?.provider === 'netease-local') {
+      player.musicProvider.set('netease-local');
+      audio.getPlayers().youtubePlayer?.pause();
+    }
+    player.musicStatus.set(status === 'playing' ? 'playing' : status === 'paused' ? 'paused' : status === 'error' ? 'error' : 'idle');
+    player.isPlaying.set(status === 'playing');
+    if (status !== 'error') player.error.set(null);
+    if (state?.title) player.currentTrackTitle.set(state.title);
+    if (status === 'playing') {
+      const record = normalizeRecentPlaylist(state?.playlistRecord);
+      if (record) {
+        recentPlaylist = record;
+        saveRecentPlaylist(record);
+      }
+    }
+  }
+
+  function handleMusicIntent(event) {
+    musicFeedback = updateMusicFeedback(musicFeedback, event);
+    if (event?.status === 'started') player.error.set(null);
+    if (event?.status === 'completed' && event.action !== 'cancel_selection' && !musicFeedback.choices.length) {
+      claudeOrch.markMusicChange();
+    }
+  }
+
+  function playRecentPlaylist() {
+    if (!recentPlaylist || get(connectionStatus) !== 'connected') return;
+    audio.getPlayers().youtubePlayer?.pause();
+    if (!bridgeClient.sendMusicCommand('play_playlist', [], recentPlaylist)) {
+      musicFeedback = updateMusicFeedback(musicFeedback, { type: 'music_error', message: 'Bridge 未连接，请重新连接后重试。' });
+    }
+  }
+
+  function handleMusicSearchResults(event) {
+    musicFeedback = updateMusicFeedback(musicFeedback, event);
+  }
+
   function setActivityState() {
+    const now = Date.now();
+    if (now - lastActivityNotifiedAt < 250) {
+      return;
+    }
+    lastActivityNotifiedAt = now;
     session.markActivity();
   }
 
@@ -131,15 +201,42 @@
     refreshClaudeState();
   }
 
+  function clearClaudeHistory() {
+    claudeOrch.clearHistory();
+    refreshClaudeState();
+  }
+
+  function openClaudeHistory() {
+    setActivityState();
+    closeTransientUi();
+    claudeOrch.openPanel();
+    refreshClaudeState();
+  }
+
+  function markClaudeTyping() {
+    setActivityState();
+    claudeOrch.markUserTyping();
+    refreshClaudeState();
+  }
+
+  function markClaudeListening() {
+    setActivityState();
+    claudeOrch.markListening();
+    refreshClaudeState();
+  }
+
   function handleClaudeFormChange(event) {
     const formName = event.detail?.name ?? '新形态';
-    claudeOrch.closePanel();
+    // Switching forms should close the lightweight chat without letting the
+    // normal close path overwrite the newly selected form with idle_breathe.
+    claudeOrch.closePanel({ resumePatrol: false });
     claudeOrch.showTransientBubble(`切换形态：${formName}`, 2000);
     refreshClaudeState();
   }
 
   async function handleClaudeActivate() {
     setActivityState();
+    ui.bridgeSettingsOpen.set(false);
     await claudeOrch.handleClick();
     refreshClaudeState();
   }
@@ -149,6 +246,7 @@
     ui.timerPopoverOpen.set(false);
     ui.rainPopoverOpen.set(false);
     ui.miniPlayerExpanded.set(false);
+    ui.bridgeSettingsOpen.set(false);
     closeClaudeBubble();
     closeClaudePanel();
   }
@@ -166,7 +264,31 @@
       sceneLocked: get(scene.locked)
     });
 
-    window.localStorage.setItem(PERSIST_KEY, JSON.stringify(snapshot));
+    writeStorageValue(window.localStorage, PERSIST_KEY, JSON.stringify(snapshot));
+  }
+
+  function applyFocusSnapshot(snapshot) {
+    focus.todayMinutes.set(snapshot.todayMinutes);
+    focus.streakDays.set(snapshot.streakDays);
+    focus.sessionCount.set(snapshot.sessionCount);
+    focus.lastSummary.set(snapshot.lastSummary);
+  }
+
+  function getCurrentFocusSnapshot() {
+    return createFocusSnapshot({
+      todayMinutes: get(focus.todayMinutes),
+      streakDays: get(focus.streakDays),
+      sessionCount: get(focus.sessionCount),
+      lastSummary: get(focus.lastSummary)
+    });
+  }
+
+  function persistFocusSnapshot(snapshot = getCurrentFocusSnapshot()) {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    writeStorageValue(window.localStorage, FOCUS_KEY, JSON.stringify(snapshot));
   }
 
   function restoreState() {
@@ -176,7 +298,7 @@
 
     suppressPersist = true;
 
-    const stored = window.localStorage.getItem(PERSIST_KEY);
+    const stored = readStorageValue(window.localStorage, PERSIST_KEY);
     if (stored) {
       try {
         const restored = parsePersistedSnapshot(stored, PLAYLIST);
@@ -199,22 +321,82 @@
       }
     }
 
+    const storedFocus = readStorageValue(window.localStorage, FOCUS_KEY);
+    try {
+      restoredFocusSnapshot = parseFocusSnapshot(storedFocus);
+      applyFocusSnapshot(restoredFocusSnapshot);
+    } catch {
+      restoredFocusSnapshot = createFocusSnapshot({});
+      applyFocusSnapshot(restoredFocusSnapshot);
+    }
+
     suppressPersist = false;
   }
 
   async function startExperience() {
+    if (get(connectionStatus) !== 'connected') player.musicProvider.set('youtube');
+    const wasStarted = get(hasStarted);
     hasStarted.set(true);
     uiMode.set('default');
-    claude.mood.set(get(connectionStatus) === 'connected' ? 'idle' : 'sleep');
+    claudeOrch.markActive();
+    refreshClaudeState();
     setActivityState();
-    await audio.initAudio(true);
-    if (get(connectionStatus) !== 'connected') {
-      claudeOrch.showTransientBubble('Start the local bridge to wake me up', 2800);
-      refreshClaudeState();
+
+    if (!wasStarted) {
+      const startedFocus = createStartedFocusSnapshot(restoredFocusSnapshot ?? getCurrentFocusSnapshot());
+      restoredFocusSnapshot = startedFocus;
+      applyFocusSnapshot(startedFocus);
+      persistFocusSnapshot(startedFocus);
     }
+
+    await audio.initAudio(true);
+    claudeOrch.showTransientBubble(
+      getStartRitualCopy({
+        sceneName: getSceneName($currentScene),
+        trackName: $currentTrackTitle,
+        rainVolume: $rainVolume,
+        streakDays: get(focus.streakDays)
+      }),
+      4200
+    );
+    refreshClaudeState();
   }
 
-  async function togglePlayback() {
+  async function togglePlayback(source = null) {
+    if (source === 'youtube') {
+      player.musicProvider.set('youtube');
+      player.isPlaying.set(false);
+      player.musicStatus.set('idle');
+      await audio.initAudio(true);
+      return;
+    }
+    if (source === 'netease-local' && get(connectionStatus) === 'connected') {
+      player.musicProvider.set('netease-local');
+      audio.getPlayers().youtubePlayer?.pause();
+      await sendClaudeMessage('播放网易云 lofi');
+      return;
+    }
+    if (get(connectionStatus) !== 'connected' && $musicProvider !== 'youtube') {
+      player.musicProvider.set('youtube');
+      player.isPlaying.set(false);
+      player.musicStatus.set('idle');
+      player.currentTrackTitle.set(normalizeTrackTitle($currentTrackIndex, PLAYLIST));
+    }
+    if (!$hasStarted) {
+      await startExperience();
+      if (get(connectionStatus) !== 'connected') return;
+    }
+    if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
+      audio.getPlayers().youtubePlayer?.pause();
+      if ($playerIsPlaying || $musicStatus === 'paused') {
+        bridgeClient.sendMusicCommand($playerIsPlaying ? 'pause' : 'resume');
+      } else if (recentPlaylist) {
+        playRecentPlaylist();
+      } else {
+        await sendClaudeMessage('播放 lofi');
+      }
+      return;
+    }
     if (!$hasStarted) {
       await startExperience();
       return;
@@ -250,21 +432,21 @@
   }
 
   async function playNextTrack() {
+    if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
+      audio.getPlayers().youtubePlayer?.pause();
+      bridgeClient.sendMusicCommand('next');
+      return;
+    }
     await selectTrack($currentTrackIndex + 1);
   }
 
   async function playPreviousTrack() {
-    await selectTrack($currentTrackIndex - 1);
-  }
-
-  async function addCustomTrack(url) {
-    const trackIndex = addCustomTrackFromUrl(url);
-    if (trackIndex < 0) {
-      return false;
+    if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
+      audio.getPlayers().youtubePlayer?.pause();
+      bridgeClient.sendMusicCommand('prev');
+      return;
     }
-
-    await selectTrack(trackIndex);
-    return true;
+    await selectTrack($currentTrackIndex - 1);
   }
 
   function setRainVolume(nextVolume) {
@@ -278,6 +460,13 @@
     rain.muted.set(clamped === 0);
     const { rainPlayer } = audio.getPlayers();
     rainPlayer?.setVolume(clamped);
+  }
+
+  function setMusicVolume(nextVolume) {
+    const volume = Math.max(0, Math.min(100, Math.round(nextVolume)));
+    if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
+      bridgeClient.sendMusicCommand('volume', [String(volume)]);
+    }
   }
 
   function setRainType(type) {
@@ -324,8 +513,18 @@
     timer.remainingSeconds.set(0);
     claude.mood.set('sleep');
 
+    const summary = createSessionSummary({
+      minutes: get(timer.minutes),
+      sceneName: getSceneName($currentScene)
+    });
+    if (summary) {
+      focus.lastSummary.set(summary);
+      restoredFocusSnapshot = createFocusSnapshot({ ...getCurrentFocusSnapshot(), lastSummary: summary });
+      persistFocusSnapshot(restoredFocusSnapshot);
+    }
+
     const { youtubePlayer, rainPlayer } = audio.getPlayers();
-    youtubePlayer?.pause();
+    youtubePlayer?.fadeOut?.(4000);
     rainPlayer?.fadeOut(4000);
 
     claudeOrch.showAmbientComment('timerEnding', true).then(refreshClaudeState);
@@ -333,6 +532,12 @@
 
   async function sendClaudeMessage(text) {
     await claudeOrch.sendMessage(text);
+    refreshClaudeState();
+  }
+
+  async function sendClaudePanelMessage(text) {
+    await claudeOrch.sendMessage(text);
+    claudeOrch.openPanel();
     refreshClaudeState();
   }
 
@@ -349,10 +554,50 @@
     session.resetSceneRotation();
   }
 
+  function startFocusTracking() {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    focusInterval = window.setInterval(() => {
+      if (!get(hasStarted)) {
+        return;
+      }
+
+      if (document.visibilityState === 'hidden' || get(ui.idleSince)) {
+        return;
+      }
+
+      const incremented = incrementActiveFocusMinute(restoredFocusSnapshot ?? getCurrentFocusSnapshot());
+      restoredFocusSnapshot = incremented;
+      applyFocusSnapshot(incremented);
+      persistFocusSnapshot(incremented);
+    }, 60000);
+  }
+
   onMount(() => {
     restoreState();
+    recentPlaylist = readRecentPlaylist();
     claudeOrch.attachBridge(bridgeClient);
+    bridgeClient.onMusicState = handleMusicState;
+    bridgeClient.onMusicIntent = handleMusicIntent;
+    bridgeClient.onMusicSearchResults = handleMusicSearchResults;
+    bridgeClient.onMusicError = (event) => {
+      musicFeedback = updateMusicFeedback(musicFeedback, event);
+      player.error.set(musicFeedback.message);
+    };
+    const handleChatDisconnect = bridgeClient.onDisconnect;
+    bridgeClient.onDisconnect = (info) => {
+      musicFeedback = emptyMusicFeedback();
+      handleChatDisconnect(info);
+    };
     refreshClaudeState();
+    unsubscribeBridgeSettings = ui.bridgeSettingsOpen.subscribe((open) => {
+      if (open) {
+        closeClaudeBubble();
+        closeClaudePanel();
+      }
+    });
 
     teardownKeyboard = setupKeyboardShortcuts({
       onActivity: setActivityState,
@@ -366,6 +611,7 @@
       onToggleTimerPopover: () => {
         ui.timerPopoverOpen.update((open) => !open);
         ui.scenePopoverOpen.set(false);
+        ui.bridgeSettingsOpen.set(false);
       },
       onToggleShortcutHint: () => ui.shortcutVisible.update((visible) => !visible),
       isSceneLocked: () => $sceneLocked,
@@ -396,26 +642,35 @@
 
     startIdleTimer();
     startSceneRotation();
+    startFocusTracking();
 
     return () => {
       session.stop();
       teardownKeyboard();
+      if (focusInterval) {
+        window.clearInterval(focusInterval);
+      }
       unsubscribePersist.forEach((unsubscribe) => unsubscribe());
       unsubscribePersist = [];
       unsubscribeScene?.();
+      unsubscribeBridgeSettings?.();
       audio.destroy();
     };
   });
 </script>
 
-<main class="app-shell" aria-label="LoFiClaude phase four shell">
+<main class="app-shell" aria-label="LoFiClaude ambient room">
   <section class="canvas-zone" aria-label="Canvas scene" on:mousemove={setActivityState}>
     <AsciiBackground scene={$currentScene} rainVolume={$rainVolume} working={$claudeMode === 'working'} />
     <ClaudeSprite on:activate={handleClaudeActivate} on:formchange={handleClaudeFormChange} />
 
     {#if !$hasStarted}
       <div class="empty-state" aria-live="polite">
-        <p class="empty-state-text">Claude is asleep until bridge connects</p>
+        <div class="empty-state-copy">
+          <p class="empty-state-title">LoFiClaude</p>
+          <p class="empty-state-text">会陪你工作的 AI 桌面房间</p>
+          <p class="empty-state-hint">可先进入本地陪伴模式，稍后再连接 Claude</p>
+        </div>
         <button type="button" class="start-overlay" on:click={startExperience}>
           Start room
         </button>
@@ -426,10 +681,11 @@
   <AmbientHeader />
 
   <MiniPlayer
+    musicStatus={$musicStatus}
+    musicProvider={$musicProvider}
     onTogglePlay={togglePlayback}
     onPreviousTrack={playPreviousTrack}
     onNextTrack={playNextTrack}
-    onAddCustomUrl={addCustomTrack}
     onSetRainType={setRainType}
     onSetRainVolume={setRainVolume}
     onSelectTimer={selectTimer}
@@ -441,13 +697,22 @@
   {#if claudeBubbleVisible}
     <ClaudeBubble
       message={claudeBubbleMessage}
+      companionState={claudeCompanionState}
       messages={claudeHistory}
       activeAssistantId={claudeActiveAssistantId}
       anchor={$claudeBubbleAnchor}
-      passive={claudeBubblePassive}
+      passive={claudeBubblePassive && !musicFeedback.choices.length && musicFeedback.status !== 'pending'}
       loading={claudeLoading}
+      {musicFeedback}
+      {recentPlaylist}
       on:close={closeClaudeBubble}
       on:send={(event) => sendClaudeMessage(event.detail.text)}
+      on:history={openClaudeHistory}
+      on:typing={markClaudeTyping}
+      on:listening={markClaudeListening}
+      on:musicChoice={(event) => sendClaudeMessage(`播放第 ${event.detail.index} 个`)}
+      on:musicCancel={() => sendClaudeMessage('取消')}
+      on:playRecent={playRecentPlaylist}
     />
   {/if}
 
@@ -463,12 +728,17 @@
       toolRunning={claudeToolRunning}
       lastError={claudeLastError}
       on:close={closeClaudePanel}
-      on:send={(event) => sendClaudeMessage(event.detail.text)}
+      on:clear={clearClaudeHistory}
+      on:send={(event) => sendClaudePanelMessage(event.detail.text)}
       on:reconnect={reconnectClaudeBridge}
     />
   {/if}
 
-  <div id="youtube-player-host" class="youtube-host" aria-hidden="true"></div>
+  {#if ENABLE_YOUTUBE_AUDIO}
+    <div class="youtube-host" aria-hidden="true" tabindex="-1" role="presentation">
+      <div id="youtube-player-host" class="youtube-player-mount"></div>
+    </div>
+  {/if}
 </main>
 
 <style>
@@ -483,18 +753,45 @@
     top: -9999px;
   }
 
+  .youtube-player-mount {
+    width: 1px;
+    height: 1px;
+  }
+
   .empty-state {
     position: absolute;
     inset: 0;
     z-index: 7;
     display: grid;
-    place-items: center;
+    align-content: center;
+    justify-items: center;
+    gap: 22px;
+    padding: 12vh 24px 24vh;
     pointer-events: none;
   }
 
-  .empty-state-text {
+  .empty-state-copy {
     margin: 0;
-    padding-bottom: 92px;
+    display: grid;
+    gap: 8px;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+  }
+
+  .empty-state-title,
+  .empty-state-text,
+  .empty-state-hint {
+    margin: 0;
+  }
+
+  .empty-state-title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 14px;
+    color: rgba(231, 219, 202, 0.92);
+  }
+
+  .empty-state-text {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 12px;
     color: rgba(231, 219, 202, 0.82);
@@ -502,7 +799,21 @@
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
   }
 
+  .empty-state-hint {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: rgba(231, 219, 202, 0.72);
+  }
+
   .start-overlay {
     pointer-events: auto;
+    z-index: 1;
+  }
+
+  @media (max-height: 760px) {
+    .empty-state {
+      padding: 96px 20px 150px;
+      gap: 16px;
+    }
   }
 </style>

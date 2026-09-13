@@ -4,14 +4,31 @@ const DEFAULT_PALETTE = Object.freeze({
   2: '#0f0f0f'
 });
 
-const FORM_DEFS = [
+// Keep the companion drawable if an archived preset is malformed or unavailable
+// in a production bundle. The real archive data remains the normal source.
+const FALLBACK_GRID = Object.freeze([
+  [0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0],
+  [0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0],
+  [0, 1, 1, 2, 1, 1, 0, 1, 2, 1, 1, 1],
+  [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+  [0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0],
+  [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0],
+  [0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+  [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0],
+  [0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0],
+  [0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0],
+  [0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+  [0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0]
+]);
+
+export const FORM_DEFS = [
   { id: 'idle_blink', label: '眨眼', archive: 'idle_blink.html' },
   { id: 'idle_breathe', label: '呼吸', archive: 'idle_breathe.html' },
   { id: 'idle_look_around', label: '环顾四周', archive: 'idle_look_around.html' },
   { id: 'work_coding', label: '编码', archive: 'work_coding.html' },
   { id: 'work_think', label: '思考', archive: 'work_think.html' },
   { id: 'expression_sleep', label: '睡觉', archive: 'expression_sleep.html' },
-  { id: 'expression_wink', label: '眨眼', archive: 'expression_wink.html' },
+  { id: 'expression_wink', label: '俏皮眨眼', archive: 'expression_wink.html' },
   { id: 'expression_surprise', label: '惊讶', archive: 'expression_surprise.html' },
   { id: 'dance_sway', label: '摇摆', archive: 'dance_sway.html' },
   { id: 'dance_bounce', label: '弹跳', archive: 'dance_bounce.html' },
@@ -128,7 +145,8 @@ async function loadArchiveSources() {
   if (isBrowser) {
     const archiveManifest = import.meta.glob('../../archive/misc/claudepix_presets/*.html', {
       eager: true,
-      as: 'raw'
+      query: '?raw',
+      import: 'default'
     });
 
     for (const [path, source] of Object.entries(archiveManifest)) {
@@ -151,21 +169,29 @@ function parsePreset(def) {
   const source = FORM_SOURCES.get(def.id);
   const parsed = source ? evaluatePresetSource(source) : null;
   const preset = parsed?.preset ?? null;
-  const frames = preset?.frames ?? parsed?.frames ?? [];
+  const rawFrames = preset?.frames ?? parsed?.frames ?? [];
+  const frames = Array.isArray(rawFrames) ? rawFrames : [];
   const palette = normalizePalette(parsed?.palette ?? null);
 
   const baseFrame = frames.find((frame) => frame?.frame || frame?.rows || frame?.grid) ?? null;
   const baseGrid = toGrid(baseFrame?.frame ?? baseFrame?.rows ?? baseFrame?.grid ?? null);
 
+  const normalizedFrames = frames
+    .map((frame) => ({
+      hold: Math.max(16, Number(frame?.hold) || 0),
+      grid: toGrid(frame?.frame ?? frame?.rows ?? frame?.grid ?? null)
+    }))
+    .filter((frame) => Array.isArray(frame.grid) && frame.grid.length > 0);
+  const safeBaseGrid = baseGrid ?? normalizedFrames[0]?.grid ?? FALLBACK_GRID;
+
   return {
     id: def.id,
     label: def.label,
     name: preset?.name ?? def.id.replaceAll('_', ' '),
-    baseGrid: baseGrid ?? toGrid(frames[0]?.frame ?? frames[0]?.rows ?? frames[0]?.grid ?? null),
-    frames: frames.map((frame) => ({
-      hold: Number(frame?.hold ?? 0),
-      grid: toGrid(frame?.frame ?? frame?.rows ?? frame?.grid ?? null)
-    })),
+    baseGrid: safeBaseGrid,
+    frames: normalizedFrames.length > 0
+      ? normalizedFrames
+      : [{ hold: 900, grid: safeBaseGrid }],
     palette
   };
 }
@@ -190,6 +216,45 @@ export function getFormFrame(formIndex = 0, frameIndex = 0) {
 
   const normalized = ((Number(frameIndex) || 0) % form.frames.length + form.frames.length) % form.frames.length;
   return form.frames[normalized];
+}
+
+function gridDifference(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right)) {
+    return 0;
+  }
+
+  const height = Math.max(left.length, right.length);
+  let difference = 0;
+  for (let row = 0; row < height; row += 1) {
+    const leftRow = left[row] ?? [];
+    const rightRow = right[row] ?? [];
+    const width = Math.max(leftRow.length, rightRow.length);
+    for (let column = 0; column < width; column += 1) {
+      if ((leftRow[column] ?? 0) !== (rightRow[column] ?? 0)) {
+        difference += 1;
+      }
+    }
+  }
+  return difference;
+}
+
+// The archive loops often start on a neutral standing frame. Previewing the
+// most distinctive frame makes a menu selection visibly acknowledge itself.
+export function getFormSelectionFrame(formIndex = 0) {
+  const form = getForm(formIndex);
+  const baseGrid = form.frames[0]?.grid ?? form.baseGrid;
+  let selected = { index: 0, frame: form.frames[0] ?? { hold: 900, grid: baseGrid } };
+  let largestDifference = -1;
+
+  form.frames.forEach((frame, index) => {
+    const difference = gridDifference(frame.grid, baseGrid);
+    if (difference > largestDifference) {
+      largestDifference = difference;
+      selected = { index, frame };
+    }
+  });
+
+  return selected;
 }
 
 export function getPaletteForForm(index = 0) {

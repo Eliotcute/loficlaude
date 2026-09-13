@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
 
-import { createSocketServer } from '../bridge/socketServer.js';
+import { createSocketServer, sanitizeTerminalText } from '../bridge/socketServer.js';
 
 function createSocketPath(name) {
   const suffix = Math.random().toString(16).slice(2, 8);
@@ -48,6 +50,11 @@ function closeServer(server) {
     server.close(() => resolve());
   });
 }
+
+test('terminal output strips control sequences while preserving text and newlines', () => {
+  const unsafe = `before\u001b]52;c;secret\u0007after\rhidden\nnext\u202E`;
+  assert.equal(sanitizeTerminalText(unsafe), 'beforeafterhidden\nnext');
+});
 
 test('creates and starts Unix socket server', async (t) => {
   const socketPath = createSocketPath('socket-start');
@@ -134,6 +141,26 @@ test('receives line-buffered client input via onClientData', async (t) => {
   await closeServer(socketServer);
 });
 
+test('preserves UTF-8 input split across socket chunks', async (t) => {
+  const socketPath = createSocketPath('socket-utf8');
+  const received = [];
+  const socketServer = createSocketServer({ socketPath, onClientData: (line) => received.push(line) });
+  const started = await startServer(socketServer, t);
+  if (!started) {
+    return;
+  }
+  const client = await connectClient(socketPath);
+  const input = Buffer.from('中文🙂\n');
+
+  client.write(input.subarray(0, 1));
+  client.write(input.subarray(1));
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  assert.deepEqual(received, ['中文🙂']);
+  client.destroy();
+  await closeServer(socketServer);
+});
+
 test('broadcast reaches multiple clients', async (t) => {
   const socketPath = createSocketPath('socket-multi');
   const socketServer = createSocketServer({ socketPath });
@@ -184,4 +211,97 @@ test('close cleans up socket file', async (t) => {
 
   await closeServer(socketServer);
   assert.equal(fs.existsSync(socketPath), false);
+});
+
+test('rejects an unterminated input line above the configured limit', async (t) => {
+  const socketPath = createSocketPath('socket-limit');
+  const received = [];
+  const socketServer = createSocketServer({
+    socketPath,
+    maxLineBytes: 8,
+    onClientData: (line) => received.push(line)
+  });
+
+  const started = await startServer(socketServer, t);
+  if (!started) {
+    return;
+  }
+  const client = await connectClient(socketPath);
+  const response = new Promise((resolve) => client.once('data', (chunk) => resolve(chunk.toString('utf8'))));
+
+  client.write('123456789');
+
+  assert.equal(await response, '[Input too long]\n');
+  assert.deepEqual(received, []);
+  client.destroy();
+  await closeServer(socketServer);
+});
+
+test('refuses to delete a non-socket file at the configured path', async (t) => {
+  const directory = fs.mkdtempSync('/tmp/loficlaude-socket-safety-');
+  const socketPath = `${directory}/occupied`;
+  fs.writeFileSync(socketPath, 'keep me');
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+
+  const socketServer = createSocketServer({ socketPath });
+  const error = await new Promise((resolve) => socketServer.start((startError) => resolve(startError)));
+
+  assert.match(error?.message ?? '', /Refusing to replace non-socket path/);
+  assert.equal(fs.readFileSync(socketPath, 'utf8'), 'keep me');
+});
+
+test('refuses to replace an active socket owned by another bridge instance', async (t) => {
+  const socketPath = createSocketPath('socket-active');
+  const first = createSocketServer({ socketPath });
+  const started = await startServer(first, t);
+  if (!started) {
+    return;
+  }
+  const second = createSocketServer({ socketPath });
+
+  const error = await new Promise((resolve) => second.start((startError) => resolve(startError)));
+
+  assert.equal(error?.code, 'EADDRINUSE');
+  const client = await connectClient(socketPath);
+  client.destroy();
+  await closeServer(first);
+});
+
+test('closing an older instance does not remove a successor socket', async (t) => {
+  const socketPath = createSocketPath('socket-successor');
+  const first = createSocketServer({ socketPath });
+  const firstStarted = await startServer(first, t);
+  if (!firstStarted) {
+    return;
+  }
+
+  fs.unlinkSync(socketPath);
+  const second = createSocketServer({ socketPath });
+  const secondStarted = await startServer(second, t);
+  if (!secondStarted) {
+    await closeServer(first);
+    return;
+  }
+
+  await closeServer(first);
+  assert.equal(fs.existsSync(socketPath), true);
+  const client = await connectClient(socketPath);
+  client.destroy();
+  await closeServer(second);
+});
+
+test('creates a private runtime directory for the socket', async (t) => {
+  const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'loficlaude-runtime-test-'));
+  const runtimeDir = path.join(parent, 'runtime');
+  const socketPath = path.join(runtimeDir, 'claude.sock');
+  t.after(() => fs.rmSync(parent, { recursive: true, force: true }));
+  const socketServer = createSocketServer({ socketPath, runtimeDir });
+
+  const started = await startServer(socketServer, t);
+  if (!started) {
+    return;
+  }
+
+  assert.equal(fs.statSync(runtimeDir).mode & 0o777, 0o700);
+  await closeServer(socketServer);
 });

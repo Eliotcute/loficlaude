@@ -1,4 +1,5 @@
 import { player } from '../stores/appState.js';
+import { get } from 'svelte/store';
 
 const CUSTOM_TRACKS_STORAGE_KEY = 'loficlaude-custom-tracks';
 
@@ -13,7 +14,18 @@ const BASE_PLAYLIST = [
 export const PLAYLIST = [...BASE_PLAYLIST];
 
 const API_TIMEOUT_MS = 15000;
+const PLAYER_READY_TIMEOUT_MS = 9000;
 let youtubeApiPromise;
+
+export function isolateYouTubeFrame(frame) {
+  if (!frame?.setAttribute) {
+    return;
+  }
+
+  frame.setAttribute('aria-hidden', 'true');
+  frame.setAttribute('role', 'presentation');
+  frame.setAttribute('tabindex', '-1');
+}
 
 function readCustomTracks() {
   if (typeof window === 'undefined') {
@@ -99,12 +111,16 @@ function loadYouTubeApi() {
       script.async = true;
       script.onerror = () => {
         clearTimeout(timeoutId);
+        youtubeApiPromise = null;
+        script.remove?.();
         reject(new Error('Failed to load YouTube iframe API script.'));
       };
       document.head.append(script);
     }
 
     timeoutId = window.setTimeout(() => {
+      youtubeApiPromise = null;
+      document.getElementById(scriptId)?.remove?.();
       reject(new Error('Timed out while loading YouTube iframe API.'));
     }, API_TIMEOUT_MS);
   });
@@ -170,6 +186,23 @@ export class YouTubePlayer {
     this.currentIndex = 0;
     this.readyPromise = null;
     this.skipCount = 0;
+    this.failedAll = false;
+    this.volume = 60;
+    this.fadeTimer = null;
+    this.frameObserver = null;
+  }
+
+  isolateMountNode(mountNode, isolationNode = mountNode?.parentElement ?? mountNode) {
+    if (!mountNode) {
+      return;
+    }
+
+    if (!isolationNode) {
+      return;
+    }
+
+    isolationNode.setAttribute?.('aria-hidden', 'true');
+    isolationNode.querySelectorAll?.('iframe').forEach(isolateYouTubeFrame);
   }
 
   async init(initialIndex = 0) {
@@ -182,14 +215,27 @@ export class YouTubePlayer {
     player.currentTrackIndex.set(this.currentIndex);
     player.currentTrackTitle.set(initialTrack.name);
 
-    this.readyPromise = loadYouTubeApi().then(
-      () =>
-        new Promise((resolve, reject) => {
+    this.readyPromise = loadYouTubeApi()
+      .then(
+        () =>
+          new Promise((resolve, reject) => {
           const mountNode = document.getElementById(this.mountId);
           if (!mountNode) {
             reject(new Error(`Missing YouTube player mount node: #${this.mountId}`));
             return;
           }
+
+          const isolationNode = mountNode.parentElement ?? mountNode;
+          this.isolateMountNode(mountNode, isolationNode);
+          const MutationObserverImpl = window.MutationObserver;
+          if (MutationObserverImpl) {
+            this.frameObserver = new MutationObserverImpl(() => this.isolateMountNode(mountNode, isolationNode));
+            this.frameObserver.observe(isolationNode, { childList: true, subtree: true });
+          }
+
+          let readyTimeoutId = window.setTimeout(() => {
+            reject(new Error('Timed out while preparing YouTube player.'));
+          }, PLAYER_READY_TIMEOUT_MS);
 
           this.instance = new window.YT.Player(this.mountId, {
             width: '1',
@@ -205,7 +251,12 @@ export class YouTubePlayer {
             },
             events: {
               onReady: () => {
+                window.clearTimeout(readyTimeoutId);
+                readyTimeoutId = null;
+                this.isolateMountNode(mountNode, isolationNode);
                 this.ready = true;
+                this.failedAll = false;
+                this.setVolume(this.volume);
                 player.error.set(null);
                 player.isLoading.set(false);
                 resolve();
@@ -215,18 +266,22 @@ export class YouTubePlayer {
             }
           });
         })
-    );
+      )
+      .catch((error) => {
+        this.readyPromise = null;
+        this.ready = false;
+        player.isLoading.set(false);
+        player.error.set(`YouTube initialization failed: ${error?.message ?? 'unknown'}`);
+        throw error;
+      });
 
     return this.readyPromise;
   }
 
   loadTrack(index, options = {}) {
-    if (!this.ready || !this.instance) {
-      return;
-    }
-
     if (!options.fromFailover) {
       this.skipCount = 0;
+      this.failedAll = false;
     }
 
     const nextIndex = wrapIndex(index);
@@ -237,6 +292,10 @@ export class YouTubePlayer {
     player.currentTrackTitle.set(nextTrack.name);
     player.isLoading.set(true);
     player.error.set(null);
+
+    if (!this.ready || !this.instance) {
+      return;
+    }
 
     this.instance.loadVideoById(nextTrack.id);
   }
@@ -253,6 +312,11 @@ export class YouTubePlayer {
     if (!this.ready || !this.instance) {
       return;
     }
+    if (this.failedAll) {
+      this.loadTrack(this.currentIndex);
+    }
+    this.clearFadeTimer();
+    this.setVolume(this.volume);
     this.instance.playVideo();
   }
 
@@ -260,19 +324,54 @@ export class YouTubePlayer {
     if (!this.ready || !this.instance) {
       return;
     }
+    this.clearFadeTimer();
     this.instance.pauseVideo();
   }
 
   setVolume(volume) {
+    const clamped = Math.max(0, Math.min(100, Math.round(volume)));
+    this.volume = clamped;
+
     if (!this.ready || !this.instance) {
       return;
     }
 
-    const clamped = Math.max(0, Math.min(100, Math.round(volume)));
     this.instance.setVolume(clamped);
   }
 
+  fadeOut(ms = 4000) {
+    this.clearFadeTimer();
+
+    if (!this.ready || !this.instance) {
+      return;
+    }
+
+    const startVolume = this.volume;
+    const startedAt = Date.now();
+
+    this.fadeTimer = window.setInterval(() => {
+      const progress = Math.min(1, (Date.now() - startedAt) / ms);
+      this.instance.setVolume(Math.round(startVolume * (1 - progress)));
+
+      if (progress >= 1) {
+        this.clearFadeTimer();
+        this.instance.pauseVideo?.();
+        this.instance.setVolume?.(startVolume);
+      }
+    }, 100);
+  }
+
+  clearFadeTimer() {
+    if (this.fadeTimer) {
+      window.clearInterval(this.fadeTimer);
+      this.fadeTimer = null;
+    }
+  }
+
   destroy() {
+    this.clearFadeTimer();
+    this.frameObserver?.disconnect?.();
+    this.frameObserver = null;
     if (this.instance) {
       this.instance.destroy();
     }
@@ -281,26 +380,37 @@ export class YouTubePlayer {
     this.ready = false;
     this.readyPromise = null;
     this.skipCount = 0;
+    this.failedAll = false;
   }
 
   handleError(event) {
+    if (this.failedAll || get(player.musicProvider) !== 'youtube') {
+      return;
+    }
+
     player.isLoading.set(false);
+    player.isPlaying.set(false);
     this.skipCount += 1;
 
     if (this.skipCount < PLAYLIST.length) {
       player.error.set(`YouTube playback error (${event?.data ?? 'unknown'}), skipping...`);
       window.setTimeout(() => {
+        if (get(player.musicProvider) !== 'youtube') return;
         this.loadTrack(this.currentIndex + 1, { fromFailover: true });
+        if (!this.ready) {
+          this.init(this.currentIndex);
+        }
       }, 250);
       return;
     }
 
     this.skipCount = 0;
+    this.failedAll = true;
     player.error.set('All streams unavailable');
   }
 
   handleStateChange(event) {
-    if (!window.YT?.PlayerState) {
+    if (get(player.musicProvider) !== 'youtube' || !window.YT?.PlayerState) {
       return;
     }
 

@@ -168,6 +168,67 @@ export function drawStaticScene(ctx, sceneDef, width, height) {
         dottedCircle(ctx, x, y - 60, 14, { seed: `${seed}-bulb`, spacing: 5, density: 0.7, color: 'rgba(234,208,136,0.54)' });
         break;
       }
+      case 'shelf': {
+        const x = object.x * width;
+        const y = object.y * height;
+        const w = object.w * width;
+        const h = object.h * height;
+        dottedRect(ctx, x, y, w, h, { seed, spacing: 8, density: 0.62, color: 'rgba(190,198,210,0.38)' });
+        for (let row = 1; row < 4; row += 1) {
+          dottedLine(ctx, x, y + h * row / 4, x + w, y + h * row / 4, { seed: `${seed}-${row}`, spacing: 7, color: 'rgba(214,220,228,0.48)' });
+        }
+        break;
+      }
+      case 'radio': {
+        const x = object.x * width;
+        const y = object.y * height;
+        const w = object.w * width;
+        const h = object.h * height;
+        dottedRect(ctx, x, y, w, h, { seed, spacing: 7, density: 0.7, color: 'rgba(218,204,176,0.48)' });
+        dottedCircle(ctx, x + w * 0.34, y + h * 0.56, Math.min(w, h) * 0.2, { seed: `${seed}-dial`, spacing: 6, density: 0.72, color: 'rgba(226,218,196,0.56)' });
+        dottedLine(ctx, x + w * 0.62, y + h * 0.32, x + w * 0.86, y + h * 0.32, { seed: `${seed}-display`, spacing: 5, color: 'rgba(226,218,196,0.62)' });
+        break;
+      }
+      case 'keyboard': {
+        const x = object.x * width;
+        const y = object.y * height;
+        const w = object.w * width;
+        const h = object.h * height;
+        dottedRect(ctx, x, y, w, h, { seed, spacing: 6, density: 0.7, color: 'rgba(170,184,198,0.42)' });
+        dottedLine(ctx, x + w * 0.18, y + h * 0.65, x + w * 0.82, y + h * 0.65, { seed: `${seed}-space`, spacing: 6, color: 'rgba(212,220,228,0.52)' });
+        break;
+      }
+      case 'recordWall': {
+        const x = object.x * width;
+        const y = object.y * height;
+        const w = object.w * width;
+        const h = object.h * height;
+        dottedRect(ctx, x, y, w, h, { seed, spacing: 8, density: 0.24, color: 'rgba(190,198,210,0.3)' });
+        for (let index = 0; index < 4; index += 1) {
+          dottedCircle(ctx, x + w * (0.16 + index * 0.22), y + h * (0.3 + (index % 2) * 0.42), Math.min(w, h) * 0.13, { seed: `${seed}-${index}`, spacing: 6, density: 0.7, color: 'rgba(218,218,208,0.52)' });
+        }
+        break;
+      }
+      case 'turntable': {
+        const x = object.x * width;
+        const y = object.y * height;
+        const w = object.w * width;
+        const h = object.h * height;
+        dottedRect(ctx, x, y, w, h, { seed, spacing: 7, density: 0.68, color: 'rgba(172,142,120,0.44)' });
+        dottedCircle(ctx, x + w * 0.48, y + h * 0.5, Math.min(w, h) * 0.32, { seed: `${seed}-record`, spacing: 6, density: 0.74, color: 'rgba(220,220,212,0.56)' });
+        dottedLine(ctx, x + w * 0.72, y + h * 0.2, x + w * 0.58, y + h * 0.48, { seed: `${seed}-arm`, spacing: 5, color: 'rgba(226,216,190,0.58)' });
+        break;
+      }
+      case 'console': {
+        const x = object.x * width;
+        const y = object.y * height;
+        const w = object.w * width;
+        const h = object.h * height;
+        dottedRect(ctx, x, y, w, h, { seed, spacing: 7, density: 0.52, color: 'rgba(150,168,188,0.36)' });
+        dottedRect(ctx, x + w * 0.1, y + h * 0.12, w * 0.8, h * 0.56, { seed: `${seed}-screen`, spacing: 6, density: 0.48, color: 'rgba(208,222,230,0.5)' });
+        dottedLine(ctx, x + w * 0.12, y + h * 0.84, x + w * 0.88, y + h * 0.84, { seed: `${seed}-base`, spacing: 6, color: 'rgba(196,182,154,0.5)' });
+        break;
+      }
       default:
         break;
     }

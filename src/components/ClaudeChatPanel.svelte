@@ -1,5 +1,5 @@
 <script>
-  import { createEventDispatcher, onMount, onDestroy } from 'svelte';
+  import { createEventDispatcher, onMount, onDestroy, afterUpdate } from 'svelte';
   import { connectionStatus, toolRunning as bridgeToolRunning } from '../stores/bridgeState.js';
 
   export let sceneName = 'Lofi Night';
@@ -14,7 +14,10 @@
   const dispatch = createEventDispatcher();
 
   let root;
+  let messagesViewport;
   let inputValue = '';
+  let stickToBottom = true;
+  let previousMessageView = '';
 
   $: recentMessages = messages;
   $: bridgeConnected = $connectionStatus === 'connected';
@@ -69,9 +72,53 @@
     dispatch('reconnect');
   }
 
+  function clearHistory() {
+    dispatch('clear');
+  }
+
+  function handleMessagesScroll() {
+    if (!messagesViewport) {
+      return;
+    }
+
+    const distanceFromBottom = messagesViewport.scrollHeight - messagesViewport.scrollTop - messagesViewport.clientHeight;
+    stickToBottom = distanceFromBottom < 48;
+  }
+
+  function scrollMessagesToBottom(force = false) {
+    if (!messagesViewport || (!force && !stickToBottom)) {
+      return;
+    }
+
+    messagesViewport.scrollTop = messagesViewport.scrollHeight;
+  }
+
   onMount(() => {
     window.addEventListener('keydown', handleDocumentKeydown);
     window.addEventListener('pointerdown', handleDocumentPointerDown);
+  });
+
+  afterUpdate(() => {
+    const latest = recentMessages.at(-1);
+    const nextMessageView = [
+      recentMessages.length,
+      latest?.id ?? '',
+      latest?.text?.length ?? 0,
+      activeAssistantId ?? '',
+      loading,
+      $bridgeToolRunning ?? '',
+      lastError
+    ].join('|');
+    const hasNewContent = nextMessageView !== previousMessageView;
+    const shouldFollowNewContent = stickToBottom;
+    previousMessageView = nextMessageView;
+
+    if (hasNewContent && shouldFollowNewContent) {
+      scrollMessagesToBottom(true);
+      return;
+    }
+
+    scrollMessagesToBottom();
   });
 
   onDestroy(() => {
@@ -93,13 +140,16 @@
       <div class="title">LoFiClaude</div>
       <div class="scene">{sceneName} · Claude {statusLabel}</div>
     </div>
-    <div class="status-chip" class:connected={currentStatus === 'connected'} class:working={currentStatus === 'working'}>
-      {bridgeStatus}
+    <div class="panel-actions">
+      <div class="status-chip" class:connected={currentStatus === 'connected'} class:working={currentStatus === 'working'}>
+        {bridgeStatus}
+      </div>
+      <button type="button" class="clear-btn" disabled={loading || recentMessages.length === 0} on:click={clearHistory}>Clear</button>
+      <button type="button" class="close-btn" aria-label="Close chat panel" on:click={close}>×</button>
     </div>
-    <button type="button" class="close-btn" aria-label="Close chat panel" on:click={close}>×</button>
   </header>
 
-  <div class="messages" aria-live="polite">
+  <div bind:this={messagesViewport} class="messages" aria-live="polite" on:scroll={handleMessagesScroll}>
     {#if recentMessages.length === 0}
       <div class="empty">今天想做点什么呢？</div>
     {/if}
@@ -134,39 +184,41 @@
     {/if}
   </div>
 
-  <form class="input-row" on:submit={handleSubmit}>
-    <input
-      type="text"
-      placeholder="ask something..."
-      value={inputValue}
-      on:input={(event) => (inputValue = event.currentTarget.value)}
-      aria-label="Ask Claude"
-      disabled={loading || !bridgeConnected}
-    />
-    <button type="submit" disabled={loading || !bridgeConnected || !inputValue.trim()}>{loading ? '...' : 'Send'}</button>
-  </form>
+  <div class="panel-footer">
+    <form class="input-row" on:submit={handleSubmit}>
+      <input
+        type="text"
+        placeholder="ask something..."
+        value={inputValue}
+        on:input={(event) => (inputValue = event.currentTarget.value)}
+        aria-label="Ask Claude"
+        disabled={loading}
+      />
+      <button type="submit" disabled={loading || !inputValue.trim()}>{loading ? '...' : 'Send'}</button>
+    </form>
 
-  {#if !bridgeConnected}
-    <div class="hint-row">
-      <p class="hint">Start the local bridge to wake Claude.</p>
-      {#if canReconnect}
-        <button type="button" class="reconnect-btn" on:click={handleReconnect}>Reconnect</button>
-      {/if}
-    </div>
-  {/if}
+    {#if !bridgeConnected}
+      <div class="hint-row">
+        <p class="hint">Local companion mode. Connect bridge for Claude CLI.</p>
+        {#if canReconnect}
+          <button type="button" class="reconnect-btn" on:click={handleReconnect}>Reconnect</button>
+        {/if}
+      </div>
+    {/if}
+  </div>
 </div>
 
 <style>
   .chat-panel {
+    --control-radius: 8px;
     position: absolute;
-    top: max(80px, calc(100vh - 380px));
+    top: max(80px, calc(100vh - 680px));
     right: 20px;
     width: min(400px, calc(100vw - 24px));
-    max-height: calc(100vh - 120px);
+    height: min(560px, calc(100vh - 184px));
     border: 1px solid rgba(212, 165, 116, 0.3);
-    border-radius: 10px;
-    background: rgba(8, 10, 12, 0.72);
-    backdrop-filter: blur(10px);
+    border-radius: var(--control-radius);
+    background: rgba(8, 10, 12, 0.94);
     color: #e8e0d8;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
@@ -185,8 +237,12 @@
 
   .status-chip {
     border: 1px solid rgba(212, 165, 116, 0.22);
-    border-radius: 999px;
-    padding: 4px 7px;
+    border-radius: var(--control-radius);
+    box-sizing: border-box;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 8px;
     font-size: 10px;
     font-family: 'IBM Plex Mono', monospace;
     color: rgba(232, 224, 216, 0.72);
@@ -202,6 +258,19 @@
   .status-chip.working {
     color: #e4c189;
     border-color: rgba(212, 165, 116, 0.42);
+  }
+
+  .panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .clear-btn {
+    height: 32px;
+    padding: 0 9px;
+    font-size: 10px;
+    border-radius: var(--control-radius);
   }
 
   .title {
@@ -229,10 +298,16 @@
 
   .messages {
     overflow: auto;
+    min-height: 0;
     display: grid;
     align-content: start;
     gap: 8px;
     padding-right: 2px;
+    scrollbar-width: none;
+  }
+
+  .messages::-webkit-scrollbar {
+    display: none;
   }
 
   .empty {
@@ -276,6 +351,12 @@
     gap: 8px;
   }
 
+  .panel-footer {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+
   .hint {
     margin: 0;
     font-size: 11px;
@@ -288,18 +369,21 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+    min-height: 40px;
   }
 
   .reconnect-btn {
-    height: 36px;
+    flex: 0 0 auto;
+    height: 40px;
     font-size: 11px;
     white-space: nowrap;
   }
 
   input,
   button {
+    box-sizing: border-box;
     border: 1px solid rgba(212, 165, 116, 0.28);
-    border-radius: 7px;
+    border-radius: var(--control-radius);
     background: rgba(10, 12, 15, 0.82);
     color: #e8e0d8;
     height: 38px;
@@ -309,6 +393,10 @@
   input {
     padding: 0 10px;
     outline: none;
+  }
+
+  .hint {
+    min-width: 0;
   }
 
   button {
@@ -377,10 +465,11 @@
   @media (max-width: 640px) {
     .chat-panel {
       top: 72px;
+      bottom: 84px;
       right: 12px;
       left: 12px;
       width: auto;
-      max-height: calc(100vh - 104px);
+      max-height: none;
     }
 
     .panel-header {

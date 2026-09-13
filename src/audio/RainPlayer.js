@@ -1,8 +1,16 @@
 const PRESETS = {
-  light: { cutoff: 700, gain: 0.15 },
-  medium: { cutoff: 1200, gain: 0.28 },
-  heavy: { cutoff: 2200, gain: 0.5 }
+  light: { cutoff: 700, gain: 0.15, remoteGain: 0.7 },
+  medium: { cutoff: 1200, gain: 0.28, remoteGain: 0.85 },
+  heavy: { cutoff: 2200, gain: 0.5, remoteGain: 1 }
 };
+
+export const RAINY_MOOD_SOURCES = [
+  { src: 'https://media.rainymood.com/0.m4a', type: 'audio/mp4' },
+  { src: 'https://media.rainymood.com/0.ogg', type: 'audio/ogg' },
+  { src: 'https://media.rainymood.com/0.mp3', type: 'audio/mpeg' }
+];
+
+export const LOCAL_RAIN_SOURCES = [{ src: '/0.m4a', type: 'audio/mp4' }];
 
 let sharedCtx = null;
 let sharedNoiseBuffer = null;
@@ -13,7 +21,8 @@ function normalizeType(type) {
 
 function getContext() {
   if (!sharedCtx) {
-    const AudioContextImpl = window.AudioContext || window.webkitAudioContext;
+    const runtime = typeof window === 'undefined' ? globalThis : window;
+    const AudioContextImpl = runtime.AudioContext || runtime.webkitAudioContext;
     sharedCtx = new AudioContextImpl();
   }
   return sharedCtx;
@@ -55,7 +64,12 @@ function getNoiseBuffer(ctx) {
 }
 
 export class RainPlayer {
-  constructor() {
+  constructor(options = {}) {
+    this.AudioElement = options.AudioElement ?? globalThis.Audio;
+    this.sources = options.sources ?? LOCAL_RAIN_SOURCES;
+    this.preferLocal = options.preferLocal ?? false;
+    this.onStatus = options.onStatus ?? (() => {});
+    this.audio = null;
     this.ctx = null;
     this.source = null;
     this.gain = null;
@@ -63,12 +77,73 @@ export class RainPlayer {
     this.type = 'medium';
     this.volume = 60;
     this.started = false;
+    this.remoteStarted = false;
+    this.fallbackStarted = false;
+    this.shouldPlay = false;
+    this.usingFallback = false;
+    this.fadeTimer = null;
     this.presetGain = PRESETS.medium.gain;
+    this.remoteGain = PRESETS.medium.remoteGain;
   }
 
   async init(initialType = 'medium', autoplay = false) {
-    this.ctx = getContext();
     this.type = normalizeType(initialType);
+    this.presetGain = PRESETS[this.type].gain;
+    this.remoteGain = PRESETS[this.type].remoteGain;
+
+    if (this.preferLocal) {
+      this.startFallback(false);
+    } else if (!this.audio && this.AudioElement) {
+      this.audio = new this.AudioElement();
+      this.audio.loop = true;
+      this.audio.preload = 'none';
+      this.audio.crossOrigin = 'anonymous';
+      this.audio.addEventListener?.('error', () => {
+        if (this.shouldPlay && this.remoteStarted && !this.usingFallback) {
+          this.startFallback(true);
+        }
+      });
+      this.loadRainyMoodSources();
+      this.setVolume(this.volume);
+      this.onStatus(this.sources.every(({ src }) => src.startsWith('/')) ? 'local-recording' : 'rainy-mood');
+    } else if (!this.audio) {
+      this.startFallback(false);
+    }
+
+    if (autoplay) {
+      await this.play();
+    }
+  }
+
+  loadRainyMoodSources() {
+    if (!this.audio || this.sources.length === 0) {
+      return;
+    }
+
+    const doc = typeof document === 'undefined' ? null : document;
+    if (!doc || !this.audio.appendChild) {
+      this.audio.src = this.sources[0].src;
+      return;
+    }
+
+    for (const sourceConfig of this.sources) {
+      const sourceNode = doc.createElement('source');
+      sourceNode.src = sourceConfig.src;
+      sourceNode.type = sourceConfig.type;
+      this.audio.appendChild(sourceNode);
+    }
+  }
+
+  startFallback(autoplay = false) {
+    if (this.usingFallback) {
+      return;
+    }
+
+    this.remoteStarted = false;
+    this.usingFallback = true;
+    this.onStatus('fallback');
+    this.audio?.pause?.();
+    this.ctx = getContext();
     this.source = this.ctx.createBufferSource();
     this.source.buffer = getNoiseBuffer(this.ctx);
     this.source.loop = true;
@@ -86,7 +161,7 @@ export class RainPlayer {
     this.setVolume(this.volume);
 
     if (autoplay) {
-      await this.play();
+      this.playFallback();
     }
   }
 
@@ -95,6 +170,7 @@ export class RainPlayer {
     const preset = PRESETS[normalized];
     this.type = normalized;
     this.presetGain = preset.gain;
+    this.remoteGain = preset.remoteGain;
 
     if (this.filter && this.ctx) {
       const now = this.ctx.currentTime;
@@ -104,16 +180,34 @@ export class RainPlayer {
     if (this.gain) {
       this.setVolume(this.volume);
     }
+
+    if (this.audio && !this.usingFallback) {
+      this.setVolume(this.volume);
+    }
   }
 
   loadType(type) {
-    if (this.started) {
+    if (type === 'stop') {
+      this.stop();
+      return;
+    }
+    if (this.usingFallback && this.fallbackStarted) {
       this.applyPreset(type);
+      this.play().catch(() => {});
       return;
     }
 
-    this.type = normalizeType(type);
-    this.presetGain = PRESETS[this.type].gain;
+    this.applyPreset(type);
+    // Selecting a rain preset after Stop is an explicit resume action.
+    this.play().catch(() => {});
+  }
+
+  stop() {
+    this.shouldPlay = false;
+    this.clearFadeTimer();
+    this.audio?.pause?.();
+    if (this.audio) this.audio.currentTime = 0;
+    this.onStatus('stopped');
   }
 
   setVolume(volume) {
@@ -122,14 +216,46 @@ export class RainPlayer {
 
     if (this.gain && this.ctx) {
       this.gain.gain.setValueAtTime((clamped / 100) * this.presetGain, this.ctx.currentTime);
+      if (clamped === 0 && this.ctx.state === 'running') {
+        this.ctx.suspend?.();
+      } else if (clamped > 0 && this.shouldPlay && this.ctx.state === 'suspended') {
+        this.ctx.resume?.();
+      }
+    }
+
+    if (this.audio) {
+      this.audio.volume = (clamped / 100) * this.remoteGain;
+      if (clamped === 0) {
+        this.audio.pause?.();
+      } else if (this.shouldPlay && !this.usingFallback && this.audio.paused !== false) {
+        this.audio.play?.().catch?.(() => {});
+      }
     }
   }
 
   async play() {
-    if (!this.ctx || !this.source || this.started) {
+    this.shouldPlay = true;
+    if (this.audio && !this.usingFallback) {
+      try {
+        this.audio.volume = (this.volume / 100) * this.remoteGain;
+        await this.audio.play();
+        this.remoteStarted = true;
+        this.started = true;
+        return;
+      } catch {
+        this.startFallback(false);
+      }
+    }
+
+    await this.playFallback();
+  }
+
+  async playFallback() {
+    if (!this.ctx || !this.source || this.fallbackStarted) {
       if (this.ctx?.state === 'suspended') {
         await this.ctx.resume();
       }
+      this.setVolume(this.volume);
       return;
     }
 
@@ -138,10 +264,27 @@ export class RainPlayer {
     }
 
     this.source.start(0);
+    this.fallbackStarted = true;
     this.started = true;
   }
 
   fadeOut(ms = 3000) {
+    this.shouldPlay = false;
+    if (this.audio && !this.usingFallback) {
+      this.clearFadeTimer();
+      const startVolume = this.audio.volume;
+      const startedAt = Date.now();
+      this.fadeTimer = setInterval(() => {
+        const progress = Math.min(1, (Date.now() - startedAt) / ms);
+        this.audio.volume = startVolume * (1 - progress);
+        if (progress >= 1) {
+          this.clearFadeTimer();
+          this.audio.pause?.();
+        }
+      }, 100);
+      return;
+    }
+
     if (!this.gain || !this.ctx) {
       return;
     }
@@ -150,12 +293,33 @@ export class RainPlayer {
     this.gain.gain.cancelScheduledValues(now);
     this.gain.gain.setValueAtTime(this.gain.gain.value, now);
     this.gain.gain.linearRampToValueAtTime(0, now + ms / 1000);
+    this.fadeTimer = setTimeout(() => {
+      this.fadeTimer = null;
+      if (!this.shouldPlay && this.usingFallback && this.ctx?.state === 'running') {
+        this.ctx.suspend?.();
+      }
+    }, ms);
+  }
+
+  clearFadeTimer() {
+    if (this.fadeTimer) {
+      clearInterval(this.fadeTimer);
+      this.fadeTimer = null;
+    }
   }
 
   destroy() {
+    this.clearFadeTimer();
+    this.shouldPlay = false;
+    if (this.audio) {
+      this.audio.pause?.();
+      this.audio.removeAttribute?.('src');
+      this.audio.load?.();
+    }
+
     if (this.source) {
       try {
-        if (this.started) {
+        if (this.fallbackStarted) {
           this.source.stop();
         }
       } catch {
@@ -171,6 +335,10 @@ export class RainPlayer {
     this.gain = null;
     this.filter = null;
     this.ctx = null;
+    this.audio = null;
     this.started = false;
+    this.remoteStarted = false;
+    this.fallbackStarted = false;
+    this.usingFallback = false;
   }
 }

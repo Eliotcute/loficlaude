@@ -23,8 +23,7 @@
     z-index: 7;
     border: 1px solid rgba(212, 165, 116, 0.3);
     border-radius: 8px;
-    background: rgba(8, 10, 12, 0.72);
-    backdrop-filter: blur(10px);
+    background: rgba(8, 10, 12, 0.92);
     color: #e8e0d8;
     padding: 10px 12px;
     display: grid;

@@ -6,24 +6,45 @@
   export let message = '今天想做点什么呢？';
   export let messages = [];
   export let activeAssistantId = null;
+  export let companionState = 'resting';
   export let passive = false;
   export let loading = false;
   export let anchor = { x: 0, y: 0 };
+  export let musicFeedback = { status: 'idle', message: '', choices: [] };
+  export let recentPlaylist = null;
 
   const dispatch = createEventDispatcher();
 
   let root;
   let inputValue = '';
   let autoCloseTimeout;
-  let errorHint = '';
-  let shakeError = false;
-  let shakeTimer;
+  let viewportWidth = 1024;
+  let viewportHeight = 768;
 
   $: bridgeConnected = $connectionStatus === 'connected';
-  $: fallbackWidth = typeof window === 'undefined' ? 1024 : window.innerWidth;
-  $: fallbackHeight = typeof window === 'undefined' ? 768 : window.innerHeight;
+  $: fallbackWidth = viewportWidth;
+  $: fallbackHeight = viewportHeight;
   $: anchorX = Number.isFinite(anchor?.x) && anchor.x > 0 ? anchor.x : Math.round(fallbackWidth / 2);
   $: anchorY = Number.isFinite(anchor?.y) && anchor.y > 0 ? anchor.y : Math.round(fallbackHeight * 0.58);
+  $: bubbleWidth = Math.min(290, Math.max(0, fallbackWidth - 28));
+  $: bubbleLeft = Math.max(
+    14,
+    Math.min(
+      anchorX >= fallbackWidth / 2 ? anchorX - bubbleWidth - 24 : anchorX + 24,
+      fallbackWidth - bubbleWidth - 14
+    )
+  );
+  let bubbleHeight = 290;
+  $: bubbleTop = Math.max(12, Math.min(Math.max(72, anchorY - 186), fallbackHeight - bubbleHeight - (fallbackHeight > 600 ? 112 : 12)));
+  $: latestAssistant = [...messages].reverse().find((item) => item.role === 'assistant');
+  $: activeAssistant = activeAssistantId
+    ? messages.find((item) => item.id === activeAssistantId && item.role === 'assistant')
+    : null;
+  $: bubbleText = activeAssistant?.text || (loading ? message : latestAssistant?.text || message) || '今天想做点什么呢？';
+  $: statusLabel = {
+    listening: 'LISTENING', typing: 'TYPING', thinking: 'THINKING', speaking: 'REPLYING',
+    resting: 'RESTING', idle: bridgeConnected ? 'CONNECTED' : 'LOCAL MODE', error: 'OFFLINE'
+  }[companionState] ?? (bridgeConnected ? 'CONNECTED' : 'LOCAL MODE');
 
   function close() {
     dispatch('close');
@@ -42,20 +63,6 @@
     autoCloseTimeout = setTimeout(() => {
       close();
     }, 8000);
-  }
-
-  function triggerDisconnectedError() {
-    errorHint = 'Bridge not connected — run `node bridge/index.js`';
-    shakeError = true;
-
-    if (shakeTimer) {
-      window.clearTimeout(shakeTimer);
-    }
-
-    shakeTimer = window.setTimeout(() => {
-      shakeError = false;
-      shakeTimer = null;
-    }, 500);
   }
 
   function handleDocumentPointerDown(event) {
@@ -85,15 +92,14 @@
       return;
     }
 
-    if (!bridgeConnected) {
-      triggerDisconnectedError();
-      return;
-    }
-
-    errorHint = '';
     dispatch('send', { text });
     inputValue = '';
   }
+
+  function handleOpenHistory() {
+    dispatch('history');
+  }
+  function chooseMusic(index) { dispatch('musicChoice', { index }); }
 
   onMount(() => {
     resetPassiveTimeout();
@@ -105,9 +111,6 @@
     if (autoCloseTimeout) {
       clearTimeout(autoCloseTimeout);
     }
-    if (shakeTimer) {
-      clearTimeout(shakeTimer);
-    }
     window.removeEventListener('pointerdown', handleDocumentPointerDown);
     window.removeEventListener('keydown', handleDocumentKeydown);
   });
@@ -117,53 +120,75 @@
   }
 </script>
 
+<svelte:window bind:innerWidth={viewportWidth} bind:innerHeight={viewportHeight} />
+
 <div
   bind:this={root}
+  bind:clientHeight={bubbleHeight}
   class:passive
-  class:shake-error={shakeError}
   class="claude-bubble"
   role="dialog"
   aria-label="Claude bubble"
-  style="left: clamp(14px, {anchorX - 132}px, calc(100vw - 304px)); top: clamp(14px, {anchorY - 164}px, calc(100vh - 360px));"
+  style={`left: ${bubbleLeft}px; top: ${bubbleTop}px;`}
 >
   <div class="bubble-header">
-    <span>{title}</span>
-    <button type="button" class="close-btn" aria-label="Close Claude bubble" on:click={close}>×</button>
+    <div class="bubble-title">
+      <span>{title}</span>
+      <span class="status-chip" class:active={loading}>{statusLabel}</span>
+    </div>
+    <div class="bubble-actions">
+      {#if messages.length > 0}
+        <button type="button" class="icon-btn" aria-label="Open Claude history" title="Open history" on:click={handleOpenHistory}>≡</button>
+      {/if}
+      <button type="button" class="close-btn" aria-label="Close Claude bubble" title="Close" on:click={close}>×</button>
+    </div>
   </div>
 
   <div class="message-list" aria-live="polite">
-    {#if messages.length === 0}
-      <div class="message">{message}</div>
-    {:else}
-      {#each messages as item (item.id)}
-        <div class="line" class:user={item.role === 'user'}>
-          <span class="role">{item.role === 'user' ? 'You' : 'Claude'}</span>
-          {#if loading && item.role === 'assistant' && item.id === activeAssistantId}
-            <p class="streaming-text">{item.text}</p>
-          {:else}
-            <p>{item.text}</p>
-          {/if}
-        </div>
-      {/each}
-    {/if}
+    <div class="message" class:streaming-text={loading && activeAssistantId}>{bubbleText}</div>
   </div>
 
-  {#if errorHint}
-    <div class="bridge-hint error" role="status">{errorHint}</div>
-  {:else if !bridgeConnected}
-    <div class="bridge-hint">Bridge not connected</div>
+  {#if !bridgeConnected}
+    <div class="bridge-hint">Local companion mode</div>
+  {/if}
+
+  {#if musicFeedback.message}
+    <div class="music-feedback" aria-live="polite" aria-label="Music feedback">
+      <div class:music-error={musicFeedback.status === 'error'}>{musicFeedback.message}</div>
+      {#if musicFeedback.choices.length}
+        <div class="music-choices">
+          {#each musicFeedback.choices as choice, index}
+            <button type="button" title={choice.name} disabled={loading || !bridgeConnected || musicFeedback.status === 'pending'} on:click={() => chooseMusic(index + 1)}>
+              <span class="choice-number">{index + 1}.</span><span class="choice-name">{choice.name}</span>
+            </button>
+          {/each}
+        </div>
+        <button type="button" class="music-cancel" disabled={loading || !bridgeConnected} on:click={() => dispatch('musicCancel')}>取消</button>
+      {/if}
+    </div>
+  {/if}
+
+  {#if recentPlaylist && !musicFeedback.choices.length}
+    <button type="button" class="recent-playlist" title={recentPlaylist.name}
+      disabled={!bridgeConnected || musicFeedback.status === 'pending'} on:click={() => dispatch('playRecent')}>
+      <span aria-hidden="true">▶</span><span>{recentPlaylist.name}</span>
+    </button>
   {/if}
 
   <form class="input-row" on:submit={handleSubmit}>
     <input
       type="text"
-      placeholder={bridgeConnected ? 'ask something...' : 'Start the local bridge to chat'}
+      placeholder={bridgeConnected ? 'ask something...' : 'ask locally...'}
       value={inputValue}
       on:input={(event) => {
         inputValue = event.currentTarget.value;
-        if (errorHint) {
-          errorHint = '';
+        if (inputValue.trim()) {
+          dispatch('typing');
         }
+        resetPassiveTimeout();
+      }}
+      on:focus={() => {
+        dispatch('listening');
         resetPassiveTimeout();
       }}
       aria-label="Ask Claude"
@@ -179,25 +204,30 @@
   .claude-bubble {
     position: absolute;
     width: min(290px, calc(100vw - 28px));
-    border-radius: 12px;
-    background: rgba(232, 224, 216, 0.9);
-    color: #111;
-    border: 1px solid rgba(17, 17, 17, 0.12);
-    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    background: rgba(9, 11, 14, 0.94);
+    color: #e8e0d8;
+    border: 1px solid rgba(212, 165, 116, 0.34);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
     padding: 10px 12px 12px;
     z-index: 19;
     animation: bubble-in 140ms ease;
-    backdrop-filter: blur(10px);
   }
+  .music-feedback { margin: 6px 0 10px; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+  .music-choices { display: grid; gap: 4px; margin-top: 6px; }
+  .music-choices button, .music-cancel { height: 36px; width: 100%; min-width: 0; background: rgba(212,165,116,.08); color: inherit; border: 1px solid rgba(212,165,116,.28); border-radius: 8px; text-align: left; padding: 4px 8px; font: inherit; cursor: pointer; }
+  .music-choices button { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; }
+  .choice-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .music-cancel { margin-top: 4px; text-align: center; }
+  .music-feedback button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .music-feedback button:focus-visible { outline: 2px solid #d4a574; outline-offset: 1px; }
+  .music-error { color: #e89b87; }
+  .recent-playlist { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 4px; width: 100%; height: 36px; margin: 0 0 8px; padding: 4px 8px; text-align: left; border: 1px solid rgba(212,165,116,.28); border-radius: 8px; color: #e8e0d8; background: rgba(212,165,116,.08); cursor: pointer; font-family: inherit; font-size: 11px; line-height: 1.4; }
+  .recent-playlist span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .recent-playlist:disabled { opacity: 0.5; cursor: not-allowed; }
 
   .claude-bubble.passive {
     animation: bubble-in 140ms ease, bubble-fade 320ms ease 7.68s forwards;
-  }
-
-  .claude-bubble.shake-error {
-    animation: bubble-in 140ms ease, bubble-shake 500ms ease;
-    border-color: rgba(185, 70, 70, 0.72);
-    box-shadow: 0 0 0 2px rgba(185, 70, 70, 0.22), 0 14px 30px rgba(0, 0, 0, 0.3);
   }
 
   .bubble-header {
@@ -206,57 +236,82 @@
     justify-content: space-between;
     margin-bottom: 6px;
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 500;
+    color: #e8e0d8;
   }
 
+  .bubble-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .status-chip {
+    border: 1px solid rgba(212, 165, 116, 0.28);
+    border-radius: 8px;
+    padding: 4px 7px;
+    color: rgba(232, 224, 216, 0.64);
+    font: 10px/1 'IBM Plex Mono', monospace;
+    white-space: nowrap;
+  }
+
+  .status-chip.active {
+    color: #d4a574;
+    border-color: rgba(212, 165, 116, 0.52);
+  }
+
+  .bubble-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .icon-btn,
   .close-btn {
-    border: 0;
+    border: 1px solid rgba(212, 165, 116, 0.28);
+    border-radius: 8px;
     background: transparent;
     font-size: 16px;
     line-height: 1;
-    color: #111;
+    color: #e8e0d8;
     cursor: pointer;
+    width: 32px;
+    min-height: 32px;
+    height: 32px;
+    position: relative;
+    display: grid;
+    place-items: center;
     padding: 0;
+  }
+
+  .icon-btn::before,
+  .close-btn::before {
+    content: '';
+    position: absolute;
+    inset: -6px;
+  }
+
+  .icon-btn {
+    font-size: 14px;
   }
 
   .message-list {
     display: grid;
     gap: 6px;
-    max-height: 200px;
-    overflow-y: auto;
-    margin-bottom: 8px;
-    padding-right: 2px;
+    margin: 6px 0 10px;
+    overflow: hidden;
   }
 
   .message {
     font-size: 13px;
     line-height: 1.35;
     min-height: 18px;
-  }
-
-  .line {
-    border: 1px solid rgba(17, 17, 17, 0.14);
-    border-radius: 8px;
-    background: rgba(17, 17, 17, 0.05);
-    padding: 6px 7px;
-  }
-
-  .line.user {
-    background: rgba(17, 17, 17, 0.09);
-  }
-
-  .role {
-    font-size: 10px;
-    letter-spacing: 0.05em;
-    opacity: 0.72;
-    display: block;
-    margin-bottom: 3px;
-  }
-
-  p {
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.4;
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    white-space: pre-line;
   }
 
   .streaming-text::after {
@@ -273,11 +328,7 @@
   .bridge-hint {
     margin-bottom: 8px;
     font-size: 11px;
-    color: rgba(17, 17, 17, 0.62);
-  }
-
-  .bridge-hint.error {
-    color: #8f3b3b;
+    color: rgba(232, 224, 216, 0.58);
   }
 
   .input-row {
@@ -288,10 +339,10 @@
 
   input {
     width: 100%;
-    border: 1px solid rgba(17, 17, 17, 0.18);
+    border: 1px solid rgba(212, 165, 116, 0.28);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.7);
-    color: #111;
+    background: rgba(255, 255, 255, 0.06);
+    color: #e8e0d8;
     padding: 7px 9px;
     font-size: 12px;
     outline: none;
@@ -303,18 +354,28 @@
 
   input:focus-visible,
   .send-btn:focus-visible,
-  .close-btn:focus-visible {
-    outline: 1px solid rgba(17, 17, 17, 0.38);
+  .close-btn:focus-visible,
+  .icon-btn:focus-visible {
+    outline: 1px solid rgba(212, 165, 116, 0.9);
     outline-offset: 2px;
   }
 
   .send-btn {
-    border: 1px solid rgba(17, 17, 17, 0.18);
+    border: 1px solid rgba(212, 165, 116, 0.28);
     border-radius: 8px;
-    background: rgba(17, 17, 17, 0.06);
-    color: #111;
-    width: 32px;
+    background: rgba(212, 165, 116, 0.08);
+    color: #e8e0d8;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    position: relative;
     cursor: pointer;
+  }
+
+  .send-btn::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
   }
 
   .send-btn:disabled {
@@ -328,15 +389,14 @@
     bottom: -8px;
     width: 14px;
     height: 14px;
-    background: rgba(232, 224, 216, 0.92);
-    border-right: 1px solid rgba(17, 17, 17, 0.12);
-    border-bottom: 1px solid rgba(17, 17, 17, 0.12);
+    background: rgba(9, 11, 14, 0.94);
+    border-right: 1px solid rgba(212, 165, 116, 0.34);
+    border-bottom: 1px solid rgba(212, 165, 116, 0.34);
     transform: rotate(45deg);
   }
 
   @media (max-height: 760px) {
     .claude-bubble {
-      top: 14px !important;
       max-height: calc(100vh - 28px);
       overflow: hidden;
     }
@@ -354,25 +414,6 @@
     to {
       opacity: 1;
       transform: translateY(0);
-    }
-  }
-
-  @keyframes bubble-shake {
-    0%,
-    100% {
-      transform: translateX(0);
-    }
-    20% {
-      transform: translateX(-4px);
-    }
-    40% {
-      transform: translateX(4px);
-    }
-    60% {
-      transform: translateX(-3px);
-    }
-    80% {
-      transform: translateX(3px);
     }
   }
 

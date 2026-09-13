@@ -8,13 +8,19 @@ function createToken() {
   return crypto.randomBytes(16).toString('hex');
 }
 
-function createTokenManager() {
-  const token = createToken();
+function createTokenManager(existingToken) {
+  const token = typeof existingToken === 'string' && existingToken ? existingToken : createToken();
 
   return {
     token,
     verify(candidate) {
-      return typeof candidate === 'string' && candidate.length > 0 && candidate === token;
+      if (typeof candidate !== 'string') {
+        return false;
+      }
+
+      const candidateBuffer = Buffer.from(candidate);
+      const tokenBuffer = Buffer.from(token);
+      return candidateBuffer.length === tokenBuffer.length && crypto.timingSafeEqual(candidateBuffer, tokenBuffer);
     }
   };
 }

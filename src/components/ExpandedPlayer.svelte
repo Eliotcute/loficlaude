@@ -6,6 +6,11 @@
   export let title = '';
   export let genreColor = '#d4a574';
   export let isPlaying = false;
+  export let isLoading = false;
+  export let musicStatus = 'disabled';
+  export let musicProvider = 'youtube';
+  export let error = null;
+  export let rainSourceStatus = 'idle';
   export let rainType = 'medium';
   export let rainVolume = 60;
   export let timerMinutes = 45;
@@ -13,7 +18,7 @@
 
   const dispatch = createEventDispatcher();
   const TIMER_OPTIONS = [25, 45, 60];
-  const RAIN_TYPES = ['light', 'medium', 'heavy'];
+  const RAIN_TYPES = ['light', 'medium', 'heavy', 'stop'];
 
   let expanded = false;
   let inactivityTimeout;
@@ -32,13 +37,8 @@
 
   function resetInactivityTimer() {
     clearInactivityTimer();
-    if (!expanded) {
-      return;
-    }
-
-    inactivityTimeout = setTimeout(() => {
-      expanded = false;
-    }, 5000);
+    // Keep the drawer open while the user is interacting with Clawd or the
+    // chat input; closing after a timer can detach the conversation target.
   }
 
   function openExpanded() {
@@ -132,34 +132,42 @@
     on:touchstart={handleTouchStart}
     on:touchend={handleTouchEnd}
   >
-    <span class="brand">Claude FM</span>
+      <span class="brand">{musicProvider === 'netease-local' ? '网易云 · 本机' : 'YouTube · Claude FM'}</span>
     <span class="actions">
-      <span class="pause">{isPlaying ? '❚❚' : '▶'}</span>
+      <span class="pause">{musicStatus === 'loading' ? '...' : isPlaying ? '❚❚' : '▶'}</span>
       <span>🌧{rainVolume}</span>
     </span>
   </button>
 
   {#if expanded}
     <div class="expanded-body" transition:slide={{ duration: 250, easing: (t) => 1 - Math.pow(1 - t, 3) }}>
-      <div class="label">NOW PLAYING</div>
+      <div class="section-heading">音乐</div>
+      <div class="chip-row source-switch" aria-label="音乐来源">
+        <button type="button" class:active={musicProvider === 'youtube'} on:click={() => forward('useyoutube')}>YouTube</button>
+        <button type="button" class:active={musicProvider === 'netease-local'} on:click={() => forward('usেনetease')}>网易云</button>
+      </div>
+      <div class="label">{error ? '音频提示' : musicStatus === 'disabled' ? '音乐未启动' : isLoading ? '正在加载音乐' : musicStatus === 'playing' ? '正在播放' : '已暂停'}</div>
       <div class="title-row">
         <span class="genre-dot" style={`background: ${genreColor};`} aria-hidden="true"></span>
-        <div class="title" title={title}>{title}</div>
+        <div class="title" title={error || title}>{error || (musicProvider === 'netease-local' ? '本机 mpv 播放器' : title)}</div>
       </div>
 
       <div class="controls">
         <button type="button" aria-label="Previous track" on:click={() => forward('previous')}>◀</button>
         <button type="button" aria-label={isPlaying ? 'Pause track' : 'Play track'} on:click={() => forward('toggleplay')}>
-          {isPlaying ? '❚❚' : '▶'}
+          {musicStatus === 'loading' ? '...' : isPlaying ? '❚❚' : '▶'}
         </button>
         <button type="button" aria-label="Next track" on:click={() => forward('next')}>▶</button>
       </div>
 
       <div class="section-row">
-        <span class="section-title">RAIN</span>
+        <span class="section-title">雨声</span>
+        <span class="source-badge" class:remote={rainSourceStatus === 'rainy-mood'} class:fallback={rainSourceStatus === 'fallback'}>
+          {rainSourceStatus === 'local-recording' ? '本机录音' : rainSourceStatus === 'rainy-mood' ? 'RAINY MOOD' : rainSourceStatus === 'fallback' ? '合成备用' : rainSourceStatus === 'stopped' ? '已停止' : '未启动'}
+        </span>
         <div class="chip-row">
           {#each RAIN_TYPES as type}
-            <button type="button" class:active={rainType === type} on:click={() => handleRainType(type)}>{type}</button>
+            <button type="button" class:active={type !== 'stop' && rainType === type} on:click={() => handleRainType(type)}>{type}</button>
           {/each}
         </div>
       </div>
@@ -170,7 +178,7 @@
       </div>
 
       <div class="section-row">
-        <span class="section-title">TIMER</span>
+        <span class="section-title">专注</span>
         <div class="chip-row">
           {#each TIMER_OPTIONS as minutes}
             <button
@@ -202,8 +210,7 @@
     width: 100%;
     border: 1px solid rgba(212, 165, 116, 0.28);
     border-radius: 10px;
-    background: linear-gradient(180deg, rgba(10, 12, 13, 0.86), rgba(7, 9, 10, 0.8));
-    backdrop-filter: blur(14px);
+    background: linear-gradient(180deg, rgba(10, 12, 13, 0.96), rgba(7, 9, 10, 0.94));
     box-shadow: 0 16px 44px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(232, 224, 216, 0.04);
     color: #e8e0d8;
     overflow: hidden;
@@ -248,6 +255,7 @@
     gap: 10px;
     align-items: center;
     font-size: 13px;
+    min-height: 32px;
   }
 
   .pause {
@@ -257,7 +265,6 @@
 
   .expanded-body {
     min-height: 180px;
-    max-height: 220px;
     padding: 12px 14px 14px;
     display: grid;
     gap: 9px;
@@ -269,6 +276,13 @@
     font-size: 11px;
     letter-spacing: 0.08em;
     color: rgba(232, 224, 216, 0.75);
+  }
+
+  .section-heading {
+    color: #d4a574;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
 
   .title {
@@ -304,7 +318,8 @@
     border-radius: 7px;
     background: rgba(12, 15, 18, 0.74);
     color: inherit;
-    min-height: 32px;
+    min-height: 40px;
+    padding: 0 12px;
     font-family: inherit;
     cursor: pointer;
     text-transform: lowercase;
@@ -328,7 +343,7 @@
 
   .section-row {
     display: grid;
-    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-columns: 52px auto minmax(0, 1fr);
     align-items: center;
     gap: 10px;
   }
@@ -336,6 +351,30 @@
   .section-title {
     font-size: 12px;
     color: rgba(232, 224, 216, 0.75);
+  }
+
+  .source-badge {
+    border: 1px solid rgba(232, 224, 216, 0.2);
+    border-radius: 7px;
+    min-height: 40px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 10px;
+    color: rgba(232, 224, 216, 0.55);
+    font-size: 9px;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .source-badge.remote {
+    color: #a8d8b2;
+    border-color: rgba(103, 191, 122, 0.42);
+  }
+
+  .source-badge.fallback {
+    color: #e4c189;
+    border-color: rgba(212, 165, 116, 0.5);
   }
 
   .chip-row {
@@ -364,12 +403,16 @@
 
   @media (max-width: 720px) {
     .expanded-body {
-      max-height: none;
       min-height: 200px;
     }
 
     .chip-row {
       flex-wrap: wrap;
+    }
+
+    .controls button,
+    .chip-row button {
+      min-height: 40px;
     }
   }
 </style>

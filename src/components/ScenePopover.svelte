@@ -1,14 +1,10 @@
 <script>
   import { createEventDispatcher, onDestroy, onMount } from 'svelte';
   import { scene } from '../stores/appState.js';
+  import { SCENE_CATALOG } from '../canvas/asciiScenes.js';
 
   const dispatch = createEventDispatcher();
 
-  const SCENES = [
-    { key: 'lofiNight', icon: '🌙', label: 'Night' },
-    { key: 'softRain', icon: '🌧', label: 'Rain' },
-    { key: 'starDrift', icon: '⭐', label: 'Stars' }
-  ];
   const currentScene = scene.current;
   const sceneLocked = scene.locked;
 
@@ -92,7 +88,7 @@
   on:pointerdown={resetCloseTimer}
 >
   <div class="title">SCENE</div>
-  {#each SCENES as item}
+  {#each SCENE_CATALOG as item (item.key)}
     <button
       type="button"
       class:selected={item.key === $currentScene}
@@ -116,8 +112,7 @@
     padding: 8px;
     border: 1px solid rgba(212, 165, 116, 0.3);
     border-radius: 8px;
-    background: rgba(8, 10, 12, 0.72);
-    backdrop-filter: blur(10px);
+    background: rgba(8, 10, 12, 0.92);
     display: grid;
     gap: 6px;
     animation: fade-in 120ms ease;

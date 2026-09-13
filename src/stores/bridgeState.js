@@ -7,7 +7,11 @@ function readStoredToken() {
     return '';
   }
 
-  return window.localStorage.getItem(TOKEN_STORAGE_KEY) ?? '';
+  try {
+    return window.sessionStorage.getItem(TOKEN_STORAGE_KEY) ?? '';
+  } catch {
+    return '';
+  }
 }
 
 export const connectionStatus = writable('disconnected');
@@ -46,7 +50,7 @@ export function getSessionStatus(connection, claude) {
     return connectionState;
   }
 
-  return claudeState === 'connected' ? 'connected' : claudeState;
+  return claudeState === 'connected' || claudeState === 'done' ? 'connected' : claudeState;
 }
 
 bridgeToken.subscribe((value) => {
@@ -55,17 +59,23 @@ bridgeToken.subscribe((value) => {
   }
 
   const clean = `${value ?? ''}`.trim();
-  if (clean) {
-    window.localStorage.setItem(TOKEN_STORAGE_KEY, clean);
-  } else {
-    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  try {
+    if (clean) {
+      window.sessionStorage.setItem(TOKEN_STORAGE_KEY, clean);
+    } else {
+      window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    }
+  } catch {
+    // Keep the in-memory token available for the current page.
   }
 });
 
-export function resetBridgeState() {
+export function resetBridgeState(options = {}) {
   connectionStatus.set('disconnected');
   claudeStatus.set('disconnected');
   streamingText.set('');
   toolRunning.set(null);
-  lastError.set('');
+  if (!options.preserveLastError) {
+    lastError.set('');
+  }
 }
