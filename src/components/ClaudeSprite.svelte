@@ -6,8 +6,6 @@
 
   const dispatch = createEventDispatcher();
   const claudeMood = claude.mood;
-  const claudeX = claude.x;
-  const claudeY = claude.y;
   const claudeDirection = claude.direction;
   const currentClaudeForm = claudeForm;
   const uiMiniPlayerExpanded = ui.miniPlayerExpanded;
@@ -29,6 +27,8 @@
   let lastDragClientX = 0;
   let wasDragged = false;
   let spriteRoot;
+  let spriteX = 0;
+  let spriteY = 0;
   let formMenuOpen = false;
   let reducedMotion = false;
   let pageVisible = true;
@@ -56,6 +56,23 @@
     isFalling: false,
     velocityY: 0
   };
+  let cachedPlayerHeight = null;
+  let cachedPlayerHeightAt = 0;
+  const getPlayerHeight = () => {
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (cachedPlayerHeight != null && now - cachedPlayerHeightAt < 250) return cachedPlayerHeight;
+    cachedPlayerHeight = document.querySelector('.player-shell')?.getBoundingClientRect().height || null;
+    cachedPlayerHeightAt = now;
+    return cachedPlayerHeight;
+  };
+
+  function applySpriteTransform() {
+    spriteX = motionState.x;
+    spriteY = motionState.y;
+    if (spriteRoot) {
+      spriteRoot.style.transform = `translate3d(${spriteX}px, ${spriteY}px, 0)`;
+    }
+  }
 
   function syncStores({ force = true } = {}) {
     const nextMotion = {
@@ -171,26 +188,28 @@
       return;
     }
 
-    if (lastPaintTimestamp && timestamp - lastPaintTimestamp < targetFrameMs) {
+    const falling = motionState.isFalling;
+    if (!falling && lastPaintTimestamp && timestamp - lastPaintTimestamp < targetFrameMs) {
       startAnimation();
       return;
     }
     lastPaintTimestamp = timestamp;
 
-    const dt = Math.min(0.05, (timestamp - (lastTime || timestamp)) / 1000);
+    const dt = Math.min(falling ? 0.032 : 0.05, (timestamp - (lastTime || timestamp)) / 1000);
     lastTime = timestamp;
 
     if (!formMenuOpen) {
       updateClaudeMotion(
         motionState,
-        { width: window.innerWidth, height: window.innerHeight, playerExpanded: $uiMiniPlayerExpanded },
+        { width: window.innerWidth, height: window.innerHeight, playerExpanded: $uiMiniPlayerExpanded, playerHeight: getPlayerHeight() },
         dt
       );
     }
+    applySpriteTransform();
 
     motionSyncElapsedMs += dt * 1000;
-    if (motionSyncElapsedMs >= storeSyncIntervalMs) {
-      syncStores();
+    if (falling || motionSyncElapsedMs >= storeSyncIntervalMs) {
+      syncStores({ force: falling });
       motionSyncElapsedMs = 0;
     }
     const renderedForm = getAnimatedFormFrame(dt * 1000, $currentClaudeForm);
@@ -305,7 +324,7 @@
   }
 
   function handlePointerMove(event) {
-    const bounds = getPatrolBounds(window.innerWidth, window.innerHeight, $uiMiniPlayerExpanded);
+    const bounds = getPatrolBounds(window.innerWidth, window.innerHeight, $uiMiniPlayerExpanded, getPlayerHeight());
     const deltaX = event.clientX - dragStartX;
     const deltaY = event.clientY - dragStartY;
     motionState.x = Math.max(bounds.left, Math.min(bounds.right, dragStartSpriteX + deltaX));
@@ -317,6 +336,7 @@
       motionState.direction = 'right';
     }
     lastDragClientX = event.clientX;
+    applySpriteTransform();
     syncStores();
   }
 
@@ -327,7 +347,7 @@
   }
 
   function handlePointerUp() {
-    const bounds = getPatrolBounds(window.innerWidth, window.innerHeight, $uiMiniPlayerExpanded);
+    const bounds = getPatrolBounds(window.innerWidth, window.innerHeight, $uiMiniPlayerExpanded, getPlayerHeight());
     motionState.isDragging = false;
     const dragged = Math.hypot(motionState.x - dragStartSpriteX, motionState.y - dragStartSpriteY) > 4;
     if (dragged) {
@@ -339,9 +359,11 @@
     motionState.idleTime = 1000;
     motionState.velocityY = 0;
     motionState.isFalling = motionState.y < bounds.y;
-    if (spriteRoot) spriteRoot.style.transition = '';
+    if (spriteRoot) spriteRoot.style.transition = 'none';
     cleanupDragListeners();
+    applySpriteTransform();
     syncStores();
+    startAnimation({ resetClock: true });
   }
 
   function handlePointerDown(event) {
@@ -368,14 +390,15 @@
     const previousBounds = getPatrolBounds(
       previousViewport.width || window.innerWidth,
       previousViewport.height || window.innerHeight,
-      $uiMiniPlayerExpanded
+      $uiMiniPlayerExpanded, getPlayerHeight()
     );
-    const bounds = getPatrolBounds(window.innerWidth, window.innerHeight, $uiMiniPlayerExpanded);
+    const bounds = getPatrolBounds(window.innerWidth, window.innerHeight, $uiMiniPlayerExpanded, getPlayerHeight());
     const previousRange = previousBounds.right - previousBounds.left;
     const positionRatio = previousRange > 0 ? (motionState.x - previousBounds.left) / previousRange : 1;
     motionState.x = bounds.left + Math.max(0, Math.min(1, positionRatio)) * (bounds.right - bounds.left);
     motionState.y = motionState.isDragging || motionState.isFalling ? Math.min(motionState.y, bounds.y) : bounds.y;
     previousViewport = { width: window.innerWidth, height: window.innerHeight };
+    applySpriteTransform();
     syncStores();
   }
 
@@ -402,13 +425,15 @@
     reducedMotion = motionQuery.matches;
     pageVisible = document.visibilityState !== 'hidden';
     resetFormAnimation($currentClaudeForm);
+    applySpriteTransform();
     syncStores();
     drawStaticForm();
     window.addEventListener('resize', scheduleResize);
     const resizeObserver = typeof ResizeObserver === 'function'
       ? new ResizeObserver(scheduleResize)
       : null;
-    resizeObserver?.observe(spriteRoot);
+    const playerShell = document.querySelector('.player-shell');
+    resizeObserver?.observe(playerShell);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     document.addEventListener('pointerdown', handleDocumentPointerDown);
     document.addEventListener('keydown', handleDocumentKeydown);
@@ -445,7 +470,7 @@
   aria-label="Claude"
   tabindex="0"
   bind:this={spriteRoot}
-  style="transform: translate3d({$claudeX}px, {$claudeY}px, 0);"
+  style="transform: translate3d({spriteX}px, {spriteY}px, 0);"
   on:pointerdown={handlePointerDown}
   on:click={handleSpriteClick}
   on:contextmenu={handleContextMenu}
@@ -482,8 +507,8 @@
 <style>
   .claude-sprite {
     position: absolute;
-    min-width: 96px;
-    min-height: 96px;
+    width: 96px;
+    height: 96px;
     z-index: 15;
     cursor: pointer;
     transition: none;
@@ -491,6 +516,7 @@
     pointer-events: auto;
     touch-action: none;
     user-select: none;
+    outline: none;
   }
 
   .claude-sprite:focus:not(:focus-visible) {
@@ -498,9 +524,8 @@
   }
 
   .claude-sprite:focus-visible {
-    outline: 1px solid rgba(212, 165, 116, 0.82);
-    outline-offset: 5px;
-    box-shadow: 0 0 0 5px rgba(212, 165, 116, 0.08);
+    outline: none;
+    box-shadow: none;
   }
 
   .form-menu {

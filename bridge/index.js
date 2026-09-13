@@ -5,6 +5,7 @@ const { createTokenManager } = require('./token');
 const { createSocketServer } = require('./socketServer');
 const { createSessionState } = require('./sessionState');
 const { createPairingServer } = require('./pairingServer');
+const { createPairingManager } = require('./pairing');
 const { STATUS } = require('./protocol');
 const config = require('./config');
 
@@ -16,13 +17,16 @@ if (!runtimeStats.isDirectory() || (typeof process.getuid === 'function' && runt
 fs.chmodSync(config.runtimeDir, 0o700);
 
 const tokenManager = createTokenManager();
+const pairingManager = createPairingManager({ onRevoke: () => bridgeServer?.revokePairedClients() });
 let socketClosed = false;
 let bridgeServer;
 let sessionState;
 const pairingServer = createPairingServer({
   host: config.host,
   port: config.pairingPort,
-  tokenManager
+  tokenManager,
+  pairingManager,
+  onMobileConnection: (socket, request) => bridgeServer.emit('connection', socket, request)
 });
 
 const socketServer = createSocketServer({
@@ -79,6 +83,7 @@ function startBridgeServer() {
     bridgeServer = createBridgeServer({
       config,
       tokenManager,
+      pairingManager,
       sessionFactory: ({ onStatus, onDelta, onTool, onUser, onError, model, workspace }) => {
         const launchOptions = sessionState.getLaunchOptions();
         const session = createClaudeSession({

@@ -4,20 +4,23 @@ function clamp(value, min, max) {
 
 const PATROL_SPEED = 34;
 const IDLE_PAUSE_MS = 1000;
-const GRAVITY = 1800;
-const TERMINAL_VELOCITY = 1100;
+const GRAVITY = 980;
+const TERMINAL_VELOCITY = 560;
 export let chatPaused = false;
 
 export function setChatPaused(value) {
   chatPaused = Boolean(value);
 }
 
-export function getPatrolBounds(width, height, playerExpanded) {
+export function getPatrolBounds(width, height, playerExpanded, measuredPlayerHeight = null) {
   const collapsedPlayerHeight = 72;
-  const expandedPlayerHeight = 320;
+  // Keep Clawd's feet on the player shell's top edge. The expanded drawer is
+  // content-sized (music, rain and focus controls), so reserve its measured
+  // desktop height rather than letting the sprite walk through the panel.
+  const expandedPlayerHeight = 720;
   const playerBottomGap = 20;
   const spriteHeight = 96;
-  const playerHeight = playerExpanded ? expandedPlayerHeight : collapsedPlayerHeight;
+  const playerHeight = playerExpanded ? (Number.isFinite(measuredPlayerHeight) ? measuredPlayerHeight : expandedPlayerHeight) : collapsedPlayerHeight;
   const playerTop = height - playerHeight - playerBottomGap;
   const y = Math.max(120, playerTop - spriteHeight + (playerExpanded ? 8 : 0));
 
@@ -47,7 +50,7 @@ export function createClaudeMotionState(viewportWidth, viewportHeight) {
 }
 
 export function updateClaudeMotion(claudeState, viewport, dt) {
-  const bounds = getPatrolBounds(viewport.width, viewport.height, viewport.playerExpanded);
+  const bounds = getPatrolBounds(viewport.width, viewport.height, viewport.playerExpanded, viewport.playerHeight);
   claudeState.x = clamp(claudeState.x, bounds.left, bounds.right);
 
   if (claudeState.isDragging) {
@@ -56,14 +59,15 @@ export function updateClaudeMotion(claudeState, viewport, dt) {
 
   if (claudeState.isFalling) {
     claudeState.velocityY = Math.min(TERMINAL_VELOCITY, claudeState.velocityY + GRAVITY * dt);
-    claudeState.y += claudeState.velocityY * dt;
-
-    if (claudeState.y >= bounds.y) {
+    const nextY = claudeState.y + claudeState.velocityY * dt;
+    if (nextY >= bounds.y) {
       claudeState.y = bounds.y;
       claudeState.velocityY = 0;
       claudeState.isFalling = false;
       claudeState.mode = 'idle';
       claudeState.idleTime = IDLE_PAUSE_MS;
+    } else {
+      claudeState.y = nextY;
     }
     return;
   }

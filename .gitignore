@@ -29,3 +29,9 @@ output/playwright/
 # Environment
 .env
 .env.*
+
+# Project-generated outputs and local QA artifacts
+output/
+.playwright-cli/
+.gstack/browse-*.log
+.gstack/browse-*.jsonl

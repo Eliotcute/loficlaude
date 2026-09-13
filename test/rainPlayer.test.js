@@ -198,6 +198,25 @@ test('RainPlayer suspends fallback output after fade and resumes it without rest
   }
 });
 
+test('RainPlayer stop suspends fallback and presets resume playback', async () => {
+  const originalAudioContext = globalThis.AudioContext;
+  globalThis.AudioContext = FakeAudioContext;
+  try {
+    const player = new RainPlayer({ AudioElement: RejectingAudio });
+    await player.init('medium', true);
+    await player.play();
+    player.stop();
+    assert.equal(FakeAudioContext.instance.state, 'suspended');
+    for (const type of ['light', 'medium', 'heavy']) {
+      player.loadType(type);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.equal(FakeAudioContext.instance.state, 'running');
+    }
+  } finally {
+    globalThis.AudioContext = originalAudioContext;
+  }
+});
+
 test('RainPlayer starts fallback after a remote stream error even after remote playback started', async () => {
   const originalAudioContext = globalThis.AudioContext;
   globalThis.AudioContext = FakeAudioContext;

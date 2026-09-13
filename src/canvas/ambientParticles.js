@@ -6,8 +6,10 @@ export function createAmbientParticles(sceneKey, width, height) {
   const particles = [];
   const effects = getSceneDefinition(sceneKey).particles;
 
+  const areaScale = Math.min(1, (1280 * 720) / Math.max(1, width * height));
   if (effects.includes('rain')) {
-    for (let i = 0; i < 180; i += 1) {
+    const rainCount = Math.max(48, Math.round(180 * areaScale));
+    for (let i = 0; i < rainCount; i += 1) {
       particles.push({
         type: 'rain',
         x: rng() * width,
@@ -28,7 +30,8 @@ export function createAmbientParticles(sceneKey, width, height) {
     }
   }
   if (effects.includes('stars')) {
-    for (let i = 0; i < 80; i += 1) {
+    const starCount = Math.max(24, Math.round(80 * areaScale));
+    for (let i = 0; i < starCount; i += 1) {
       particles.push({ type: 'star', x: rng() * width, y: rng() * height * 0.8, tw: rng() * Math.PI * 2, tws: 1 + rng() * 3 });
     }
     if (effects.includes('meteors')) {

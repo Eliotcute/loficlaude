@@ -49,6 +49,8 @@ export function createAudioInitializer(options = {}) {
   let initializationPromise = null;
   let initializationGeneration = 0;
   let autoplayRequested = false;
+  let rainAutoplayRequested = false;
+  let youtubeAutoplayRequested = false;
   let audioReady = false;
   let youtubeReady = !enableYouTube;
   let rainReady = false;
@@ -60,14 +62,17 @@ export function createAudioInitializer(options = {}) {
     onLoading(loading);
   };
 
-  function initAudio(autoplay = false) {
+  function initAudio(autoplay = false, options = {}) {
     const useYouTube = enableYouTube && shouldUseYouTube();
+    const wantYouTubeNow = useYouTube && options.playYouTube !== false;
     autoplayRequested ||= autoplay;
+    rainAutoplayRequested ||= autoplay && options.playRain !== false;
+    youtubeAutoplayRequested ||= autoplay && wantYouTubeNow;
 
-    if (audioReady && (!useYouTube || youtubeReady) && rainReady) {
+    if (audioReady && (!wantYouTubeNow || youtubeReady) && rainReady) {
       if (autoplay) {
-        if (useYouTube) youtubePlayer?.play();
-        rainPlayer?.play();
+        if (wantYouTubeNow) youtubePlayer?.play();
+        if (options.playRain !== false) rainPlayer?.play();
       }
       return Promise.resolve({ youtubePlayer, rainPlayer });
     }
@@ -78,10 +83,12 @@ export function createAudioInitializer(options = {}) {
 
     const generation = ++initializationGeneration;
     setLoading(true);
-    if (useYouTube || !enableYouTube) setMusicStatus(useYouTube ? 'loading' : 'disabled');
+    if (wantYouTubeNow) setMusicStatus('loading');
+    else if (useYouTube) setMusicStatus(youtubeReady ? 'paused' : 'idle');
+    else if (!enableYouTube) setMusicStatus('disabled');
 
     initializationPromise = (async () => {
-      if (useYouTube && !youtubePlayer) {
+      if (wantYouTubeNow && !youtubePlayer) {
         youtubePlayer = createYouTubePlayer({ mountId });
       }
       if (!rainPlayer) {
@@ -90,7 +97,7 @@ export function createAudioInitializer(options = {}) {
 
       const initializeRain = (async () => {
         try {
-          await rainPlayer.init(getRainType(), autoplayRequested);
+          await rainPlayer.init(getRainType(), rainAutoplayRequested);
           rainPlayer.setVolume(getRainMuted() ? 0 : getRainVolume());
           rainReady = true;
           // Rain is an independent usable source; do not hold the room in
@@ -102,7 +109,7 @@ export function createAudioInitializer(options = {}) {
         }
       })();
 
-      const initializeYouTube = useYouTube
+      const initializeYouTube = wantYouTubeNow
         ? (async () => {
             try {
               await withTimeout(
@@ -135,11 +142,11 @@ export function createAudioInitializer(options = {}) {
         }
 
         if (autoplayRequested) {
-          if (useYouTube && shouldUseYouTube() && youtubeReady && youtubePlayer) {
+          if (youtubeAutoplayRequested && shouldUseYouTube() && youtubeReady && youtubePlayer) {
             youtubePlayer.play();
             setMusicStatus('playing');
           }
-          if (rainReady) {
+          if (rainReady && rainAutoplayRequested) {
             rainPlayer.play();
           }
         }
@@ -149,6 +156,8 @@ export function createAudioInitializer(options = {}) {
         if (generation === initializationGeneration) {
           setLoading(false);
           autoplayRequested = false;
+          rainAutoplayRequested = false;
+          youtubeAutoplayRequested = false;
           initializationPromise = null;
         }
       }
@@ -172,6 +181,8 @@ export function createAudioInitializer(options = {}) {
     youtubeReady = !enableYouTube;
     rainReady = false;
     autoplayRequested = false;
+    rainAutoplayRequested = false;
+    youtubeAutoplayRequested = false;
     initializationPromise = null;
     initializationGeneration += 1;
     setLoading(false);

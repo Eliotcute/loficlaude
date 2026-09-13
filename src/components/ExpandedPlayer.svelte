@@ -134,7 +134,7 @@
   >
       <span class="brand">{musicProvider === 'netease-local' ? '网易云 · 本机' : 'YouTube · Claude FM'}</span>
     <span class="actions">
-      <span class="pause">{musicStatus === 'loading' ? '...' : isPlaying ? '❚❚' : '▶'}</span>
+      <span class="pause">{isPlaying ? '❚❚' : '▶'}</span>
       <span>🌧{rainVolume}</span>
     </span>
   </button>
@@ -144,18 +144,18 @@
       <div class="section-heading">音乐</div>
       <div class="chip-row source-switch" aria-label="音乐来源">
         <button type="button" class:active={musicProvider === 'youtube'} on:click={() => forward('useyoutube')}>YouTube</button>
-        <button type="button" class:active={musicProvider === 'netease-local'} on:click={() => forward('usেনetease')}>网易云</button>
+        <button type="button" class:active={musicProvider === 'netease-local'} on:click={() => forward('usenetease')}>网易云</button>
       </div>
-      <div class="label">{error ? '音频提示' : musicStatus === 'disabled' ? '音乐未启动' : isLoading ? '正在加载音乐' : musicStatus === 'playing' ? '正在播放' : '已暂停'}</div>
+      <div class="label" role="status">{error ? '音频提示' : musicStatus === 'loading' || isLoading ? '正在加载音乐' : musicStatus === 'playing' ? '正在播放' : musicStatus === 'paused' ? '已暂停' : '尚未播放'}</div>
       <div class="title-row">
         <span class="genre-dot" style={`background: ${genreColor};`} aria-hidden="true"></span>
-        <div class="title" title={error || title}>{error || (musicProvider === 'netease-local' ? '本机 mpv 播放器' : title)}</div>
+        <div class="title" title={error || title}>{error || title || '尚未选择歌曲'}</div>
       </div>
 
       <div class="controls">
         <button type="button" aria-label="Previous track" on:click={() => forward('previous')}>◀</button>
         <button type="button" aria-label={isPlaying ? 'Pause track' : 'Play track'} on:click={() => forward('toggleplay')}>
-          {musicStatus === 'loading' ? '...' : isPlaying ? '❚❚' : '▶'}
+          {isPlaying ? '❚❚' : '▶'}
         </button>
         <button type="button" aria-label="Next track" on:click={() => forward('next')}>▶</button>
       </div>
@@ -318,9 +318,11 @@
     border-radius: 7px;
     background: rgba(12, 15, 18, 0.74);
     color: inherit;
+    min-width: 44px;
     min-height: 40px;
-    padding: 0 12px;
+    padding: 0 10px;
     font-family: inherit;
+    font-size: 14px;
     cursor: pointer;
     text-transform: lowercase;
     transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
@@ -341,9 +343,14 @@
     font-size: 16px;
   }
 
+  .controls button {
+    width: auto;
+    min-width: 0;
+  }
+
   .section-row {
     display: grid;
-    grid-template-columns: 52px auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: 10px;
   }
@@ -379,8 +386,15 @@
 
   .chip-row {
     display: flex;
+    flex-wrap: wrap;
+    min-width: 0;
     gap: 6px;
   }
+
+  .section-row > .chip-row { grid-column: 1 / -1; }
+  .section-row .chip-row button { flex: 1 1 44px; }
+  .source-badge { justify-self: end; }
+  .expanded-body { max-height: calc(100dvh - 240px); overflow-y: auto; }
 
   .chip-row button.active {
     border-color: rgba(212, 165, 116, 0.62);
@@ -414,5 +428,11 @@
     .chip-row button {
       min-height: 40px;
     }
+  }
+
+  @media (max-width: 430px) {
+    .expanded-body { padding: 10px; }
+    .controls, .chip-row { gap: 6px; }
+    .chip-row button { padding-inline: 8px; font-size: 12px; }
   }
 </style>

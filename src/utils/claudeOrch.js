@@ -341,6 +341,20 @@ export function createClaudeOrchestrator(options = {}) {
     return state;
   }
 
+  function handleMusicRoute(event) {
+    const lastUser = [...state.history].reverse().find((item) => item.role === 'user');
+    const musicAction = ['play_playlist', 'select_playlist', 'cancel_selection', 'pause', 'resume', 'next', 'prev', 'stop'].includes(event.action);
+    if (event.status !== 'started' || !musicAction || (event.text && lastUser?.text !== event.text)) return;
+    const pending = getPendingAssistant();
+    if (!pending || pending.text) return;
+    state.history = state.history.filter((item) => item.id !== pending.id);
+    activeAssistantId = null;
+    persistHistory();
+    setChatPaused(false);
+    sync({ history: state.history, loading: false });
+    setVisualState('connected', 'music_control');
+  }
+
   function markMusicChange() {
     if (state.loading || ['typing', 'listening'].includes(state.companionState)) return state;
     setVisualState('done', 'music_change');
@@ -770,6 +784,7 @@ export function createClaudeOrchestrator(options = {}) {
     showAmbientComment,
     showTransientBubble,
     sendMessage,
+    handleMusicRoute,
     handleClick,
     openPanel,
     markUserTyping,

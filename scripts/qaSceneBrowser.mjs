@@ -6,7 +6,7 @@ const output = `${process.cwd()}/output/playwright`;
 const baseURL = process.env.QA_BASE_URL || 'http://127.0.0.1:5173/';
 const appOrigin = new URL(baseURL).origin;
 await mkdir(output, { recursive: true });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: process.env.PLAYWRIGHT_HEADLESS !== 'false', executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await context.addInitScript(() => {

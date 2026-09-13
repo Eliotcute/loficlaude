@@ -32,6 +32,46 @@ test('local music startup skips YouTube and rain-only playback can resume', asyn
   audio.destroy();
 });
 
+test('start room can skip creating the YouTube iframe', async () => {
+  let youtubeCreations = 0;
+  const audio = createAudioInitializer({
+    shouldUseYouTube: () => true,
+    createRainPlayer: () => ({ async init() {}, setVolume() {}, play() {}, destroy() {} }),
+    createYouTubePlayer: () => {
+      youtubeCreations += 1;
+      return { async init() {}, setVolume() {}, play() {}, destroy() {} };
+    }
+  });
+  await audio.initAudio(true, { playRain: false, playYouTube: false });
+  assert.equal(youtubeCreations, 0);
+  assert.equal(audio.getPlayers().youtubePlayer == null, true);
+  audio.destroy();
+});
+
+test('start room can initialize rain without playing it', async () => {
+  const rainPlayer = {
+    playCalls: 0,
+    initCalls: 0,
+    async init(_type, autoplay) {
+      this.initCalls += 1;
+      this.lastAutoplay = autoplay;
+    },
+    setVolume() {},
+    play() { this.playCalls += 1; },
+    destroy() {}
+  };
+  const audio = createAudioInitializer({
+    shouldUseYouTube: () => false,
+    createRainPlayer: () => rainPlayer,
+    createYouTubePlayer: () => ({ async init() {}, setVolume() {}, play() {}, destroy() {} })
+  });
+  await audio.initAudio(true, { playRain: false });
+  assert.equal(rainPlayer.initCalls, 1);
+  assert.equal(rainPlayer.lastAutoplay, false);
+  assert.equal(rainPlayer.playCalls, 0);
+  audio.destroy();
+});
+
 test('a late YouTube initialization cannot autoplay over the local music provider', async () => {
   let useBrowser = true;
   let playCalls = 0;

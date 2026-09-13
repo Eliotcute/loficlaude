@@ -12,6 +12,7 @@ const RULES = [
 function parseMusicIntent(text) {
   const clean = `${text ?? ''}`.trim();
   if (!clean) return null;
+  if (/^lofi$/i.test(clean)) return { action: 'play_playlist', query: 'lofi' };
   const choice = clean.match(/^(?:播放|选择)?\s*(?:第\s*)?([1-5]|[一二三四五])\s*(?:个|号|首)?$/i);
   if (choice) { const n = {'一':1,'二':2,'三':3,'四':4,'五':5}[choice[1]] || Number(choice[1]); return { action: 'select_playlist', index: n - 1 }; }
   if (/^(取消|算了|cancel)$/i.test(clean)) return { action: 'cancel_selection' };

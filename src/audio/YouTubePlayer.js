@@ -190,6 +190,8 @@ export class YouTubePlayer {
     this.volume = 60;
     this.fadeTimer = null;
     this.frameObserver = null;
+    this.pausedByVisibility = false;
+    this.visibilityHandler = null;
   }
 
   isolateMountNode(mountNode, isolationNode = mountNode?.parentElement ?? mountNode) {
@@ -256,7 +258,9 @@ export class YouTubePlayer {
                 this.isolateMountNode(mountNode, isolationNode);
                 this.ready = true;
                 this.failedAll = false;
+                this.preferTinyPlayback();
                 this.setVolume(this.volume);
+                this.bindVisibilityPause();
                 player.error.set(null);
                 player.isLoading.set(false);
                 resolve();
@@ -308,6 +312,36 @@ export class YouTubePlayer {
     this.loadTrack(this.currentIndex - 1);
   }
 
+  preferTinyPlayback() {
+    try {
+      this.instance?.setSize?.(16, 9);
+      this.instance?.setPlaybackQuality?.('tiny');
+    } catch {
+      // Live radios may ignore quality hints; size still limits decode cost.
+    }
+  }
+
+  bindVisibilityPause() {
+    if (this.visibilityHandler || typeof document === 'undefined') return;
+    this.visibilityHandler = () => {
+      if (!this.ready || !this.instance) return;
+      if (document.visibilityState === 'hidden') {
+        const state = this.instance.getPlayerState?.();
+        if (state === 1) {
+          this.pausedByVisibility = true;
+          this.instance.pauseVideo?.();
+        }
+        return;
+      }
+      if (this.pausedByVisibility) {
+        this.pausedByVisibility = false;
+        this.preferTinyPlayback();
+        this.instance.playVideo?.();
+      }
+    };
+    document.addEventListener('visibilitychange', this.visibilityHandler);
+  }
+
   play() {
     if (!this.ready || !this.instance) {
       return;
@@ -316,6 +350,7 @@ export class YouTubePlayer {
       this.loadTrack(this.currentIndex);
     }
     this.clearFadeTimer();
+    this.preferTinyPlayback();
     this.setVolume(this.volume);
     this.instance.playVideo();
   }
@@ -370,6 +405,11 @@ export class YouTubePlayer {
 
   destroy() {
     this.clearFadeTimer();
+    if (this.visibilityHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+    }
+    this.visibilityHandler = null;
+    this.pausedByVisibility = false;
     this.frameObserver?.disconnect?.();
     this.frameObserver = null;
     if (this.instance) {

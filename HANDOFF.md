@@ -1,7 +1,9 @@
 # LoFiClaude Handoff
 
 ## Goal
-全面体检后的 P0/P1/P2 工程优化与本轮自动验收完成（2026-09-06）。真实第三方听音/会话和跨浏览器人工验收单列，不视为已通过。以下状态优先于历史对话和旧审计评分。
+把 2026-09-12 审计里挡住房间启动和 CI 的问题修到可验收：桌面房间能挂载并出现 Start room；无 Bridge 时仍能走本地房间（雨声，音乐策略与开关一致）；`npm test` / `npm run ci` 变绿。真实 ncm-cli / Claude / Safari / 真机仍不计入本轮完成。
+
+当前权威状态以本文件 + `TODO.md` + `.gstack/qa-reports/audit-2026-09-12/AUDIT.md` 为准。2026-09-06 的 P0/P1/P2 已在 git 历史中，不重新执行；不要把旧 Acceptance（152 tests）当作当前事实。
 
 ## Decisions
 - Claude session 继续使用 `--permission-mode dontAsk --tools ""`。
@@ -9,28 +11,45 @@
 - 当前实现为 Bridge 固定规则预解析，用户原文同时进入 Claude 文本会话；不是 Claude tool calling。此边界不应在文档中混称。
 - 搜索有多个歌单时等待选择，单个结果时调用该歌单；选择状态属于浏览器连接，重连需要重新搜索。
 - 凭证只留在本机 ncm-cli 配置，浏览器只接收状态。
+- 默认不把配对 LAN 暴露到公网；LAN 仅在用户主动「连接手机」后开启。
+- 无 Bridge 时房间必须可用（方向 PRD KR2）。YouTube 编译开关与 `player.musicProvider` 默认值必须一致，禁止再出现 `ENABLE_YOUTUBE_AUDIO=false` 但默认 provider 仍是 `youtube`。
+- `ui` 是 writable 袋子，不是 store；模板禁止 `$ui.xxx`，必须先绑定内部 writable。
 
 ## Progress And Evidence
-- P0 完成（2026-09-06）：候选与意图事件只发请求连接、不重放；新搜索/取消/断开会使旧异步结果与状态失效；终端保持文本会话，不执行浏览器音乐意图；CLI 假成功与错误 JSON 被拒绝。26 项 bridgeServer/musicIntent/musicController 专项测试通过，独立规格复核通过。
-- P0 本地提交：`288d8f4`。
-- 场景目录统一在 asciiScenes.js；Header/选择器/持久化/粒子共用。controller 校验业务失败、未播放、非法参数和损坏 JSON。
-- P1 完成（2026-09-06）：音乐反馈/候选独立于 Claude 回复，5 个候选可见且等高，取消/新搜索/断线清空；music_error 不走 Claude 错误通道。本机录音状态不再冒充 Rainy Mood。13 项 client/feedback 专项测试通过；Chromium 1440x900、768x1024、375x812 交互和雨点像素检查通过，截图在 output/playwright（已忽略）。最近歌单恢复的基础代码随前端契约一同提交，P2 再做行为验收。
-- P1 本地提交：`0d4b503`。
-- P2 完成：确认播放后仅保存歌单 ID/名称，刷新不自动播放，点击恢复；Clawd 音乐动作不打断回复；旧启动提示计时器不能关闭新回复；YouTube 延迟回调不能覆盖网易云状态。
-- P2 渲染：静态背景只在尺寸变化/换景时重绘，雨点层独立。Chromium 检查 11 场景有实际像素、13 形态选项可见、切换形态改变像素、自主巡游及拖拽下落正常；稳定场景采样窗口内静态重绘 0 次。
-- 可重复浏览器检查：`npm run qa:browser`（需已有 Playwright，见 README）。音乐使用测试 Bridge，不调用真实 Claude/ncm-cli。四档对话视口：1440x900、768x1024、375x812、375x667；5 候选等高、无横向溢出、无 pageerror。截图与 JSON 位于忽略的 `output/playwright/`。
+- 2026-09-06 已合入 git 的音乐隔离 / 反馈 / 场景目录工作仍然有效，见历史提交 `288d8f4`、`0d4b503`、`9cdbea9`。
+- 2026-09-12 审计（Grok，只读）已由 Codex GPT-6 Astra medium 按五项修复落地。Grok 复审：`http://127.0.0.1:5173/` 能看到 Start room；点击后 overlay 消失，无 `store_invalid_shape`。Playwright `qa:browser` 仍可能被本机 Chrome SIGABRT/EPERM 挡住，与 gstack browse 能否打开不是同一条路径。
+- 根因：未提交 `src/App.svelte` `paused={$ui.bridgeSettingsOpen}`。HEAD `9cdbea9` 无此行。
+- YouTube 编译开关已恢复为 `true`，与默认 `youtube` provider 和无 Bridge 启动路径一致。
+- `GET /token` 已收敛为 `{ token }`。测试数量以 Acceptance 为准，不要沿用 Progress 里的沙箱 skip 数字。
+- `RainPlayer.stop()` 现在会 suspend fallback；回归测试覆盖 Stop 后切换 light/medium/heavy 恢复。无客户端 orphan timer 现在调用 `music.close()`。
+- 手机空态 `/mobile.html` 375 无横滑、无 token 文案正确；Bridge `:9121` 本轮未开，配对 E2E 未做。
 
 ## Acceptance
-- `npm test`：152 通过、0 失败、0 跳过；含本机 Socket 与 pairing 测试（经允许在沙箱外运行）。
-- `npm run build`、`npm run verify:build`、`git diff --check`：通过。
-- 不新增运行时依赖，不迁移 p5.js/Three.js，不改 Claude 工具权限，不使用远端 CI。
+当前工作区（审计时）：
+- `npm test`（Grok 复审机）：161 项，161 通过，0 失败，0 跳过。Codex 沙箱曾报 148 pass / 13 skip，skip 视为环境限制，不以那次数字覆盖本机全绿。
+- `npm run build`、`npm run verify:build`：Codex 报通过；本轮复审以 `npm test` + 浏览器挂载为准。
+- `npm run ci`：Codex 报通过。
+- 浏览器：gstack browse 已验证 Start room 可见且可点；`npm run qa:browser` 未在本轮复审重跑（Codex 侧 Chrome 启动失败）。
+
+本轮优化完成标准（Codex 执行后必须达到）：
+- 打开 `http://127.0.0.1:5173/` 能看到 Start room，控制台无 `store_invalid_shape`。
+- `npm test` 全绿；`npm run ci` 全绿。
+- `ENABLE_YOUTUBE_AUDIO` 与默认 `musicProvider`、无 Bridge 启动路径一致。
+- `RainPlayer.stop()` 在 fallback 路径静音，Stop 后再选 light/medium/heavy 能恢复；有回归测试。
+- 更新本文件的 Progress / Acceptance，使其与命令输出一致。不要把未跑的听音/Safari 写成通过。
 
 ## Remaining Manual Acceptance
-- 用户验收真实 ncm-cli 搜索/播放/暂停/切歌、音频听感和 Claude 终端/浏览器续聊。本轮只验证 adapter/协议和测试替身，不伪造真实服务结果。
-- Safari、Firefox、真机与长期温度/功耗检查由用户完成；短时像素与绘制预算不等于全天性能保证。
+- 用户验收真实 ncm-cli 搜索/播放/暂停/切歌、音频听感和 Claude 终端/浏览器续聊。
+- Safari、Firefox、真机与长期温度/功耗。
 - 公开发布前确认本机雨声录音及可选远端音源授权。
+- 手机配对真机扫码：已修 LAN WS Origin 过严、hash token 被 iOS 丢掉、二维码改 query。仍需同一 Wi-Fi 与 macOS 放行 9121。room_state 完整度和雨声控制未当完成。
 
 ## Next
-1. 按上方人工验收清单使用产品，发现问题后开具体修复项。
-2. 周统计、语义场景仍为后续产品路线图，不计入本轮 Goal。
-3. 只以本文件与 TODO.md 继续；SESSION_LOG/archive 保留为历史，不重新执行旧方案。
+Grok 复审通过五项代码修复与房间挂载。剩余：
+1. 有可启动的 Playwright Chrome 时补跑 `npm run qa:browser`。
+2. 原有真实 ncm-cli / Claude / Safari / 真机人工验收。
+3. 注意：无浏览器客户端 3s 后现在调用 `music.close()`，会杀 ncm-cli/mpv 进程组；关标签不等于关 Bridge/Claude，但会停本机播放进程。
+4. 未连 Bridge 时设置面板会周期性 `ERR_CONNECTION_REFUSED`（token 发现），不是挂载崩溃。
+5. Chrome 卡死/CPU：隐藏 YouTube 直播视频解码，不是 `public/0.m4a`。雨声仍用用户提供的 `/0.m4a`（moov 在文件头，流式播放）。Start room 不创建 YouTube iframe、不自动下雨；点播放才加载 YouTube。切走标签 pauseVideo。画布 20fps、粒子按面积收敛。
+
+禁止：回滚未知改动、新增运行时依赖、改 Claude 工具权限、远端 CI、把 SESSION_LOG/archive 当权威。

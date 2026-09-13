@@ -101,3 +101,7 @@ export const SCENE_NAME_MAP = Object.freeze(Object.fromEntries(SCENE_CATALOG.map
 export function getSceneDefinition(key) {
   return Object.hasOwn(SCENES, key) ? SCENES[key] : SCENES[DEFAULT_SCENE];
 }
+
+export function sceneUsesRain(key) {
+  return getSceneDefinition(key).particles.includes('rain');
+}

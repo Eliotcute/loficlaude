@@ -22,6 +22,10 @@ test('recognizes the documented standalone commands and Chinese choices', () => 
   assert.deepEqual(parseMusicIntent('取消'), { action: 'cancel_selection' });
 });
 
+test('treats standalone lofi as the default music search', () => {
+  assert.deepEqual(parseMusicIntent('lofi'), { action: 'play_playlist', query: 'lofi' });
+});
+
 test('negated, quoted and unrelated conversation never controls music', () => {
   for (const text of ['不要暂停音乐', '别切换到网易云', '继续', '继续讲故事', '停止雨声',
     '如何播放 lofi', '为什么下一首没有切换', '解释 pause', 'next week', 'stopwatch',

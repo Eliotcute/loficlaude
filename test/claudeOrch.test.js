@@ -13,6 +13,22 @@ const expressionWinkIndex = FORMS.findIndex((form) => form.id === 'expression_wi
 const expressionSleepIndex = FORMS.findIndex((form) => form.id === 'expression_sleep');
 const idleBreatheIndex = FORMS.findIndex((form) => form.id === 'idle_breathe');
 
+test('local music routing releases chat without waiting for a Claude response', async () => {
+  resetBridgeState();
+  const orchestrator = createClaudeOrchestrator();
+  const client = { sendMessage: () => true };
+  orchestrator.attachBridge(client);
+  client.onStatus('connected');
+  await orchestrator.sendMessage('播放网易云 lofi');
+  assert.equal(orchestrator.getState().loading, true);
+  orchestrator.handleMusicRoute({ status: 'started', action: 'play_playlist', text: '播放网易云 lofi' });
+  assert.equal(orchestrator.getState().loading, false);
+  assert.equal(orchestrator.getState().activeAssistantId, null);
+  await orchestrator.sendMessage('你好');
+  assert.equal(orchestrator.getState().loading, true);
+  client.onStatus('done');
+});
+
 test('music companion feedback preserves completed replies and never interrupts active replies', async () => {
   resetBridgeState();
   const orchestrator = createClaudeOrchestrator();

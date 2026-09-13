@@ -8,6 +8,17 @@ function hashSeed(seed) {
   return h >>> 0;
 }
 
+export function canvasBufferSize(cssWidth, cssHeight, maxEdge = 1280) {
+  const width = Math.max(1, Math.floor(Number(cssWidth) || 0));
+  const height = Math.max(1, Math.floor(Number(cssHeight) || 0));
+  const edge = Math.max(width, height);
+  const scale = edge > maxEdge ? maxEdge / edge : 1;
+  return {
+    width: Math.max(1, Math.floor(width * scale)),
+    height: Math.max(1, Math.floor(height * scale))
+  };
+}
+
 export function seedRandom(seed) {
   let state = hashSeed(seed) || 1;
   return () => {

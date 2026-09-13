@@ -1,6 +1,7 @@
 <script>
-  import { createEventDispatcher, onDestroy, onMount } from 'svelte';
+  import { createEventDispatcher, onDestroy, onMount, tick } from 'svelte';
   import { connectionStatus } from '../stores/bridgeState.js';
+  import { placeClaudeBubble } from '../utils/claudeBubbleLayout.js';
 
   export let title = 'LoFiClaude';
   export let message = '今天想做点什么呢？';
@@ -16,26 +17,22 @@
   const dispatch = createEventDispatcher();
 
   let root;
+  let content;
   let inputValue = '';
   let autoCloseTimeout;
+  let lastScrolledText = '';
   let viewportWidth = 1024;
   let viewportHeight = 768;
 
   $: bridgeConnected = $connectionStatus === 'connected';
-  $: fallbackWidth = viewportWidth;
-  $: fallbackHeight = viewportHeight;
-  $: anchorX = Number.isFinite(anchor?.x) && anchor.x > 0 ? anchor.x : Math.round(fallbackWidth / 2);
-  $: anchorY = Number.isFinite(anchor?.y) && anchor.y > 0 ? anchor.y : Math.round(fallbackHeight * 0.58);
-  $: bubbleWidth = Math.min(290, Math.max(0, fallbackWidth - 28));
-  $: bubbleLeft = Math.max(
-    14,
-    Math.min(
-      anchorX >= fallbackWidth / 2 ? anchorX - bubbleWidth - 24 : anchorX + 24,
-      fallbackWidth - bubbleWidth - 14
-    )
-  );
-  let bubbleHeight = 290;
-  $: bubbleTop = Math.max(12, Math.min(Math.max(72, anchorY - 186), fallbackHeight - bubbleHeight - (fallbackHeight > 600 ? 112 : 12)));
+  $: bubbleBox = placeClaudeBubble({
+    anchorX: anchor?.x,
+    anchorY: anchor?.y,
+    viewportWidth,
+    viewportHeight
+  });
+  $: bubbleLeft = bubbleBox.left;
+  $: bubbleTop = bubbleBox.top;
   $: latestAssistant = [...messages].reverse().find((item) => item.role === 'assistant');
   $: activeAssistant = activeAssistantId
     ? messages.find((item) => item.id === activeAssistantId && item.role === 'assistant')
@@ -45,6 +42,10 @@
     listening: 'LISTENING', typing: 'TYPING', thinking: 'THINKING', speaking: 'REPLYING',
     resting: 'RESTING', idle: bridgeConnected ? 'CONNECTED' : 'LOCAL MODE', error: 'OFFLINE'
   }[companionState] ?? (bridgeConnected ? 'CONNECTED' : 'LOCAL MODE');
+  $: if (bubbleText && bubbleText !== lastScrolledText) {
+    lastScrolledText = bubbleText;
+    tick().then(() => { if (content) content.scrollTop = content.scrollHeight; });
+  }
 
   function close() {
     dispatch('close');
@@ -102,9 +103,20 @@
   function chooseMusic(index) { dispatch('musicChoice', { index }); }
 
   onMount(() => {
+    const applyViewport = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      if (Math.abs(w - viewportWidth) >= 8) viewportWidth = w;
+      if (Math.abs(h - viewportHeight) >= 8) viewportHeight = h;
+    };
+    applyViewport();
     resetPassiveTimeout();
+    window.addEventListener('resize', applyViewport);
     window.addEventListener('pointerdown', handleDocumentPointerDown);
     window.addEventListener('keydown', handleDocumentKeydown);
+    return () => {
+      window.removeEventListener('resize', applyViewport);
+    };
   });
 
   onDestroy(() => {
@@ -120,11 +132,8 @@
   }
 </script>
 
-<svelte:window bind:innerWidth={viewportWidth} bind:innerHeight={viewportHeight} />
-
 <div
   bind:this={root}
-  bind:clientHeight={bubbleHeight}
   class:passive
   class="claude-bubble"
   role="dialog"
@@ -144,7 +153,7 @@
     </div>
   </div>
 
-  <div class="message-list" aria-live="polite">
+  <div class="message-list" bind:this={content} aria-live="polite">
     <div class="message" class:streaming-text={loading && activeAssistantId}>{bubbleText}</div>
   </div>
 
@@ -203,7 +212,11 @@
 <style>
   .claude-bubble {
     position: absolute;
-    width: min(290px, calc(100vw - 28px));
+    width: min(360px, calc(100vw - 28px));
+    min-width: min(290px, calc(100vw - 28px));
+    max-width: min(640px, calc(100vw - 28px));
+    max-height: calc(100dvh - 160px);
+    overflow: hidden;
     border-radius: 8px;
     background: rgba(9, 11, 14, 0.94);
     color: #e8e0d8;
@@ -300,19 +313,19 @@
     display: grid;
     gap: 6px;
     margin: 6px 0 10px;
-    overflow: hidden;
+    max-height: min(280px, 32dvh);
+    overflow: auto;
+    scrollbar-width: none;
   }
 
   .message {
     font-size: 13px;
     line-height: 1.35;
     min-height: 18px;
-    display: -webkit-box;
-    -webkit-line-clamp: 5;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+    overflow-wrap: anywhere;
     white-space: pre-line;
   }
+  .message-list::-webkit-scrollbar { display: none; }
 
   .streaming-text::after {
     content: '';
@@ -404,6 +417,13 @@
     .message-list {
       max-height: min(160px, calc(100vh - 178px));
     }
+  }
+
+  @media (max-width: 430px) {
+    .claude-bubble { width: calc(100vw - 24px); padding: 9px 10px 10px; }
+    .bubble-header { gap: 4px; }
+    .status-chip { display: none; }
+    .message { font-size: 12px; }
   }
 
   @keyframes bubble-in {

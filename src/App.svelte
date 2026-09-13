@@ -9,8 +9,10 @@
   import AsciiBackground from './components/AsciiBackground.svelte';
   import ClaudeSprite from './components/ClaudeSprite.svelte';
   import { PLAYLIST } from './audio/YouTubePlayer.js';
+  import { sceneUsesRain } from './canvas/asciiScenes.js';
   import { hasStarted, uiMode, player, rain, scene, timer, claude, ui, focus } from './stores/appState.js';
   import { bridgeClient } from './bridge/bridgeClient.js';
+  import { claudeForm } from './stores/appState.js';
   import { connectionStatus } from './stores/bridgeState.js';
   import { setupKeyboardShortcuts } from './utils/keyboard.js';
   import { createSessionController } from './utils/session.js';
@@ -50,6 +52,7 @@
   const timerActive = timer.active;
   const timerRemainingSeconds = timer.remainingSeconds;
   const shortcutVisible = ui.shortcutVisible;
+  const bridgeSettingsOpen = ui.bridgeSettingsOpen;
   const claudeBubbleAnchor = claude.bubbleAnchor;
 
   let suppressPersist = false;
@@ -78,11 +81,14 @@
   let musicFeedback = emptyMusicFeedback();
   let recentPlaylist = null;
   // Formal V1.1 decision: ship the lofi station with explicit rain/music states.
+  // YouTube's iframe widget keeps a cross-origin postMessage polling loop alive
+  // and can stall the UI on localhost (especially while the settings panel opens).
+  // Keep it opt-in until the provider is explicitly selected by the user.
   const ENABLE_YOUTUBE_AUDIO = true;
 
   const audio = createAudioInitializer({
     enableYouTube: ENABLE_YOUTUBE_AUDIO,
-    shouldUseYouTube: () => get(connectionStatus) !== 'connected',
+    shouldUseYouTube: () => get(player.musicProvider) === 'youtube',
     mountId: 'youtube-player-host',
     getCurrentTrackIndex: () => $currentTrackIndex,
     getRainType: () => $rainType,
@@ -143,8 +149,15 @@
     applyClaudeState(claudeOrch.getState());
   }
 
+  let pendingSourcePause = null;
+  let switchingSource = false;
   function handleMusicState(state) {
     const status = state?.status ?? 'unavailable';
+    if (pendingSourcePause) {
+      if (['paused', 'idle', 'error'].includes(status)) pendingSourcePause(status !== 'error');
+      return;
+    }
+    if (get(player.musicProvider) !== 'netease-local') return;
     if (state?.provider === 'netease-local') {
       player.musicProvider.set('netease-local');
       audio.getPlayers().youtubePlayer?.pause();
@@ -163,6 +176,12 @@
   }
 
   function handleMusicIntent(event) {
+    claudeOrch.handleMusicRoute(event);
+    refreshClaudeState();
+    if (event.status === 'started' && ['play_playlist', 'select_playlist', 'resume'].includes(event.action)) {
+      audio.getPlayers().youtubePlayer?.pause();
+      player.musicProvider.set('netease-local');
+    }
     musicFeedback = updateMusicFeedback(musicFeedback, event);
     if (event?.status === 'started') player.error.set(null);
     if (event?.status === 'completed' && event.action !== 'cancel_selection' && !musicFeedback.choices.length) {
@@ -349,7 +368,7 @@
       persistFocusSnapshot(startedFocus);
     }
 
-    await audio.initAudio(true);
+    await audio.initAudio(true, { playRain: false, playYouTube: false });
     claudeOrch.showTransientBubble(
       getStartRitualCopy({
         sceneName: getSceneName($currentScene),
@@ -363,11 +382,29 @@
   }
 
   async function togglePlayback(source = null) {
+    if (switchingSource) return;
     if (source === 'youtube') {
+      if ($musicProvider === 'netease-local') {
+        switchingSource = true;
+        const paused = await new Promise((resolve) => {
+          const timeout = setTimeout(() => finish(false), 10000);
+          const finish = (ok) => { clearTimeout(timeout); pendingSourcePause = null; resolve(ok); };
+          pendingSourcePause = finish;
+          if (!bridgeClient.sendMusicCommand('pause')) finish(false);
+        });
+        switchingSource = false;
+        if (!paused) { player.error.set('未能确认网易云已暂停，请重试；暂不启动 YouTube。'); return; }
+      }
       player.musicProvider.set('youtube');
       player.isPlaying.set(false);
-      player.musicStatus.set('idle');
+      player.error.set(null);
+      player.currentTrackTitle.set(normalizeTrackTitle($currentTrackIndex, PLAYLIST));
+      player.musicStatus.set('loading');
       await audio.initAudio(true);
+      return;
+    }
+    if (source === 'netease-local' && get(connectionStatus) !== 'connected') {
+      player.error.set('请先连接本机 Bridge，再选择网易云。');
       return;
     }
     if (source === 'netease-local' && get(connectionStatus) === 'connected') {
@@ -386,7 +423,7 @@
       await startExperience();
       if (get(connectionStatus) !== 'connected') return;
     }
-    if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
+    if ($musicProvider === 'netease-local' && get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
       audio.getPlayers().youtubePlayer?.pause();
       if ($playerIsPlaying || $musicStatus === 'paused') {
         bridgeClient.sendMusicCommand($playerIsPlaying ? 'pause' : 'resume');
@@ -432,7 +469,7 @@
   }
 
   async function playNextTrack() {
-    if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
+    if ($musicProvider === 'netease-local' && get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
       audio.getPlayers().youtubePlayer?.pause();
       bridgeClient.sendMusicCommand('next');
       return;
@@ -441,7 +478,7 @@
   }
 
   async function playPreviousTrack() {
-    if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
+    if ($musicProvider === 'netease-local' && get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
       audio.getPlayers().youtubePlayer?.pause();
       bridgeClient.sendMusicCommand('prev');
       return;
@@ -464,7 +501,7 @@
 
   function setMusicVolume(nextVolume) {
     const volume = Math.max(0, Math.min(100, Math.round(nextVolume)));
-    if (get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
+    if ($musicProvider === 'netease-local' && get(connectionStatus) === 'connected' && bridgeClient.sendMusicCommand) {
       bridgeClient.sendMusicCommand('volume', [String(volume)]);
     }
   }
@@ -490,8 +527,14 @@
       return;
     }
 
-    const currentIndex = SCENE_ORDER.indexOf($currentScene);
-    const nextScene = SCENE_ORDER[(currentIndex + 1) % SCENE_ORDER.length];
+    const currentIndex = Math.max(0, SCENE_ORDER.indexOf($currentScene));
+    const nextScene = SCENE_ORDER.find((key, index) => {
+      const candidate = SCENE_ORDER[(currentIndex + 1 + index) % SCENE_ORDER.length];
+      return candidate !== $currentScene && !sceneUsesRain(candidate);
+    });
+    if (!nextScene) {
+      return;
+    }
     scene.current.set(nextScene);
     claudeOrch.showAmbientComment('trackChange', true).then(refreshClaudeState);
   }
@@ -576,6 +619,17 @@
   }
 
   onMount(() => {
+    let previousRoom = '';
+    const roomTimer = setInterval(() => {
+      const socket = bridgeClient.socket;
+      if (!socket || socket.readyState !== 1 || get(connectionStatus) !== 'connected') { previousRoom = ''; return; }
+      const value = { scene: get(scene.current), rain: { type: get(rain.type), status: get(rain.sourceStatus), volume: get(rain.volume), muted: get(rain.muted) }, timer: { active: get(timer.active), remainingSeconds: get(timer.remainingSeconds) }, companion: { state: get(claude.mode), form: get(claudeForm) } };
+      const encoded = JSON.stringify({ type: 'room_update', value });
+      if (encoded !== previousRoom) { socket.send(encoded); previousRoom = encoded; }
+    }, 500);
+    // The room observer is independent of animation frames and stops on unmount.
+    const cleanupRoom = () => clearInterval(roomTimer);
+    window.addEventListener('pagehide', cleanupRoom, { once: true });
     restoreState();
     recentPlaylist = readRecentPlaylist();
     claudeOrch.attachBridge(bridgeClient);
@@ -661,7 +715,7 @@
 
 <main class="app-shell" aria-label="LoFiClaude ambient room">
   <section class="canvas-zone" aria-label="Canvas scene" on:mousemove={setActivityState}>
-    <AsciiBackground scene={$currentScene} rainVolume={$rainVolume} working={$claudeMode === 'working'} />
+    <AsciiBackground scene={$currentScene} rainVolume={$rainVolume} working={$claudeMode === 'working'} paused={$bridgeSettingsOpen} />
     <ClaudeSprite on:activate={handleClaudeActivate} on:formchange={handleClaudeFormChange} />
 
     {#if !$hasStarted}

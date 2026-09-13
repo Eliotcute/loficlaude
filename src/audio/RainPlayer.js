@@ -207,6 +207,7 @@ export class RainPlayer {
     this.clearFadeTimer();
     this.audio?.pause?.();
     if (this.audio) this.audio.currentTime = 0;
+    if (this.usingFallback && this.ctx?.state === 'running') this.ctx.suspend?.();
     this.onStatus('stopped');
   }
 

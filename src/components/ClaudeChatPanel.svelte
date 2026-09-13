@@ -212,10 +212,10 @@
   .chat-panel {
     --control-radius: 8px;
     position: absolute;
-    top: max(80px, calc(100vh - 680px));
+    top: 148px;
     right: 20px;
     width: min(400px, calc(100vw - 24px));
-    height: min(560px, calc(100vh - 184px));
+    height: min(560px, calc(100vh - 250px));
     border: 1px solid rgba(212, 165, 116, 0.3);
     border-radius: var(--control-radius);
     background: rgba(8, 10, 12, 0.94);
@@ -464,11 +464,12 @@
 
   @media (max-width: 640px) {
     .chat-panel {
-      top: 72px;
+      top: 104px;
       bottom: 84px;
       right: 12px;
       left: 12px;
       width: auto;
+      height: auto;
       max-height: none;
     }
 

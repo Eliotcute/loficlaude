@@ -37,7 +37,11 @@ loficlaude bridge
 
 The command resolves the Bridge from the installed LoFiClaude project, so the terminal's current directory and the project's absolute path do not matter. The equivalent project-local command is `npm run bridge`.
 
-The bridge listens on `ws://localhost:9120` and exposes a loopback-only pairing endpoint on `http://127.0.0.1:9121/token`. When the room is opened on the same machine, it discovers the running Bridge and connects automatically; the token is never placed in the URL and is retained only in the current browser session. The token is also printed once to the local terminal as a manual fallback. Start it with `LOFICLAUDE_RESET_SESSION=1 loficlaude bridge` when you intentionally want a new Claude conversation.
+The bridge listens on `ws://localhost:9120` and exposes a loopback-only management port on `http://127.0.0.1:9121`. The room discovers the Bridge via `GET /token` on that port; the JSON body is `{ token }` only. The token is never placed in the room URL and is retained only in the current browser session. It is also printed once to the local terminal as a manual fallback. Start it with `LOFICLAUDE_RESET_SESSION=1 loficlaude bridge` when you intentionally want a new Claude conversation.
+
+Phone pairing is opt-in: start the Bridge, open the room, Bridge settings → 连接手机. That binds the pairing port on the computer's Wi-Fi/LAN address, serves `public/mobile.html`, and shows a QR whose URL looks like `http://192.168.x.x:9121/mobile.html?token=...` (query token, not a Vite `/mobile.html` page). Phone and computer must be on the same Wi-Fi; guest-network isolation will fail. Use the iPhone Camera app → Open in Safari. WeChat or other in-app browsers often cannot reach the LAN socket.
+
+If the status stays on 正在连接电脑…, the QR IP is probably the wrong interface, or macOS is blocking incoming TCP 9121. The URL field under the QR is the address the phone must reach. Closing the last browser client does not stop the Bridge or Claude; after 3 seconds it does stop the Bridge-started ncm-cli/mpv process group.
 
 Configure the optional local NetEase provider with one command:
 
@@ -77,11 +81,11 @@ YouTube lofi playback is enabled after a user gesture when using browser playbac
 
 Browser audio starts only after a user gesture. `Start room` is the intended first gesture.
 
-The bundled `public/0.m4a` is the default rain source. Rainy Mood remains an optional remote source when configured. If the selected audio fails, `RainPlayer` keeps the room usable with its local fallback path. Rain intensity changes the effective gain and filter shape.
+The bundled `public/0.m4a` is the default rain source. It is a long AAC recording with the index at the front of the file, so the browser streams it instead of decoding the whole clip. Rainy Mood remains an optional remote source when configured. If the selected audio fails, `RainPlayer` keeps the room usable with its local fallback path. Rain intensity changes the effective gain and filter shape.
 
 When the local Bridge is connected, the player controls the local NetEase Music `mpv` session. Configure and log into `ncm-cli` first. A CLI failure is reported, not silently replaced with YouTube playback. Without a Bridge connection, the controls use YouTube.
 
-The Bridge lazily starts `ncm-cli tui` behind a hidden macOS `script` pseudo-terminal before the first NetEase playback command. This keeps the CLI's required player service alive without asking users to open a second terminal. The service is stopped with the Bridge; Linux and other platforms report an explicit local-player-unavailable state instead of pretending playback started.
+The Bridge lazily starts `ncm-cli tui` behind a hidden macOS `script` pseudo-terminal before the first NetEase playback command. This keeps the CLI's required player service alive without asking users to open a second terminal. The process group is stopped when the Bridge exits, and also 3 seconds after the last authenticated browser or paired client disconnects. Linux and other platforms report an explicit local-player-unavailable state instead of pretending playback started.
 
 ### Conversation and music
 
@@ -93,7 +97,7 @@ The bubble keeps music feedback separate from Claude replies. Confirmed playlist
 
 Current execution evidence and remaining checks live in `HANDOFF.md` and `TODO.md`. Older audit text and session logs are historical, not an active backlog. Local validation is `npm test`, `npm run build`, and `npm run verify:build`; remote CI is outside this product's current scope.
 
-`npm run qa:browser` runs the scene and music UI checks sequentially in isolated Chromium browsers, saving screenshots in ignored `output/playwright/`. Start the local room first. This optional check uses an existing Playwright installation: set `PLAYWRIGHT_MODULE` to its module entry when it is supplied by your tooling, and `QA_BASE_URL` if the room uses another port. No Playwright dependency is added to the product. The music check uses a test Bridge and never invokes real Claude or ncm-cli; it is not a substitute for real listening and session acceptance.
+`npm run qa:browser` runs the scene and music UI checks sequentially in isolated Chromium, saving screenshots in ignored `output/playwright/`. Start the local room first. Playwright is a devDependency; you can still override `PLAYWRIGHT_MODULE` and `QA_BASE_URL`. The music check uses a test Bridge and never invokes real Claude or ncm-cli; it is not a substitute for real listening and session acceptance. QR generation for phone pairing uses the `qrcode` runtime dependency.
 
 ## Troubleshooting
 

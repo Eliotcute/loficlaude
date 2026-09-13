@@ -10,6 +10,7 @@ const runtimeDir = path.join(os.tmpdir(), `loficlaude-${userKey}-${workspaceKey}
 module.exports = {
   port: 9120,
   pairingPort: 9121,
+  // LAN mode is opt-in; default remains loopback-only.
   host: '127.0.0.1',
   authTimeout: 5000,
   defaultModel: 'claude-sonnet-4-6',

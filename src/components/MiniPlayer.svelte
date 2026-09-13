@@ -56,7 +56,7 @@
     on:previous={onPreviousTrack}
     on:next={onNextTrack}
     on:useyoutube={() => onTogglePlay('youtube')}
-    on:usենetease={() => onTogglePlay('netease-local')}
+    on:usenetease={() => onTogglePlay('netease-local')}
     on:setraintype={(event) => onSetRainType(event.detail.type)}
     on:setrainvolume={(event) => onSetRainVolume(event.detail.value)}
     on:settimer={(event) => onSelectTimer(event.detail.minutes)}
@@ -93,16 +93,20 @@
   .player-status {
     margin: 0;
     position: absolute;
-    left: 0;
+    left: 1px;
     bottom: calc(100% + 8px);
     max-width: min(420px, calc(100vw - 32px));
     color: rgba(232, 224, 216, 0.86);
     font-family: 'IBM Plex Mono', monospace;
     font-size: 11px;
+    line-height: 16px;
   }
 
   .player-status.error {
     color: #e19c91;
+    max-height: 32px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   @media (max-width: 520px) {
@@ -113,8 +117,8 @@
 
     .player-status {
       right: 0;
-      bottom: calc(100% + 42px);
-      text-align: center;
+      bottom: calc(100% + 8px);
+      text-align: left;
       margin-inline: auto;
     }
 

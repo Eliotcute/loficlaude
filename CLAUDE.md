@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run build` — Production build to `dist/`
 - `npm run preview` — Preview production build
 - `npm test` or `npm run test` — Run tests with Node's built-in test runner (node:test, no assertion library needed)
-- `node bridge/index.js` — Start local Claude bridge server (port 9120, token printed at startup)
+- `npm run bridge` or `loficlaude bridge` — Start local Claude bridge (`ws://localhost:9120`, loopback pairing/management `http://127.0.0.1:9121`)
 
 ## Architecture
 
@@ -23,10 +23,10 @@ Current document authority is `docs/LoFiClaude_PRODUCT_DIRECTION.md` -> `docs/Lo
 `src/stores/appState.js` — All app state lives in Svelte writable stores, grouped:
 - `player` — YouTube playback (isPlaying, currentTrackIndex, isLoading, error)
 - `rain` — Rain sound (volume 0-100, type: light/medium/heavy, muted)
-- `scene` — Canvas scene (current: lofiNight/softRain/starDrift, locked, transitionProgress)
+- `scene` — Canvas scene (keys from `asciiScenes.js`, locked, transitionProgress)
 - `timer` — Sleep timer (active, minutes, remainingSeconds)
 - `claude` — Companion state (mood, bubble visibility, position, direction, bubbleAnchor)
-- `ui` — Transient UI (popover open states, idleSince, shortcutVisible)
+- `ui` — Object of writables (popover open states, idleSince, shortcutVisible). Not itself a store; never `$ui.xxx` in templates.
 - `uiMode` — derived from idle detection: default/focus/interactive/companion/sleep
 - `claudeForm` — Current claudepix form index (0-12)
 
@@ -70,7 +70,7 @@ Provides local ambient fallback replies only. Browser code never sends conversat
 
 Node.js WebSocket bridge that connects local Claude Code CLI to the browser companion.
 
-- `bridge/index.js` bootstraps token auth, the private Unix Socket, persisted session state, and lifecycle handling.
+- `bridge/index.js` bootstraps token auth, the private Unix Socket, persisted session state, loopback pairing HTTP, and lifecycle handling.
 - `bridge/server.js` manages socket auth, bounded event replay, shared browser/terminal routing, and `status/assistant_delta/tool_running/error` events.
 - `bridge/claude.js` runs one serialized Claude CLI session in `--input-format stream-json --output-format stream-json` mode, streaming assistant deltas and tool activity back to the UI.
 - `bridge/sessionState.js` persists only the Claude session id in a private runtime file so a restart resumes the same conversation. The Bridge token rotates per server process; set `LOFICLAUDE_RESET_SESSION=1` for an explicit conversation reset.
@@ -90,7 +90,7 @@ Node.js WebSocket bridge that connects local Claude Code CLI to the browser comp
 | `TimerPopover.svelte` | Sleep timer selection |
 | `ScenePopover.svelte` | Scene switcher + lock |
 | `KeyboardHint.svelte` | Keyboard shortcuts overlay |
-| `ConnectionStatus.svelte` | Local bridge connection indicator |
+| `ConnectionStatus.svelte` | Local bridge connection indicator and opt-in phone pairing QR |
 
 ### Design constraints
 

@@ -30,8 +30,9 @@ function isLoopbackOrigin(request) {
   }
 }
 
-function createBridgeServer({ config, tokenManager, sessionFactory = createClaudeSession, WebSocketServerImpl = WebSocketServer, musicControllerFactory = createMusicController }) {
+function createBridgeServer({ config, tokenManager, pairingManager = null, sessionFactory = createClaudeSession, WebSocketServerImpl = WebSocketServer, musicControllerFactory = createMusicController }) {
   const authenticatedClients = new Set();
+  const pairedClients = new Set();
   const eventHistory = [];
   const instanceId = crypto.randomUUID();
   const maxPayloadBytes = config.maxPayloadBytes ?? DEFAULT_MAX_PAYLOAD_BYTES;
@@ -45,13 +46,24 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
   let nextEventId = 1;
   let claudeSession = null;
   let sessionStatus = STATUS.DISCONNECTED;
+  const roomState = { scene: 'lofiNight', rain: { status: 'unknown' }, timer: { active: false }, companion: { state: 'resting' } };
   let closing = false;
   let orphanStopTimer = null;
   const orphanStopDelay = config.orphanStopDelay ?? 3000;
   const music = musicControllerFactory({
-    onState: (value) => broadcast({ type: SERVER_TYPES.MUSIC_STATE, value }),
+    onState: (value) => { roomState.music = value; broadcast({ type: SERVER_TYPES.MUSIC_STATE, value }); },
     onError: (message) => broadcast({ type: 'music_error', message })
   });
+  let refreshingMusic = false;
+  async function refreshMusic() {
+    if (closing || refreshingMusic || !authenticatedClients.size || !music.refresh) return;
+    refreshingMusic = true;
+    try { await music.refresh(); }
+    catch { broadcast({ type: 'music_error', message: '无法刷新网易云播放状态，请重试。' }); }
+    finally { refreshingMusic = false; }
+  }
+  const musicRefreshTimer = setInterval(refreshMusic, 3000);
+  musicRefreshTimer.unref?.();
 
   function isUserMessageWithinLimit(text) {
     return text.length <= maxUserMessageChars && Buffer.byteLength(text, 'utf8') <= maxUserMessageBytes;
@@ -168,7 +180,7 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
         const searchVersion = context ? ++context.searchVersion : 0;
         const isCurrent = () => !closing && context?.active && context.searchVersion === searchVersion;
         const emit = (payload) => isCurrent() ? send(context.socket, payload) : false;
-        emit({ type: 'music_intent', status: 'started', action: intent.action });
+        emit({ type: 'music_intent', status: 'started', action: intent.action, text: clean });
         if (intent.action === 'cancel_selection') {
           if (context) context.playlistChoices = [];
           emit({ type: 'music_intent', status: 'completed', action: intent.action });
@@ -238,13 +250,13 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
     return requestedCursor < oldestEventId - 1;
   }
 
-  wss.on('connection', (socket, request) => {
+  wss.on('connection', (socket, request = {}) => {
     if ((wss.clients?.size ?? 0) >= maxWebSocketClients) {
       socket.close(1013, 'Too many clients');
       return;
     }
 
-    if (!isLoopbackOrigin(request)) {
+    if (!request.mobilePairing && !isLoopbackOrigin(request)) {
       socket.close(4003, 'Origin not allowed');
       return;
     }
@@ -274,14 +286,19 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
       }
 
       if (!authenticated) {
-        if (data.type !== CLIENT_TYPES.AUTH || !tokenManager.verify(data.token)) {
+        const authenticatedByPairing = data.type === CLIENT_TYPES.AUTH && pairingManager?.consume(data.token) === true;
+        const authenticatedByMobileSession = data.type === CLIENT_TYPES.AUTH && pairingManager?.verifySession(data.token) === true;
+        if (data.type !== CLIENT_TYPES.AUTH || (!( !request.mobilePairing && tokenManager.verify(data.token)) && !authenticatedByPairing && !authenticatedByMobileSession)) {
           send(socket, { type: SERVER_TYPES.ERROR, message: 'Unauthorized' });
           socket.close(4003, 'Unauthorized');
           return;
         }
 
         authenticated = true;
+        if (authenticatedByPairing || authenticatedByMobileSession) pairedClients.add(socket);
+        if (authenticatedByPairing) send(socket, { type: 'mobile_session', token: pairingManager.createSession() });
         authenticatedClients.add(socket);
+        refreshMusic();
         if (orphanStopTimer) { clearTimeout(orphanStopTimer); orphanStopTimer = null; }
         clearTimeout(authTimer);
         send(socket, {
@@ -293,8 +310,9 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
 
         try {
           ensureClaudeSession();
-          send(socket, { type: SERVER_TYPES.STATUS, value: sessionStatus });
-          send(socket, { type: SERVER_TYPES.MUSIC_STATE, value: music.getState() });
+        send(socket, { type: SERVER_TYPES.STATUS, value: sessionStatus });
+        send(socket, { type: SERVER_TYPES.MUSIC_STATE, value: music.getState() });
+          send(socket, { type: 'room_state', value: { ...roomState, music: music.getState(), claude: { status: sessionStatus } } });
         } catch (error) {
           console.error(`Claude session unavailable: ${error.message}`);
           send(socket, { type: SERVER_TYPES.ERROR, message: 'Claude session unavailable' });
@@ -318,6 +336,23 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
         return;
       }
 
+      if (data.type === 'room_snapshot_request') {
+        send(socket, { type: 'room_state', value: { ...roomState, music: music.getState(), claude: { status: sessionStatus } } });
+        return;
+      }
+
+      if (data.type === 'room_update' && !pairedClients.has(socket)) {
+        const v = data.value;
+        const short = x => typeof x === 'string' && x.length <= 100;
+        const number = x => Number.isFinite(x) && x >= 0 && x <= 86400;
+        if (!v || !short(v.scene) || !short(v.rain?.type) || !short(v.rain?.status) || !number(v.rain?.volume) || typeof v.rain?.muted !== 'boolean' || !number(v.timer?.remainingSeconds) || typeof v.timer?.active !== 'boolean' || !short(v.companion?.state) || !Number.isInteger(v.companion?.form)) {
+          send(socket, { type: 'error', message: 'Invalid room update' }); return;
+        }
+        Object.assign(roomState, { scene: v.scene, rain: { type: v.rain.type, status: v.rain.status, volume: v.rain.volume, muted: v.rain.muted }, timer: { active: v.timer.active, remainingSeconds: v.timer.remainingSeconds }, companion: { state: v.companion.state, form: v.companion.form }, updatedAt: Date.now() });
+        broadcast({ type: 'room_state', value: { ...roomState, music: music.getState(), claude: { status: sessionStatus } } });
+        return;
+      }
+
       if (data.type === CLIENT_TYPES.USER_MESSAGE) {
         const clean = typeof data.text === 'string' ? data.text.trim() : '';
         if (!clean) {
@@ -336,13 +371,14 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
     const removeClient = () => {
       clearTimeout(authTimer);
       authenticatedClients.delete(socket);
+      pairedClients.delete(socket);
       musicContext.active = false;
       musicContext.playlistChoices = [];
       musicContext.searchVersion += 1;
       if (authenticated && authenticatedClients.size === 0 && !closing) {
         orphanStopTimer = setTimeout(() => {
           orphanStopTimer = null;
-          if (!closing && authenticatedClients.size === 0) music.command('stop');
+          if (!closing && authenticatedClients.size === 0) music.close?.();
         }, orphanStopDelay);
       }
     };
@@ -358,6 +394,7 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
     }
 
     closing = true;
+    clearInterval(musicRefreshTimer);
     if (orphanStopTimer) { clearTimeout(orphanStopTimer); orphanStopTimer = null; }
     const session = claudeSession;
     claudeSession = null;
@@ -374,7 +411,15 @@ function createBridgeServer({ config, tokenManager, sessionFactory = createClaud
     closeWebSocketServer(callback);
   }
 
-  return Object.assign(wss, { broadcast, close, sendUserMessage });
+  function revokePairedClients() {
+    for (const client of pairedClients) {
+      authenticatedClients.delete(client);
+      client.close(4003, 'Mobile pairing revoked');
+    }
+    pairedClients.clear();
+  }
+
+  return Object.assign(wss, { broadcast, close, sendUserMessage, revokePairedClients });
 }
 
 module.exports = {

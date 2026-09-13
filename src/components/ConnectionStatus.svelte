@@ -4,6 +4,7 @@
   import { bridgeClient } from '../bridge/bridgeClient.js';
   import { bridgeToken, connectionStatus, claudeStatus, getSessionStatus, lastError } from '../stores/bridgeState.js';
   import { ui } from '../stores/appState.js';
+  import QRCode from 'qrcode';
 
   // The bridge settings can be opened from any terminal directory.
   const BRIDGE_CMD = 'loficlaude bridge';
@@ -15,6 +16,13 @@
   let discoveryTimer = null;
   let discoveryInFlight = false;
   let discoveryAttempts = 0;
+  let pairingUrl = '';
+  let pairingExpiresAt = 0;
+  let pairingError = '';
+  let pairingQr = '';
+  let pairingBusy = false;
+  let pairingNow = Date.now();
+  $: pairingRemaining = Math.max(0, Math.ceil((pairingExpiresAt - pairingNow) / 1000));
   const MAX_DISCOVERY_ATTEMPTS = 20;
   const DISCOVERY_INTERVAL_MS = 1500;
   const bridgeSettingsOpen = ui.bridgeSettingsOpen;
@@ -220,6 +228,31 @@
     }, 1400);
   }
 
+  async function startPairing() {
+    if (pairingBusy) return;
+    pairingBusy = true;
+    pairingError = '';
+    pairingUrl = ''; pairingQr = ''; pairingExpiresAt = 0;
+    try {
+      const response = await fetch('http://127.0.0.1:9121/pairing/start', { method: 'POST', cache: 'no-store' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Pairing unavailable');
+      pairingUrl = data.mobileUrl || '';
+      pairingQr = pairingUrl ? await QRCode.toDataURL(pairingUrl, { margin: 1, width: 180, errorCorrectionLevel: 'M' }) : '';
+      pairingExpiresAt = data.expiresAt || 0;
+      pairingNow = Date.now();
+    } catch (error) { pairingError = error.message; }
+    finally { pairingBusy = false; }
+  }
+
+  async function revokePairing() {
+    try {
+      const response = await fetch('http://127.0.0.1:9121/pairing/revoke', { method: 'POST' });
+      if (!response.ok) throw new Error('撤销失败，请重试');
+      pairingUrl = ''; pairingQr = ''; pairingExpiresAt = 0; pairingError = '';
+    } catch { pairingError = '无法确认手机已断开，请检查 Bridge 后重试'; }
+  }
+
   $: isConnected = $connectionStatus === 'connected';
   $: sessionStatus = getSessionStatus($connectionStatus, $claudeStatus);
   $: statusLabel =
@@ -236,14 +269,16 @@
   $: tokenMask = maskToken($bridgeToken);
 
   onMount(() => {
+    const pairingClock = window.setInterval(() => { pairingNow = Date.now(); }, 1000);
     if (get(bridgeToken).trim()) {
       connect();
-      return () => {};
+      return () => window.clearInterval(pairingClock);
     }
 
     startDiscovery();
 
     return () => {
+      window.clearInterval(pairingClock);
       if (discoveryTimer) {
         window.clearInterval(discoveryTimer);
         discoveryTimer = null;
@@ -295,6 +330,20 @@
       </div>
 
       <button type="button" on:click={isConnected ? disconnect : connect}>{isConnected ? 'Disconnect' : 'Connect'}</button>
+      <div class="pairing-box">
+        <button type="button" on:click={startPairing} disabled={pairingBusy}>{pairingBusy ? '正在生成…' : pairingUrl ? '重新生成二维码' : '连接手机'}</button>
+        {#if pairingUrl}
+          {#if pairingRemaining > 0}
+          <small>用 iPhone 相机扫码，点“在 Safari 中打开”。手机必须和电脑同一 Wi-Fi，不要用微信内置浏览器。二维码里的 IP 打不通就重新生成。剩余 {pairingRemaining} 秒；请保持电脑和 Bridge 开启。</small>
+          <input readonly value={pairingUrl} aria-label="Mobile pairing URL" on:click={(e) => e.currentTarget.select()} />
+          {#if pairingQr}<img class="pairing-qr" src={pairingQr} alt="手机配对二维码" />{/if}
+          {:else}
+          <small role="status">二维码已过期，请重新生成。已配对的手机不受二维码过期影响。</small>
+          {/if}
+          <button type="button" on:click={revokePairing}>断开手机</button>
+        {/if}
+        {#if pairingError}<small class="error">{pairingError}</small>{/if}
+      </div>
 
       {#if !isConnected}
         <div class="command-row">
@@ -353,6 +402,7 @@
     top: calc(100% + 8px);
     right: 0;
     width: min(320px, calc(100vw - 24px));
+    box-sizing: border-box;
     display: grid;
     gap: 10px;
     padding: 12px;
@@ -361,6 +411,10 @@
     background: #090b0e;
     box-shadow: 0 18px 40px rgba(0, 0, 0, 0.38);
   }
+  .pairing-box { display:grid; gap:6px; border-top:1px solid rgba(212,165,116,.2); padding-top:8px; }
+  .pairing-box small { font-size:10px; color:rgba(232,224,216,.7); }
+  .pairing-box input { min-width:0; font-size:10px; }
+  .pairing-qr { width:180px; height:180px; image-rendering:pixelated; background:#fff; padding:6px; justify-self:center; }
 
   .settings-header {
     display: flex;
@@ -370,6 +424,8 @@
     font-family: 'IBM Plex Mono', monospace;
     font-size: 11px;
   }
+
+  .settings-header .close-btn { width: 32px; min-height: 32px; height: 32px; }
 
   .status-dot {
     width: 8px;

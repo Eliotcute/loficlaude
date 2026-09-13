@@ -1,0 +1,55 @@
+<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>LoFiClaude Remote</title>
+<style>body{margin:0;background:#090b0e;color:#e8e0d8;font:16px monospace;padding:24px}main{max-width:560px;margin:auto}button,input{font:inherit;padding:12px;border:1px solid #765;border-radius:8px;background:#12161a;color:inherit}#messages{min-height:240px;white-space:pre-wrap;border:1px solid #765;padding:12px;margin:16px 0}form{display:flex;gap:8px}input{flex:1}</style>
+<main><h1>LoFiClaude Remote</h1><p id="status">正在加载本机房间…</p><noscript><p>请在 Safari 设置中允许 JavaScript 后重新打开。</p></noscript><div id="messages"></div><form><input autocomplete="off" placeholder="和 Claude 对话…"><button>发送</button></form><p><button data-command="pause">暂停电脑音乐</button> <button data-command="resume">继续电脑音乐</button></p></main>
+<script>
+const q=new URLSearchParams(location.search), h=new URLSearchParams(location.hash.slice(1)), out=document.querySelector('#messages'), status=document.querySelector('#status');
+addEventListener('error',()=>{status.textContent='页面初始化失败，请刷新后重试。';});
+const stored = { get: key => { try { return sessionStorage.getItem(key); } catch { return null; } }, set: (key, value) => { try { sessionStorage.setItem(key, value); } catch {} } };
+let token=q.get('token')||h.get('token')||stored.get('lofi-mobile-session'), ws, retry=0, ready=false, cursor=0, instanceId='', reconnectTimer;
+const write=t=>{out.textContent+=`${t}\n`;out.scrollTop=out.scrollHeight};
+function stripTokenFromUrl(){ try{history.replaceState(null, '', location.pathname)}catch{} }
+function setReady(value) { ready=value; document.querySelectorAll('button').forEach(b=>b.disabled=!value); }
+function send(value) { if(!ready || ws.readyState!==1) return false; ws.send(JSON.stringify(value)); return true; }
+function connect(){
+  setReady(false);
+  if(!token){status.textContent='请在电脑重新生成二维码，用 iPhone 相机扫描。';return;}
+  status.textContent='正在连接电脑…';
+  const socket=ws=new WebSocket(`${location.protocol==='https:'?'wss':'ws'}://${location.host}/ws`);
+  const timeout=setTimeout(()=>socket.close(),8000);
+  socket.onopen=()=>socket.send(JSON.stringify({type:'auth',token,instanceId,cursor}));
+  socket.onmessage=e=>{
+    if(ws!==socket)return;
+    let p; try{p=JSON.parse(e.data)}catch{return;}
+    if(p.type==='mobile_session'){token=p.token;stored.set('lofi-mobile-session',token);return;}
+    if(p.type==='ready'){
+      clearTimeout(timeout);retry=0;setReady(true);stripTokenFromUrl();
+      if(instanceId!==p.instanceId){cursor=0;out.textContent='';} instanceId=p.instanceId;
+      if(p.replayTruncated){cursor=0;out.textContent='';write('部分较早记录已过期，正在恢复可用对话。');}
+      status.textContent='手机已连接';
+      send({type:'room_snapshot_request'});return;
+    }
+    if(p.eventId && p.instanceId===instanceId && p.eventId<=cursor)return;
+    if(p.type==='user_message')write(`你：${p.text}`);
+    if(p.type==='assistant_delta'){out.textContent+=p.text;out.scrollTop=out.scrollHeight;}
+    if(p.type==='status' && p.value==='done')write('');
+    if(p.type==='room_state'){
+      let room=document.querySelector('#room');if(!room){room=document.createElement('p');room.id='room';status.after(room);}
+      room.textContent=`场景：${p.value.scene||'等待电脑同步'} · 雨声：${p.value.rain?.muted?'关闭':p.value.rain?.type||'未知'} · 剩余 ${p.value.timer?.remainingSeconds??0} 秒 · 小人：${p.value.companion?.state||'等待同步'}`;
+    }
+    if(p.type==='error'||p.type==='music_error')write(`提示：${p.message}`);
+    if(p.eventId && p.instanceId===instanceId)cursor=p.eventId;
+  };
+  socket.onclose=e=>{
+    clearTimeout(timeout);if(ws!==socket)return;setReady(false);
+    if(e.code===4003){token='';stored.set('lofi-mobile-session','');status.textContent='配对码已使用、过期或连接已撤销。请在电脑生成新码后再扫码。';return;}
+    status.textContent='电脑连接中断，正在重连；请保持电脑和 Bridge 开启。';
+    reconnectTimer=setTimeout(connect,Math.min(10000,500*2**Math.min(retry++,5)));
+  };
+}
+document.querySelector('form').onsubmit=e=>{e.preventDefault();const i=e.target.querySelector('input');if(i.value.trim()&&send({type:'user_message',text:i.value.trim()}))i.value=''};
+document.querySelectorAll('[data-command]').forEach(b=>b.onclick=()=>send({type:'music_command',command:b.dataset.command,args:[]}));
+addEventListener('pagehide',()=>{clearTimeout(reconnectTimer);const old=ws;ws=null;old?.close();});
+addEventListener('pageshow',()=>{if(!ws)connect();});
+connect();
+</script>
+<style>*{box-sizing:border-box}input{min-width:0}#messages{max-height:50dvh;overflow:auto;overflow-wrap:anywhere}#room{font-size:13px;line-height:1.6}button:disabled{opacity:.45}h1{font-size:24px}</style>

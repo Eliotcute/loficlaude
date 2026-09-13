@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 
-import { createPairingServer } from '../bridge/pairingServer.js';
+import { createPairingServer, getLanAddress, lanUpgradeAllowed } from '../bridge/pairingServer.js';
 
 function request(port, options = {}) {
   return new Promise((resolve, reject) => {
@@ -70,4 +70,27 @@ test('pairing endpoint rejects non-loopback browser origins', async (t) => {
   });
 
   assert.equal(response.statusCode, 403);
+});
+
+test('LAN address prefers Wi-Fi IPv4 and accepts numeric family', () => {
+  assert.equal(getLanAddress({
+    utun0: [{ family: 'IPv4', address: '10.8.0.2', internal: false }],
+    en0: [{ family: 4, address: '192.168.155.8', internal: false }]
+  }), '192.168.155.8');
+});
+
+test('LAN websocket upgrade allows Safari missing origin and rejects foreign origin', () => {
+  const address = '192.168.155.8';
+  const port = 9121;
+  assert.equal(lanUpgradeAllowed({ url: '/ws', headers: { host: `${address}:${port}` } }, address, port), true);
+  assert.equal(lanUpgradeAllowed({ url: '/ws', headers: { host: `${address}:${port}`, origin: 'null' } }, address, port), true);
+  assert.equal(lanUpgradeAllowed({
+    url: '/ws',
+    headers: { host: `${address}:${port}`, origin: `http://${address}:${port}` }
+  }, address, port), true);
+  assert.equal(lanUpgradeAllowed({
+    url: '/ws',
+    headers: { host: `${address}:${port}`, origin: 'https://example.com' }
+  }, address, port), false);
+  assert.equal(lanUpgradeAllowed({ url: '/mobile.html', headers: { host: `${address}:${port}` } }, address, port), false);
 });

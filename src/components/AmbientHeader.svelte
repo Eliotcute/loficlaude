@@ -247,7 +247,7 @@
       display: grid;
       grid-template-columns: 1fr;
       gap: 4px;
-      max-width: calc(100vw - 104px);
+      max-width: 100%;
     }
 
     .header-status :global(.connection-status) {
@@ -275,5 +275,12 @@
       height: 44px;
       font-size: 12px;
     }
+  }
+
+  @media (max-width: 760px) {
+    .ambient-header { grid-template-columns: 1fr; gap: 10px; padding: 14px 12px; }
+    .header-status { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .header-controls { justify-content: flex-end; width: 100%; }
+    .header-status :global(.connection-status) { width: 100%; }
   }
 </style>

@@ -560,4 +560,4 @@ V1.1 不引入服务端数据库。
 10. [待确认] 分享图、主题和跨设备同步的商业优先级。见 2.4。
 ### 网易云本机播放器生命周期
 
-网易云 provider 由 Bridge 托管。首次播放控制前，Bridge 在 macOS 使用系统 `script` 创建隐藏伪终端并启动 `ncm-cli tui`，维持 CLI 所需的活跃播放服务；随后才发送白名单播放命令。Bridge 关闭时回收该服务。非 macOS 不自动托管 TUI，并向用户报告明确的本机播放器不可用状态。
+网易云 provider 由 Bridge 托管。首次播放控制前，Bridge 在 macOS 使用系统 `script` 创建隐藏伪终端并启动 `ncm-cli tui`，维持 CLI 所需的活跃播放服务；随后才发送白名单播放命令。该进程组在 Bridge 关闭时回收，也在最后一个已认证浏览器/配对客户端离开约 3 秒后回收。关标签不会停止 Bridge 或 Claude session。非 macOS 不自动托管 TUI，并向用户报告明确的本机播放器不可用状态。

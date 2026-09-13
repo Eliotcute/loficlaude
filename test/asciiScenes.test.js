@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { SCENES, SCENE_CATALOG, getSceneDefinition } from '../src/canvas/asciiScenes.js';
+import { SCENES, SCENE_CATALOG, getSceneDefinition, sceneUsesRain } from '../src/canvas/asciiScenes.js';
 import { SCENE_NAME_MAP, SCENE_ORDER, getSceneName, parsePersistedSnapshot } from '../src/utils/appPersistence.js';
 
 test('Claude FM reference scenes are available as original procedural layouts', () => {
@@ -25,6 +25,13 @@ test('Claude FM reference scenes are available as original procedural layouts', 
     assert.ok(Array.isArray(definition.particles));
     assert.equal(getSceneName(key), SCENE_NAME_MAP[key]);
   }
+});
+
+test('rain scenes are explicit so auto-rotate can skip them', () => {
+  assert.equal(sceneUsesRain('lofiNight'), false);
+  assert.equal(sceneUsesRain('starDrift'), false);
+  assert.equal(sceneUsesRain('softRain'), true);
+  assert.equal(sceneUsesRain('rainWindow'), true);
 });
 
 test('unknown scenes fall back to the original night scene', () => {

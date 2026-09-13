@@ -1,13 +1,15 @@
 <script>
   import { onMount } from 'svelte';
-  import { drawStaticScene } from '../canvas/asciiRenderer.js';
+  import { canvasBufferSize, drawStaticScene } from '../canvas/asciiRenderer.js';
   import { getSceneDefinition } from '../canvas/asciiScenes.js';
   import { createAmbientParticles, updateAmbientParticles, drawAmbientParticles } from '../canvas/ambientParticles.js';
 
   export let scene = 'lofiNight';
   export let rainVolume = 60;
   export let working = false;
+  export let paused = false;
 
+  let stage;
   let canvas;
   let ctx;
   let particleCanvas;
@@ -30,7 +32,7 @@
   let resizeObserver;
   let lastPaintTimestamp = 0;
   let staticNeedsPaint = true;
-  const targetFrameMs = 1000 / 30;
+  const targetFrameMs = 1000 / 20;
   const transitionDuration = 1000;
 
   function drawSceneTo(canvasTarget, sceneKey) {
@@ -55,9 +57,13 @@
 
   function resize() {
     if (!canvas || !particleCanvas || !staticCanvas) return;
-    const rect = canvas.getBoundingClientRect();
-    width = Math.max(1, Math.floor(rect.width));
-    height = Math.max(1, Math.floor(rect.height));
+    const rect = (stage || canvas).getBoundingClientRect();
+    const next = canvasBufferSize(rect.width, rect.height);
+    if (next.width === width && next.height === height && canvas.width === next.width && canvas.height === next.height) {
+      return;
+    }
+    width = next.width;
+    height = next.height;
     canvas.width = width;
     canvas.height = height;
     particleCanvas.width = width;
@@ -90,7 +96,7 @@
   }
 
   function startAnimation({ resetClock = false } = {}) {
-    if (pageVisible && !reducedMotion && !animationFrame) {
+    if (pageVisible && !paused && !reducedMotion && !animationFrame) {
       if (resetClock) {
         lastTime = 0;
       }
@@ -112,6 +118,21 @@
       drawReducedFrame();
     } else {
       startAnimation({ resetClock: true });
+    }
+  }
+
+  $: applyPaused(paused);
+
+  function applyPaused(isPaused) {
+    if (isPaused) {
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame);
+        animationFrame = null;
+      }
+      return;
+    }
+    if (pageVisible && !reducedMotion && canvas) {
+      startAnimation();
     }
   }
 
@@ -228,7 +249,7 @@
     resizeObserver = typeof ResizeObserver === 'function'
       ? new ResizeObserver(scheduleResize)
       : null;
-    resizeObserver?.observe(canvas);
+    resizeObserver?.observe(stage || canvas);
     document.addEventListener('visibilitychange', handleVisibilityChange);
     motionQuery.addEventListener?.('change', handleMotionPreference);
     startAnimation();
@@ -251,7 +272,7 @@
   }
 </script>
 
-<div class="ascii-stage" class:working aria-label="ASCII animated background">
+<div bind:this={stage} class="ascii-stage" class:working aria-label="ASCII animated background">
   <canvas bind:this={canvas} class="ascii-background"></canvas>
   <canvas bind:this={particleCanvas} class="ascii-particles" aria-hidden="true"></canvas>
 </div>
@@ -262,33 +283,18 @@
     inset: 0;
     overflow: hidden;
     z-index: 0;
-  }
-
-  .ascii-background {
-    position: absolute;
-    top: 0;
-    left: -5%;
-    width: 110%;
-    height: 100%;
-    display: block;
-    image-rendering: pixelated;
     pointer-events: none;
-    filter: brightness(1.12) saturate(1.08);
   }
 
+  .ascii-background,
   .ascii-particles {
     position: absolute;
-    top: 0;
-    left: -5%;
-    width: 110%;
+    inset: 0;
+    width: 100%;
     height: 100%;
     display: block;
     image-rendering: pixelated;
     pointer-events: none;
-  }
-
-  .working .ascii-background {
-    filter: brightness(1.08) saturate(1.1);
   }
 
   @media (prefers-reduced-motion: reduce) {
