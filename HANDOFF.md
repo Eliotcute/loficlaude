@@ -54,6 +54,31 @@
 - 未做：真实浏览器页面内的流式帧率量化（需 Playwright Chrome），Safari/真机。
 - 工作区遗留：`public/0.m4a` 未提交删除（非本轮操作，未纳入提交），会导致默认雨声 404 并回退合成噪声，需用户确认。
 
+## 2026-09-26 晚：运行验收与网易云排查（未修，待续）
+
+### 运行状态
+- 已启动：Bridge（`node bin/loficlaude.js bridge`，日志 `/tmp/lofi-bridge.log`）与 Vite（`http://127.0.0.1:5173/`，日志 `/tmp/lofi-vite.log`），均为后台进程。换 app 后如需停止：`pkill -f bridge/index.js; pkill -f vite`。
+- 房间挂载正常，控制台只有 YouTube 自身的 CORS/postMessage 噪音。
+- `public/0.m4a` 仍是未提交删除：`/0.m4a` 返回 Vite 的 HTML（`Content-Type: text/html`），雨声退回合成噪声。恢复：`git checkout -- public/0.m4a`。
+
+### 网易云点了不切换：根因
+- 本机 `@music163/ncm-cli` 0.1.7；`ncm-cli state` 正常。
+- `ncm-cli search playlist --keyword lofi` 返回 `error: unknown command 'search'`。`--help` 与 `ncm-cli commands` 都不列 `search`，但 `play --help` 的示例引用了 `search all --keyword`。
+- `ncm-cli login --check` → `未登录`。**假设（未验证）**：`search` 需要登录后才注册，或是这个版本没有这条命令。用户说有搜索文档，下一轮先看文档。
+- Bridge 侧问题：`musicController` 把所有非 ENOENT 的错误都显示成「网易云音乐暂时不可用」，浏览器里又变成「音乐操作未完成」，真实原因（未登录 / 命令不存在）被吞掉了。修复时应把 CLI 的 `message` 或类别透传给 UI。
+- 下一步：① 用户执行 `ncm-cli login`；② 重跑 `ncm-cli search playlist --keyword lofi --output json`，对照文档确认命令和输出结构（`data.records` 字段）；③ 修 `musicController.searchPlaylists` 的参数，补一个登录检查，并让错误提示可以照着操作；④ 补测试。
+
+### 房间里的 Claude 为什么答非所问
+- 房间气泡里那段「没在做事，等你的指令…工作区有未提交改动」出自 Bridge 的 Claude 会话，**不是**这个 Claude Code 会话。它启动时由 Claude CLI 注入项目 CLAUDE.md、用户全局 CLAUDE.md 和一份 git status 快照，所以会引用过时的仓库状态，语气也和开发助手一样。
+- 可选改进（需用户决定）：Bridge 启动 Claude 时加 `--setting-sources` 或 `--bare`，让陪伴会话不继承开发配置和 git 快照。
+- 查看对话：房间气泡右上角 `≡` 打开完整历史面板；终端执行 `loficlaude chat` 进入同一会话。
+
+### 待办（下一轮）
+1. 网易云：见上面的下一步。
+2. 场景重绘：参照 loficities.com（480×270 缓冲 + 整数倍放大 + 构建时预渲染图层 + Bayer 抖动 + 240s 循环），地面线对齐现有 `getPatrolBounds().y`，不动 `claudeMotion`。先画 1 个给用户确认。
+3. 确认 `public/0.m4a` 的删除是否有意。
+4. 分支 `perf/terminal-chat-and-streaming` 尚未合并、未 push。
+
 ## Remaining Manual Acceptance
 - 用户验收真实 ncm-cli 搜索/播放/暂停/切歌、音频听感和 Claude 终端/浏览器续聊。
 - Safari、Firefox、真机与长期温度/功耗。

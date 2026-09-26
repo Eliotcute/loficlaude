@@ -39,6 +39,9 @@
 - [x] `loficlaude chat` shares the Bridge session; session id persisted in `~/.config/loficlaude/`; model alias `sonnet`.
 - [x] Fix `npm test` hang (YouTube fixture) — 177/177 pass.
 - [ ] Confirm the uncommitted deletion of `public/0.m4a`.
+- [ ] NetEase: ncm-cli 0.1.7 reports `unknown command 'search'` and is logged out; log in, verify search per docs, surface real CLI errors in UI.
+- [ ] Optional: isolate the Bridge Claude session from dev CLAUDE.md / git snapshot (`--setting-sources` / `--bare`).
+- [ ] Pixel scene pipeline (loficities-style), ground aligned to current patrol line.
 
 ## User Acceptance (Not Claimed Complete)
 - [ ] Real ncm-cli listening, search and playback controls; real Claude session continuity.
