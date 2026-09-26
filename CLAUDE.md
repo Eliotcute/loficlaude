@@ -9,6 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run preview` — Preview production build
 - `npm test` or `npm run test` — Run tests with Node's built-in test runner (node:test, no assertion library needed)
 - `npm run bridge` or `loficlaude bridge` — Start local Claude bridge (`ws://localhost:9120`, loopback pairing/management `http://127.0.0.1:9121`)
+- `loficlaude chat` — Join the Bridge's shared Claude session from a terminal via the private Unix socket
 
 ## Architecture
 
@@ -36,13 +37,13 @@ Room, rain, scene, focus, and bounded chat history persist to LocalStorage. The 
 
 Two separate Canvas systems that layer together:
 
-1. **`asciiRenderer.js` + `asciiScenes.js`** — Background scene. Renders dot-matrix objects (windows, desks, planets, city skylines, clouds, lamps) using seeded pseudo-random placement. Three scenes defined as data in `asciiScenes.js`. 5-layer architecture: base fill → far sky → skyline → particles → foreground. One-second crossfade between scenes.
+1. **`asciiRenderer.js` + `asciiScenes.js`** — Background scene. Renders dot-matrix objects (windows, desks, planets, city skylines, clouds, lamps) using seeded pseudo-random placement. Scenes are a single catalog in `asciiScenes.js` (key, label, icon, objects, particles). 5-layer architecture: base fill → far sky → skyline → particles → foreground. One-second crossfade between scenes.
 
 2. **`ambientParticles.js`** — Particle systems per scene (rain for softRain, stars for lofiNight, stars+meteors for starDrift). Updated in the animation loop.
 
 3. **`spriteFrames.js`** — Original 8-mode sprite system (idle/walk/talk/sleep/thinking/working/blocked/happy). 24×24 grid, 4x pixel scale. Each mode has 2 animation frames. Used for walk animation and fallback rendering.
 
-4. **`claudepixForms.js`** — Enhanced expressive form system, 13 presets with multi-frame animation. Each form has a base grid + timed frame sequence + optional custom palette. Used when Claude is not walking. `src/canvas/claudepixForms.js` contains the raw preset data (~700 lines).
+4. **`claudepixForms.js`** — Enhanced expressive form system, 13 presets with multi-frame animation. Each form has a base grid + timed frame sequence + optional custom palette. Used when Claude is not walking. `src/canvas/claudepixForms.js` contains the raw preset data.
 
 5. **`claudeMotion.js`** — Walk behavior controller. Claude navigates within walk bounds, alternating between idle (5-12s) and walk-to-random-target states. Speed 34px/s.
 
@@ -53,7 +54,7 @@ Renders a 24×24 canvas element positioned absolutely via `translate3d`. Uses `c
 ### Audio system (`src/audio/`)
 
 - **`YouTubePlayer.js`** — Wraps YouTube iframe API. 5-track base playlist plus local custom tracks, auto-skips on error/end. `loadYouTubeApi()` does the global script injection + Promise-based init.
-- **`RainPlayer.js`** — Web Audio pink-noise rain with light/medium/heavy filter and gain presets. The app defaults to this local source; an explicit remote mode retains automatic fallback. `fadeOut(ms)` suspends output after timer end and can resume the existing source.
+- **`RainPlayer.js`** — Streams the bundled `/0.m4a` rain recording with light/medium/heavy gain/filter presets; Web Audio pink noise is the fallback when the file fails. `fadeOut(ms)` suspends output after timer end and can resume the existing source.
 
 ### AI companion (`src/ai/ClaudeChat.js`)
 
@@ -73,7 +74,8 @@ Node.js WebSocket bridge that connects local Claude Code CLI to the browser comp
 - `bridge/index.js` bootstraps token auth, the private Unix Socket, persisted session state, loopback pairing HTTP, and lifecycle handling.
 - `bridge/server.js` manages socket auth, bounded event replay, shared browser/terminal routing, and `status/assistant_delta/tool_running/error` events.
 - `bridge/claude.js` runs one serialized Claude CLI session in `--input-format stream-json --output-format stream-json` mode, streaming assistant deltas and tool activity back to the UI.
-- `bridge/sessionState.js` persists only the Claude session id in a private runtime file so a restart resumes the same conversation. The Bridge token rotates per server process; set `LOFICLAUDE_RESET_SESSION=1` for an explicit conversation reset.
+- `bridge/sessionState.js` persists only the Claude session id in `~/.config/loficlaude/` (0700) so restarts and reboots resume the same conversation; a legacy temp-dir file is migrated once. Model defaults to the `sonnet` alias, override with `LOFICLAUDE_MODEL`.
+- `room_state` snapshots are sent live via `broadcastTransient` and never enter the replay history; music state is deduplicated and background polling stops while `ncm-cli` is missing. The Bridge token rotates per server process; set `LOFICLAUDE_RESET_SESSION=1` for an explicit conversation reset.
 
 ### Components (`src/components/`)
 

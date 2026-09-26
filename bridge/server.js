@@ -135,6 +135,14 @@ function createBridgeServer({ config, tokenManager, pairingManager = null, sessi
     return event;
   }
 
+  // Live snapshots (room state) supersede each other, so they are delivered
+  // to current clients without consuming the conversation replay window.
+  function broadcastTransient(payload) {
+    for (const client of [...authenticatedClients]) {
+      send(client, payload);
+    }
+  }
+
   function ensureClaudeSession() {
     if (claudeSession) {
       return claudeSession;
@@ -349,7 +357,7 @@ function createBridgeServer({ config, tokenManager, pairingManager = null, sessi
           send(socket, { type: 'error', message: 'Invalid room update' }); return;
         }
         Object.assign(roomState, { scene: v.scene, rain: { type: v.rain.type, status: v.rain.status, volume: v.rain.volume, muted: v.rain.muted }, timer: { active: v.timer.active, remainingSeconds: v.timer.remainingSeconds }, companion: { state: v.companion.state, form: v.companion.form }, updatedAt: Date.now() });
-        broadcast({ type: 'room_state', value: { ...roomState, music: music.getState(), claude: { status: sessionStatus } } });
+        broadcastTransient({ type: 'room_state', value: { ...roomState, music: music.getState(), claude: { status: sessionStatus } } });
         return;
       }
 

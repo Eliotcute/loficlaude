@@ -118,3 +118,38 @@ test('music controller reports missing CLI without exposing command details', as
   assert.deepEqual(errors, ['网易云音乐 CLI 未安装']);
   assert.equal(controller.getState().status, 'error');
 });
+
+test('unchanged polled state is not republished', async () => {
+  const states = [];
+  const controller = createMusicController({
+    onState: (state) => states.push(state),
+    execFileImpl(command, args, options, callback) {
+      callback(null, JSON.stringify({ state: { status: 'paused', volume: 40 } }));
+    }
+  });
+  await controller.refresh();
+  await controller.refresh();
+  await controller.refresh();
+  assert.equal(states.length, 1);
+});
+
+test('missing CLI stops background polling but explicit commands still retry', async () => {
+  const errors = [];
+  let calls = 0;
+  const controller = createMusicController({
+    onError: (message) => errors.push(message),
+    execFileImpl(command, args, options, callback) {
+      calls += 1;
+      const error = new Error('missing');
+      error.code = 'ENOENT';
+      callback(error);
+    }
+  });
+  assert.equal(await controller.refresh(), false);
+  assert.equal(await controller.refresh(), false);
+  assert.equal(await controller.refresh(), false);
+  assert.equal(calls, 1);
+  assert.deepEqual(errors, ['网易云音乐 CLI 未安装']);
+  assert.equal(await controller.command('state'), false);
+  assert.equal(calls, 2);
+});

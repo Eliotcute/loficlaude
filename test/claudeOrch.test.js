@@ -612,3 +612,62 @@ test('Claude bridge errors finalize the active placeholder instead of leaving st
   assert.equal(assistant.complete, true);
   assert.match(assistant.text, /\(interrupted\)$/);
 });
+
+test('streamed deltas are persisted at most once per interval and flushed on completion', async () => {
+  resetBridgeState();
+  const originalWindow = globalThis.window;
+  const timers = new Map();
+  let timerId = 0;
+  let writes = 0;
+  let lastStored = null;
+  globalThis.window = {
+    localStorage: {
+      getItem: () => null,
+      setItem(_key, value) { writes += 1; lastStored = JSON.parse(value); },
+      removeItem() {}
+    },
+    setTimeout(callback) { timers.set(++timerId, callback); return timerId; },
+    clearTimeout(id) { timers.delete(id); }
+  };
+  try {
+    const bridgeClient = { connect: () => true, sendMessage: () => true };
+    const orchestrator = createClaudeOrchestrator();
+    orchestrator.attachBridge(bridgeClient);
+    bridgeClient.onStatus('connected');
+    await orchestrator.sendMessage('stream please');
+    const before = writes;
+    for (let i = 0; i < 200; i += 1) bridgeClient.onDelta('x');
+    assert.equal(writes, before);
+
+    bridgeClient.onStatus('done');
+    assert.ok(writes - before <= 2);
+    assert.equal(lastStored.at(-1).text, 'x'.repeat(200));
+    assert.equal(lastStored.at(-1).complete, true);
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});
+
+test('flushHistory writes a pending streamed reply immediately', async () => {
+  resetBridgeState();
+  const originalWindow = globalThis.window;
+  let lastStored = null;
+  globalThis.window = {
+    localStorage: { getItem: () => null, setItem(_key, value) { lastStored = JSON.parse(value); }, removeItem() {} },
+    setTimeout: () => 1,
+    clearTimeout() {}
+  };
+  try {
+    const bridgeClient = { connect: () => true, sendMessage: () => true };
+    const orchestrator = createClaudeOrchestrator();
+    orchestrator.attachBridge(bridgeClient);
+    bridgeClient.onStatus('connected');
+    await orchestrator.sendMessage('hide the tab');
+    bridgeClient.onDelta('partial');
+    assert.notEqual(lastStored.at(-1).text, 'partial');
+    orchestrator.flushHistory();
+    assert.equal(lastStored.at(-1).text, 'partial');
+  } finally {
+    globalThis.window = originalWindow;
+  }
+});

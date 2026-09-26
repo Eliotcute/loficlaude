@@ -32,6 +32,14 @@
 - [x] Phone pairing: query token, Safari-tolerant LAN WS upgrade, prefer en0 IPv4.
 - [ ] Phone pairing live scan on the same Wi-Fi as the QR IP.
 
+## 2026-09-26 V1.2.1 Smoothness And Terminal Chat
+- [x] Throttle streamed history persistence; flush on done/interrupt/pagehide.
+- [x] Edge-trigger idle/active callbacks; skip unchanged sprite repaints.
+- [x] Deduplicate music state; stop polling while ncm-cli is missing; room_state out of replay history.
+- [x] `loficlaude chat` shares the Bridge session; session id persisted in `~/.config/loficlaude/`; model alias `sonnet`.
+- [x] Fix `npm test` hang (YouTube fixture) — 177/177 pass.
+- [ ] Confirm the uncommitted deletion of `public/0.m4a`.
+
 ## User Acceptance (Not Claimed Complete)
 - [ ] Real ncm-cli listening, search and playback controls; real Claude session continuity.
 - [ ] Safari, Firefox, physical devices and long-session thermal/power behavior.

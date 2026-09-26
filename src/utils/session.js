@@ -18,9 +18,16 @@ export function createSessionController(callbacks = {}) {
   let lastActivityAt = Date.now();
   let lastSceneRotationAt = Date.now();
   let intervalId;
+  let idle = false;
 
+  // Activity arrives on every mouse move; only the idle/active transitions
+  // are meaningful to the room, so callbacks fire on edges.
   function markActivity() {
     lastActivityAt = Date.now();
+    if (!idle) {
+      return;
+    }
+    idle = false;
     onIdleEnd();
   }
 
@@ -50,7 +57,8 @@ export function createSessionController(callbacks = {}) {
       }
 
       const idleForMs = Date.now() - lastActivityAt;
-      if (idleForMs >= IDLE_THRESHOLD_MS) {
+      if (!idle && idleForMs >= IDLE_THRESHOLD_MS) {
+        idle = true;
         onIdleStart(lastActivityAt + IDLE_THRESHOLD_MS);
       }
 

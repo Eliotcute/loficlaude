@@ -16,6 +16,14 @@ if (!runtimeStats.isDirectory() || (typeof process.getuid === 'function' && runt
 }
 fs.chmodSync(config.runtimeDir, 0o700);
 
+fs.mkdirSync(config.stateDir, { recursive: true, mode: 0o700 });
+fs.chmodSync(config.stateDir, 0o700);
+if (!fs.existsSync(config.sessionStatePath) && fs.existsSync(config.legacySessionStatePath)) {
+  // One-time move from the temp directory; createSessionState validates ownership and shape.
+  fs.copyFileSync(config.legacySessionStatePath, config.sessionStatePath, fs.constants.COPYFILE_EXCL);
+  fs.chmodSync(config.sessionStatePath, 0o600);
+}
+
 const tokenManager = createTokenManager();
 const pairingManager = createPairingManager({ onRevoke: () => bridgeServer?.revokePairedClients() });
 let socketClosed = false;

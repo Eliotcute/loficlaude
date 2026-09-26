@@ -51,6 +51,9 @@ const CHAT_HISTORY_MAX = 50;
 const CHAT_HISTORY_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const CHAT_MESSAGE_MAX_CHARS = 200000;
 const IDLE_ACTIVITY_DELAY_MS = 1200;
+// Streaming deltas arrive per token; persisting each one serializes the whole
+// history synchronously on the UI thread.
+const STREAM_PERSIST_INTERVAL_MS = 1000;
 
 export function createClaudeOrchestrator(options = {}) {
   const {
@@ -82,6 +85,7 @@ export function createClaudeOrchestrator(options = {}) {
   let doneVisualTimer = null;
   let typingVisualTimer = null;
   let chatPauseTimer = null;
+  let persistTimer = null;
   let activeAssistantId = null;
 
   function clearTransientBubbleTimer() {
@@ -137,6 +141,11 @@ export function createClaudeOrchestrator(options = {}) {
       return;
     }
 
+    if (persistTimer) {
+      window.clearTimeout(persistTimer);
+      persistTimer = null;
+    }
+
     try {
       const subset = state.history.slice(-CHAT_HISTORY_MAX);
       if (subset.length === 0) {
@@ -146,6 +155,23 @@ export function createClaudeOrchestrator(options = {}) {
       }
     } catch {
       // Ignore storage failures.
+    }
+  }
+
+  function schedulePersistHistory() {
+    if (typeof window === 'undefined' || persistTimer) {
+      return;
+    }
+
+    persistTimer = window.setTimeout(() => {
+      persistTimer = null;
+      persistHistory();
+    }, STREAM_PERSIST_INTERVAL_MS);
+  }
+
+  function flushHistory() {
+    if (persistTimer) {
+      persistHistory();
     }
   }
 
@@ -376,7 +402,7 @@ export function createClaudeOrchestrator(options = {}) {
     return entry.id;
   }
 
-  function updateMessage(id, updater) {
+  function updateMessage(id, updater, { streaming = false } = {}) {
     state.history = state.history.map((item) => {
       if (item.id !== id) {
         return item;
@@ -390,7 +416,11 @@ export function createClaudeOrchestrator(options = {}) {
           : nextText
       };
     });
-    persistHistory();
+    if (streaming) {
+      schedulePersistHistory();
+    } else {
+      persistHistory();
+    }
   }
 
   function getLastAssistantText() {
@@ -500,7 +530,7 @@ export function createClaudeOrchestrator(options = {}) {
       activeAssistantId = getPendingAssistant()?.id ?? pushMessage('assistant', '');
     }
 
-    updateMessage(activeAssistantId, (current) => `${current}${text}`);
+    updateMessage(activeAssistantId, (current) => `${current}${text}`, { streaming: true });
     sync({
       history: state.history,
       loading: true,
@@ -780,6 +810,7 @@ export function createClaudeOrchestrator(options = {}) {
     closeBubble,
     closePanel,
     clearHistory,
+    flushHistory,
     reconnectBridge,
     showAmbientComment,
     showTransientBubble,

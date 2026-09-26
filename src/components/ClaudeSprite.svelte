@@ -40,6 +40,8 @@
   let motionSyncElapsedMs = 0;
   let lastPublishedMotion = null;
   let lastPaintTimestamp = 0;
+  let lastDrawnGrid = null;
+  let lastDrawnPalette = null;
   const targetFrameMs = 1000 / 30;
   const storeSyncIntervalMs = 100;
 
@@ -89,7 +91,6 @@
       Math.abs(nextMotion.y - lastPublishedMotion.y) < 0.75 &&
       nextMotion.direction === lastPublishedMotion.direction &&
       nextMotion.mode === lastPublishedMotion.mode &&
-      Math.abs(nextMotion.idleTime - lastPublishedMotion.idleTime) < 80 &&
       nextMotion.frameIndex === lastPublishedMotion.frameIndex) {
       return;
     }
@@ -135,6 +136,10 @@
 
   function drawGrid(grid, palette) {
     if (!spriteCtx || !grid) return;
+    // Frames hold for hundreds of ms; repainting an unchanged grid at 30fps is wasted work.
+    if (grid === lastDrawnGrid && palette === lastDrawnPalette) return;
+    lastDrawnGrid = grid;
+    lastDrawnPalette = palette;
     spriteCtx.clearRect(0, 0, 24, 24);
     for (let y = 0; y < grid.length; y += 1) {
       for (let x = 0; x < grid[y].length; x += 1) {

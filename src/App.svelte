@@ -629,7 +629,9 @@
     }, 500);
     // The room observer is independent of animation frames and stops on unmount.
     const cleanupRoom = () => clearInterval(roomTimer);
+    const flushChat = () => claudeOrch.flushHistory();
     window.addEventListener('pagehide', cleanupRoom, { once: true });
+    window.addEventListener('pagehide', flushChat);
     restoreState();
     recentPlaylist = readRecentPlaylist();
     claudeOrch.attachBridge(bridgeClient);
@@ -699,6 +701,9 @@
     startFocusTracking();
 
     return () => {
+      cleanupRoom();
+      window.removeEventListener('pagehide', flushChat);
+      claudeOrch.flushHistory();
       session.stop();
       teardownKeyboard();
       if (focusInterval) {

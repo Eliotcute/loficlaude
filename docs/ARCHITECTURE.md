@@ -29,7 +29,7 @@ flowchart TB
     subgraph LocalRuntime["本机运行时"]
         Bridge --> ClaudeSession["Claude CLI 会话"]
         Bridge --> Netease["ncm-cli / mpv"]
-        Bridge <--> SessionState["私有状态文件<br/>仅 Claude session id"]
+        Bridge <--> SessionState["~/.config/loficlaude<br/>仅 Claude session id"]
         Socket <--> Bridge
         Pairing["pairing :9121 loopback<br/>opt-in LAN /mobile.html"] --> Bridge
     end
@@ -62,7 +62,9 @@ Header、ScenePopover、持久化和轮换顺序均从目录读取；`appPersist
 - Claude 会话、播放状态属于本机 Bridge；连接的浏览器和已配对手机会话共享当前播放器。最后一个已认证客户端离开约 3 秒后，Bridge 调用 `music.close()` 结束 ncm-cli/mpv 进程组；Bridge 进程和 Claude session 继续，直到 Bridge 退出。
 - `ui` 在 `appState.js` 里是一组 writable，不是 store。Svelte 模板必须先绑定内部 writable，禁止 `$ui.xxx`。
 - 搜索候选与待选择动作属于发起请求的连接，不广播、不进入重放历史，断开即失效。
-- 终端 socket 的文本继续进入共享 Claude session，但不复用浏览器候选；音乐控制走浏览器固定白名单路径。
+- 终端 socket 的文本继续进入共享 Claude session，但不复用浏览器候选；音乐控制走浏览器固定白名单路径。`loficlaude chat` 是这条 socket 的官方客户端：终端只做 Bridge 客户端，不另起 `claude --resume`，避免同一 transcript 被两个进程写分叉。
+- 回放历史只保存对话与音乐事件；`room_state` 是可被覆盖的实时快照，经 `broadcastTransient` 直接下发，不占用回放窗口。音乐状态未变化不广播，`ncm-cli` 缺失时后台轮询停止。
+- 浏览器流式回复按 1 秒节流写 LocalStorage，完成、中断、`pagehide` 时立即落盘；鼠标活动只在 idle/active 边沿驱动陪伴状态。
 - 当前执行状态只以根目录 `HANDOFF.md` / `TODO.md` 为准；产品计划中的远期能力不等于本轮已完成项。
 - `musicFeedback.js` 维护候选和操作反馈，Claude delta/idle 不修改它；音乐错误使用独立 `music_error` 事件。
 - `recentPlaylist.js` 仅在确认播放后保存 `{ id, originalId, name }` 到本机 LocalStorage。刷新不发播放命令；点击恢复通过受限 `play_playlist` 协议交给 controller 再校验。

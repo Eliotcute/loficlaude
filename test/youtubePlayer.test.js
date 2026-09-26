@@ -162,6 +162,8 @@ test('YouTubePlayer can initialize after the iframe API script fails once', asyn
     }
   };
   globalThis.document = {
+    addEventListener() {},
+    removeEventListener() {},
     head: {
       append(script) {
         activeScript = script;

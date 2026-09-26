@@ -38,6 +38,22 @@
 - `RainPlayer.stop()` 在 fallback 路径静音，Stop 后再选 light/medium/heavy 能恢复；有回归测试。
 - 更新本文件的 Progress / Acceptance，使其与命令输出一致。不要把未跑的听音/Safari 写成通过。
 
+## 2026-09-26 V1.2.1 流畅度与终端共享对话（分支 `perf/terminal-chat-and-streaming`，规格见 `SPEC.md`）
+- 流式回复：LocalStorage 写入按 1 秒节流，完成/中断/pagehide/卸载立即落盘（此前每个 token 同步序列化全量历史）。
+- 活动边沿：`session.markActivity` 只在 idle→active 触发，`onIdleStart` 只在 active→idle 触发一次。
+- Sprite：网格/调色板未变不重绘；`idleTime` 不再驱动 100ms store 发布。
+- Bridge：`music_state` 去重；`ncm-cli` 缺失后停止后台轮询、同类错误只报一次；`room_state` 走 `broadcastTransient` 不进回放历史。
+- 终端对话：新增 `loficlaude chat`（Unix socket 客户端）；会话 id 迁移到 `~/.config/loficlaude/`；模型默认 `sonnet` 别名，`LOFICLAUDE_MODEL` 可覆盖。
+- 测试挂起根因：`youtubePlayer.test.js` 假 `document` 缺 `addEventListener`，`onReady` 抛错使 `init()` 永远 pending；已修夹具。
+
+### Acceptance（本机实测）
+- `npm test`：177 项，177 通过，0 失败，约 4 秒退出。
+- `npm run build`、`npm run verify:build`、`git diff --check`：通过。
+- 真实 Bridge + Claude CLI：终端 `loficlaude chat` 发送“记住暗号：蓝色台灯”，随后 WebSocket 客户端（浏览器同协议）提问，回复“蓝色台灯”；终端同时看到 `[Browser]` 消息与流式回复。
+- Bridge 空闲 12 秒内，已认证客户端收到 0 条事件（此前 ≥1 条/3 秒）。
+- 未做：真实浏览器页面内的流式帧率量化（需 Playwright Chrome），Safari/真机。
+- 工作区遗留：`public/0.m4a` 未提交删除（非本轮操作，未纳入提交），会导致默认雨声 404 并回退合成噪声，需用户确认。
+
 ## Remaining Manual Acceptance
 - 用户验收真实 ncm-cli 搜索/播放/暂停/切歌、音频听感和 Claude 终端/浏览器续聊。
 - Safari、Firefox、真机与长期温度/功耗。

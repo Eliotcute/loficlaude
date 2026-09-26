@@ -35,6 +35,16 @@ Then, from any terminal directory, start the Bridge with:
 loficlaude bridge
 ```
 
+### Talk from the terminal
+
+With the Bridge running, open any terminal and run:
+
+```bash
+loficlaude chat
+```
+
+The terminal joins the same Claude session as the room and paired phone: browser messages appear as `[Browser] …`, terminal messages appear in the room, and both sides share context. The terminal is a Bridge client, not a second `claude --resume` process, so the conversation never forks. The session id lives in `~/.config/loficlaude/` and survives reboots; the Bridge uses the `sonnet` model alias unless `LOFICLAUDE_MODEL` is set.
+
 The command resolves the Bridge from the installed LoFiClaude project, so the terminal's current directory and the project's absolute path do not matter. The equivalent project-local command is `npm run bridge`.
 
 The bridge listens on `ws://localhost:9120` and exposes a loopback-only management port on `http://127.0.0.1:9121`. The room discovers the Bridge via `GET /token` on that port; the JSON body is `{ token }` only. The token is never placed in the room URL and is retained only in the current browser session. It is also printed once to the local terminal as a manual fallback. Start it with `LOFICLAUDE_RESET_SESSION=1 loficlaude bridge` when you intentionally want a new Claude conversation.

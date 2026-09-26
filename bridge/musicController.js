@@ -28,9 +28,21 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
     ? createNeteasePlayer({ command })
     : { ensureStarted: () => Promise.resolve(true), close() {} });
   let state = { provider: 'netease-local', status: 'unavailable', title: '', volume: null };
+  let cliMissing = false;
+  let lastBackgroundError = '';
+
+  // Background refreshes repeat every few seconds; report each distinct failure once.
+  function reportError(message, background) {
+    if (background && message === lastBackgroundError) return;
+    if (background) lastBackgroundError = message;
+    onError(message);
+  }
 
   function publish(next) {
-    state = { ...state, ...next };
+    const merged = { ...state, ...next };
+    // The Bridge polls every few seconds; unchanged state must not become an event.
+    if (Object.keys(merged).every((key) => merged[key] === state[key])) return state;
+    state = merged;
     onState({ ...state });
     return state;
   }
@@ -53,7 +65,7 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
     }
   }
 
-  function run(action, args = []) {
+  function run(action, args = [], background = false) {
     if (!COMMANDS.has(action) || !Array.isArray(args) || args.some((arg) => typeof arg !== 'string')) {
       onError('Unsupported music command');
       return Promise.resolve(false);
@@ -80,12 +92,15 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
       const cliArgs = action === 'search' ? ['search', 'playlist', '--keyword', args[0] ?? 'lofi'] : [action, ...args];
       execFileImpl(command, [...cliArgs, '--output', 'json'], { timeout: 8000, maxBuffer: 128 * 1024 }, (error, stdout = '') => {
         if (error) {
-          const message = error.code === 'ENOENT' ? '网易云音乐 CLI 未安装' : '网易云音乐暂时不可用';
+          const missing = error.code === 'ENOENT';
+          cliMissing = missing;
+          const message = missing ? '网易云音乐 CLI 未安装' : '网易云音乐暂时不可用';
           publish({ status: 'error' });
-          onError(message);
+          reportError(message, background);
           resolve(false);
           return;
         }
+        cliMissing = false;
         if (action !== 'state') {
           try {
             const reply = readReply(stdout);
@@ -108,10 +123,11 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
         const next = parseState(stdout);
         if (next.status === 'error') {
           publish(next);
-          onError(next.message || '网易云音乐未能播放');
+          reportError(next.message || '网易云音乐未能播放', background);
           resolve(false);
           return;
         }
+        lastBackgroundError = '';
         publish(next);
         resolve(true);
       });
@@ -121,7 +137,9 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
   return {
     getState: () => ({ ...state }),
     command(action, args) { return run(action, args); },
-    refresh() { return run('state'); },
+    // Background polling stops once the CLI is known to be missing; explicit
+    // user commands still retry and clear the flag when the CLI appears.
+    refresh() { return cliMissing ? Promise.resolve(false) : run('state', [], true); },
     searchPlaylists(query = 'lofi') {
       if (!validQuery(query)) { onError('Invalid music search'); return Promise.resolve([]); }
       return new Promise((resolve) => {

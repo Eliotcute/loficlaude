@@ -517,3 +517,22 @@ test('bridge server closes a slow client before a new frame exceeds its buffer l
   assert.equal(socket.closeCode, 1009);
   assert.equal(socket.sent.length, 0);
 });
+
+test('room updates reach live clients without entering the replay window', () => {
+  const { fakeWss, server } = createTestServer();
+  const room = connectAuthenticatedClient(fakeWss);
+  const ready = parsedMessages(room).find((message) => message.type === 'ready');
+  const watcher = connectAuthenticatedClient(fakeWss);
+  watcher.sent = [];
+  const update = { scene: 'lofiNight', rain: { type: 'medium', status: 'idle', volume: 60, muted: false }, timer: { active: true, remainingSeconds: 10 }, companion: { state: 'idle', form: 0 } };
+  room.emit('message', Buffer.from(JSON.stringify({ type: 'room_update', value: update })));
+
+  const live = parsedMessages(watcher).filter((message) => message.type === 'room_state');
+  assert.equal(live.length, 1);
+  assert.equal(live[0].eventId, undefined);
+
+  server.broadcast({ type: 'assistant_delta', text: 'kept' });
+  const reconnected = connectAuthenticatedClient(fakeWss, { instanceId: ready.instanceId, cursor: 0 });
+  const replayedRoomStates = parsedMessages(reconnected).filter((message) => message.type === 'room_state' && message.eventId);
+  assert.equal(replayedRoomStates.length, 0);
+});

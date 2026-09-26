@@ -6,6 +6,9 @@ const workspace = path.resolve(__dirname, '..');
 const workspaceKey = crypto.createHash('sha256').update(workspace).digest('hex').slice(0, 16);
 const userKey = typeof process.getuid === 'function' ? process.getuid() : 'user';
 const runtimeDir = path.join(os.tmpdir(), `loficlaude-${userKey}-${workspaceKey}`);
+// The Claude session id must survive temp-directory cleanup so the shared
+// conversation resumes after reboots.
+const stateDir = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'loficlaude');
 
 module.exports = {
   port: 9120,
@@ -13,10 +16,12 @@ module.exports = {
   // LAN mode is opt-in; default remains loopback-only.
   host: '127.0.0.1',
   authTimeout: 5000,
-  defaultModel: 'claude-sonnet-4-6',
+  defaultModel: process.env.LOFICLAUDE_MODEL || 'sonnet',
   runtimeDir,
   socketPath: path.join(runtimeDir, 'claude.sock'),
-  sessionStatePath: path.join(os.tmpdir(), `loficlaude-${userKey}-${workspaceKey}.session.json`),
+  stateDir,
+  sessionStatePath: path.join(stateDir, `session-${workspaceKey}.json`),
+  legacySessionStatePath: path.join(os.tmpdir(), `loficlaude-${userKey}-${workspaceKey}.session.json`),
   resetSession: process.env.LOFICLAUDE_RESET_SESSION === '1',
   workspace,
   maxPayloadBytes: 64 * 1024,
