@@ -1,6 +1,8 @@
 const fs = require('node:fs');
 const { createBridgeServer } = require('./server');
 const { createClaudeSession } = require('./claude');
+const { createChannelSession } = require('./channelSession');
+const { createChannelHub } = require('./channelHub');
 const { createTokenManager } = require('./token');
 const { createSocketServer } = require('./socketServer');
 const { createSessionState } = require('./sessionState');
@@ -54,6 +56,37 @@ const socketServer = createSocketServer({
   }
 });
 
+const channelHub = createChannelHub({
+  send: (client, payload) => channelServer.sendToClient(client, `${JSON.stringify(payload)}\n`),
+  onAcquire: async () => {
+    if (!bridgeServer || !(await bridgeServer.enterTerminal())) {
+      return { ok: false, reason: 'Claude 正在回复，请稍后再进入终端' };
+    }
+    return { ok: true, ...sessionState.getLaunchOptions() };
+  },
+  onRelease: ({ attached }) => {
+    // A terminal that loaded the channel has opened (or created) the session.
+    if (attached) sessionState.markInitialized();
+    bridgeServer?.leaveTerminal();
+  }
+});
+
+// Channel lines are JSON, so terminal-text sanitizing must not alter them;
+// sanitizeTerminalText keeps printable JSON intact.
+const channelServer = createSocketServer({
+  socketPath: config.channelSocketPath,
+  runtimeDir: config.runtimeDir,
+  maxLineBytes: config.maxChannelLineBytes,
+  maxPendingWriteBytes: config.maxSocketPendingWriteBytes,
+  maxClients: 4,
+  onError: (error) => {
+    console.error(`Channel socket failed: ${error.message}`);
+    shutdown('channel socket error');
+  },
+  onClientData: (line, client) => channelHub.handleLine(line, client),
+  onClientClose: (client) => channelHub.handleClose(client)
+});
+
 function closeSocketServerOnce(callback = () => {}) {
   if (socketClosed) {
     callback();
@@ -61,7 +94,7 @@ function closeSocketServerOnce(callback = () => {}) {
   }
 
   socketClosed = true;
-  socketServer.close(() => callback());
+  channelServer.close(() => socketServer.close(() => callback()));
 }
 
 function statusToText(status) {
@@ -92,10 +125,12 @@ function startBridgeServer() {
       config,
       tokenManager,
       pairingManager,
-      sessionFactory: ({ onStatus, onDelta, onTool, onUser, onError, model, workspace }) => {
-        const launchOptions = sessionState.getLaunchOptions();
-        const session = createClaudeSession({
-          ...launchOptions,
+      sessionFactory: ({ mode, onStatus, onDelta, onTool, onUser, onError, model, workspace }) => {
+        const createSession = mode === 'terminal'
+          ? (options) => createChannelSession({ ...options, hub: channelHub })
+          : createClaudeSession;
+        const session = createSession({
+          ...sessionState.getLaunchOptions(),
           model,
           workspace,
           maxUserMessageChars: config.maxUserMessageChars,
@@ -194,5 +229,6 @@ socketServer.start((socketError) => {
       return;
     }
     startBridgeServer();
-  });
+      });
+    });
 });

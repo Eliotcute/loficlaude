@@ -39,3 +39,11 @@ test('candidate feedback only retains bounded display names, never credentials',
   assert.deepEqual(Object.keys(state.choices[0]), ['name']);
   assert.equal(state.choices[0].name.length, 160);
 });
+
+test('a specific music error is not overwritten by the following failed intent', () => {
+  let state = updateMusicFeedback(emptyMusicFeedback(), intent('play_playlist', 'started'));
+  state = updateMusicFeedback(state, { type: 'music_error', message: '网易云未登录或登录已过期，请在终端运行 ncm-cli login 扫码登录后重试' });
+  state = updateMusicFeedback(state, intent('play_playlist', 'failed'));
+  assert.match(state.message, /ncm-cli login/);
+  assert.match(updateMusicFeedback(updateMusicFeedback(emptyMusicFeedback(), intent('next', 'started')), intent('next', 'failed')).message, /音乐操作未完成/);
+});

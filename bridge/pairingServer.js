@@ -132,6 +132,11 @@ function createPairingServer({ host = '127.0.0.1', port, tokenManager, pairingMa
       response.end(fs.readFileSync(file));
       return;
     }
+    if (request.method === 'GET' && pathname === '/health') {
+      response.writeHead(200, headers);
+      response.end(JSON.stringify({ ok: true, lanActive: Boolean(lanServer), lanAddress: lanServer?.address()?.address || null }));
+      return;
+    }
     if (request.method === 'POST' && pathname === '/pairing/start' && pairingManager) {
       try {
         if (!opening) opening = enableLan().finally(() => { opening = null; });

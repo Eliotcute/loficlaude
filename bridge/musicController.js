@@ -16,6 +16,27 @@ function validQuery(query) {
   return typeof query === 'string' && query.trim().length > 0 && query.length <= 120 && !/[\x00-\x1f]/.test(query);
 }
 
+const LOGIN_HINT = '请在终端运行 ncm-cli login 扫码登录后重试';
+
+function cliMessage(output) {
+  try {
+    const parsed = JSON.parse(output);
+    return typeof parsed?.message === 'string' ? parsed.message : '';
+  } catch { return ''; }
+}
+
+// Maps known ncm-cli failures to actionable text; unknown causes return null so
+// callers keep their generic message instead of echoing raw CLI output.
+// ncm-cli 0.1.7 loads `search` from a remote manifest; with an expired login the
+// cached manifest was observed empty, so the failure surfaces as "unknown command".
+function describeFailure(error, stdout = '', stderr = '') {
+  if (error?.code === 'ENOENT') return '网易云音乐 CLI 未安装';
+  if (error?.killed) return '网易云音乐 CLI 响应超时，请重试';
+  if (/unknown command/.test(String(stderr))) return `网易云命令未加载（通常是登录已过期），${LOGIN_HINT}`;
+  if (/未登录|重新授权|登录.*过期/.test(cliMessage(stdout))) return `网易云未登录或登录已过期，${LOGIN_HINT}`;
+  return null;
+}
+
 function readReply(output) {
   const parsed = JSON.parse(output);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || parsed.success === false ||
@@ -90,11 +111,10 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
         return;
       }
       const cliArgs = action === 'search' ? ['search', 'playlist', '--keyword', args[0] ?? 'lofi'] : [action, ...args];
-      execFileImpl(command, [...cliArgs, '--output', 'json'], { timeout: 8000, maxBuffer: 128 * 1024 }, (error, stdout = '') => {
+      execFileImpl(command, [...cliArgs, '--output', 'json'], { timeout: 8000, maxBuffer: 128 * 1024 }, (error, stdout = '', stderr = '') => {
         if (error) {
-          const missing = error.code === 'ENOENT';
-          cliMissing = missing;
-          const message = missing ? '网易云音乐 CLI 未安装' : '网易云音乐暂时不可用';
+          cliMissing = error.code === 'ENOENT';
+          const message = describeFailure(error, stdout, stderr) || '网易云音乐暂时不可用';
           publish({ status: 'error' });
           reportError(message, background);
           resolve(false);
@@ -107,7 +127,7 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
             if (reply.success !== true && !reply.state && reply.code !== 200) throw new Error('Missing acknowledgement');
           } catch {
             publish({ status: 'error' });
-            onError('网易云未能完成音乐操作');
+            onError(describeFailure(null, stdout) || '网易云未能完成音乐操作');
             resolve(false);
             return;
           }
@@ -143,13 +163,13 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
     searchPlaylists(query = 'lofi') {
       if (!validQuery(query)) { onError('Invalid music search'); return Promise.resolve([]); }
       return new Promise((resolve) => {
-        execFileImpl(command, ['search', 'playlist', '--keyword', query, '--output', 'json'], { timeout: 8000, maxBuffer: 512 * 1024 }, (error, stdout = '') => {
-          if (error) { onError('网易云音乐暂时不可用'); resolve([]); return; }
+        execFileImpl(command, ['search', 'playlist', '--keyword', query, '--output', 'json'], { timeout: 8000, maxBuffer: 512 * 1024 }, (error, stdout = '', stderr = '') => {
+          if (error) { onError(describeFailure(error, stdout, stderr) || '网易云音乐暂时不可用'); resolve([]); return; }
           try {
             const records = readReply(stdout)?.data?.records;
             if (!Array.isArray(records)) throw new Error('Missing records');
             resolve(records.map(normalizePlaylist).filter(Boolean).slice(0, 5));
-          } catch { onError('无法读取网易云搜索结果'); resolve([]); }
+          } catch { onError(describeFailure(null, stdout) || '无法读取网易云搜索结果'); resolve([]); }
         });
       });
     },
@@ -162,12 +182,12 @@ function createMusicController({ execFileImpl = execFile, command = 'ncm-cli', o
           onError('网易云播放器未启动，请确认当前系统支持本机播放');
           return false;
         }
-        return new Promise((resolve) => execFileImpl(command, ['play', '--playlist', '--encrypted-id', playlist.id, '--original-id', playlist.originalId, '--output', 'json'], { timeout: 8000, maxBuffer: 128 * 1024 }, (error, stdout = '') => {
-        if (error) { onError('网易云歌单播放失败'); resolve(false); return; }
+        return new Promise((resolve) => execFileImpl(command, ['play', '--playlist', '--encrypted-id', playlist.id, '--original-id', playlist.originalId, '--output', 'json'], { timeout: 8000, maxBuffer: 128 * 1024 }, (error, stdout = '', stderr = '') => {
+        if (error) { onError(describeFailure(error, stdout, stderr) || '网易云歌单播放失败'); resolve(false); return; }
         try {
           const reply = readReply(stdout);
           if (reply.success !== true) throw new Error('Missing acknowledgement');
-        } catch { onError('网易云歌单播放失败'); resolve(false); return; }
+        } catch { onError(describeFailure(null, stdout) || '网易云歌单播放失败'); resolve(false); return; }
         run('state').then((ok) => {
           if (!ok || state.status !== 'playing') {
             onError('网易云尚未开始播放，请检查队列后重试');

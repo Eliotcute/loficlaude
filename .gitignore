@@ -35,3 +35,6 @@ output/
 .playwright-cli/
 .gstack/browse-*.log
 .gstack/browse-*.jsonl
+
+# Unused local audio artifact
+public/rain-loop.m4a

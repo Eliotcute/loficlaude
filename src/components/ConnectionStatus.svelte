@@ -241,7 +241,11 @@
       pairingQr = pairingUrl ? await QRCode.toDataURL(pairingUrl, { margin: 1, width: 180, errorCorrectionLevel: 'M' }) : '';
       pairingExpiresAt = data.expiresAt || 0;
       pairingNow = Date.now();
-    } catch (error) { pairingError = error.message; }
+    } catch (error) {
+      pairingError = error?.name === 'TypeError'
+        ? '无法连接 Bridge。请确认只运行一个 npm run bridge，并重新打开房间。'
+        : error.message;
+    }
     finally { pairingBusy = false; }
   }
 

@@ -2,6 +2,10 @@
 
 LoFiClaude is a local ambient room with a pixel Claude companion, lofi playback, rain audio, and a WebSocket bridge to a local Claude CLI session.
 
+![LoFiClaude room](docs/loficlaude-room.png)
+
+The room is intentionally local-first: start with the companion and ambient audio, then connect the Bridge when you want Claude CLI streaming, shared terminal chat, or phone pairing.
+
 Current product and implementation documents are indexed in [`docs/README.md`](docs/README.md). The system diagram is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## What

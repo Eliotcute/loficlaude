@@ -52,3 +52,45 @@
 3. Bridge 去重 / transient / CLI 退避 → 验证：bridgeServer、musicController 测试通过
 4. 终端 chat + 持久会话 + 模型别名 → 验证：真实启动 Bridge，`loficlaude chat` 收发一轮，浏览器侧可见
 5. 文档同步 → 验证：`npm test`、`npm run build`、`npm run verify:build`、`git diff --check`
+
+---
+
+# SPEC: V1.2.2 终端双向对话（Channel 交接）
+
+> 状态：执行中（同分支）。用户已批准方案与新依赖 `@modelcontextprotocol/sdk`（仅 `bridge/`）。
+
+## 1. 目标
+
+网页房间和终端 Claude Code 是**同一个 LoFiClaude 会话**：网页聊到一半，终端运行 `loficlaude` 进入完整 Claude Code 界面接着聊；网页此时发的消息进入终端会话，回复回到网页；终端退出后网页继续，上下文连续。会话只在显式重置（`LOFICLAUDE_RESET_SESSION=1`）时更换。
+
+## 2. 约束（已由原型验证）
+
+- 同一会话同一时刻只能有一个 Claude 进程写入，否则会话分叉 → 交接式租约。
+- Claude Code Channels（研究预览）：MCP stdio server 声明 `experimental['claude/channel']`，发 `notifications/claude/channel` 把消息推入正在运行的会话；Claude 调用 `reply` 工具回复。自定义 channel 需 `--dangerously-load-development-channels server:loficlaude`，每次启动有一次确认。
+- `--resume` 按 cwd 查找会话，终端必须在 `config.workspace` 启动。
+- 无工具 `-p` 可以续接用过工具的会话（原型：测试词与工具输出均保留）。
+
+## 3. 方案
+
+| 模块 | 职责 |
+|---|---|
+| `bridge/channelHub.js` | 私有 Unix Socket `channel.sock`（0600，JSON 行）。角色：启动器 `acquire` 租约 → `granted {sessionId, resume}` / `denied`；channel 进程 `attach` 成为消息管道；`reply` 转给当前会话；租约连接断开即释放。 |
+| `bridge/channelSession.js` | 与 `createClaudeSession` 同接口的适配器：`sendUserMessage` → 推给 channel 管道并发 `user/thinking`；收到 `reply` → `delta + done`；管道未连上时明确报错。 |
+| `bridge/channel.js` | 由终端 Claude Code 拉起的 MCP channel server：连 `channel.sock`，把房间消息作为 channel 事件推入，暴露 `reply` 工具。stdout 只走 MCP。 |
+| `bridge/server.js` | `requestTerminal(cb)`：等当前回合结束（≤30s），关闭 `-p` 会话，进入终端模式并创建 channel 会话；`releaseTerminal()`：关闭 channel 会话回到 `-p`。忽略已被替换会话的迟到状态。 |
+| `bridge/index.js` / `config.js` | 装配 hub 与 sessionFactory（`terminal` 时建 channel 会话）；新增 `channelSocketPath`。 |
+| `bridge/claude.js` | 启动参数加 `--name LoFiClaude`，便于 `/resume` 识别。 |
+| `bridge/socketServer.js` | 新增 `onClientClose` 回调。 |
+| `bin/loficlaude.js` | 无参数：申请租约 → 在 workspace 以 `--resume/--session-id` + channel 参数启动 `claude`（继承终端）→ 退出后释放。 |
+
+## 4. 非目标 / 已知限制
+
+- 终端里直接输入的对话不同步显示到网页（会话记录格式未公开）；Claude 记得，网页历史不显示。
+- 终端模式下网页收到整段回复，不是逐字流式。
+- 研究预览接口可能变化；启动时出现 `no MCP server configured with that name` 提示属 CLI 已知噪音，实际可用。
+
+## 5. 验收
+
+1. 单测：hub 租约/拒绝第二个/管道/释放；channel 会话收发；server 等待空闲后交接与回退；`--name` 参数。
+2. 真实联调：Bridge 运行 → `loficlaude` 进入终端 → 网页（或 `loficlaude chat`）发消息 → 终端可见、回复回到网页 → 退出终端 → 网页再问终端期间内容，能答出。
+3. `npm test`、`npm run build` 通过。

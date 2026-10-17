@@ -19,6 +19,8 @@ module.exports = {
   defaultModel: process.env.LOFICLAUDE_MODEL || 'sonnet',
   runtimeDir,
   socketPath: path.join(runtimeDir, 'claude.sock'),
+  channelSocketPath: path.join(runtimeDir, 'channel.sock'),
+  handoffTimeout: 30000,
   stateDir,
   sessionStatePath: path.join(stateDir, `session-${workspaceKey}.json`),
   legacySessionStatePath: path.join(os.tmpdir(), `loficlaude-${userKey}-${workspaceKey}.session.json`),

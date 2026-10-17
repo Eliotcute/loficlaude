@@ -20,6 +20,7 @@ function createSocketServer({
   socketPath,
   runtimeDir,
   onClientData = () => {},
+  onClientClose = () => {},
   onError = () => {},
   maxLineBytes = DEFAULT_MAX_LINE_BYTES,
   maxPendingWriteBytes = DEFAULT_MAX_PENDING_WRITE_BYTES,
@@ -286,8 +287,9 @@ function createSocketServer({
         client.on('data', (chunk) => handleLineData(client, chunk));
 
         const cleanupClient = () => {
-          clients.delete(client);
+          if (!clients.delete(client)) return;
           buffers.delete(client);
+          onClientClose(client);
         };
 
         client.on('error', cleanupClient);

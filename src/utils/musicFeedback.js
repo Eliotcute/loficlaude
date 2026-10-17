@@ -26,6 +26,8 @@ export function updateMusicFeedback(state, event) {
       choices: ['play_playlist', 'select_playlist', 'cancel_selection'].includes(event.action) ? [] : state.choices };
   }
   if (event.status === 'failed') {
+    // The Bridge reports the specific cause via music_error before the intent fails.
+    if (state.status === 'error' && state.message) return state;
     return { ...state, status: 'error', message: '音乐操作未完成，请检查登录、网络或重新搜索。' };
   }
   if (event.status === 'completed') {

@@ -55,7 +55,10 @@ function createClaudeSession({
       '--permission-mode',
       'dontAsk',
       '--tools',
-      ''
+      '',
+      // Named so the shared conversation is recognizable in `claude /resume`.
+      '--name',
+      'LoFiClaude'
     ];
 
     if (model) {

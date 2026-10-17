@@ -153,3 +153,35 @@ test('missing CLI stops background polling but explicit commands still retry', a
   assert.equal(await controller.command('state'), false);
   assert.equal(calls, 2);
 });
+
+test('expired login surfaces an actionable message instead of a generic failure', async () => {
+  const errors = [];
+  const controller = createMusicController({
+    onError: (message) => errors.push(message),
+    execFileImpl(command, args, options, callback) {
+      if (args[0] === 'search') {
+        const error = new Error('Command failed');
+        error.code = 1;
+        callback(error, '', "error: unknown command 'search'\n");
+        return;
+      }
+      callback(null, JSON.stringify({ success: false, message: '未登录，请执行 ncm-cli login 完成登录' }));
+    }
+  });
+  assert.deepEqual(await controller.searchPlaylists('lofi'), []);
+  assert.equal(await controller.playPlaylistById(playlist), false);
+  assert.equal(errors.length, 2);
+  for (const message of errors) assert.match(message, /ncm-cli login/);
+});
+
+test('unknown CLI failures keep the generic message and never echo raw output', async () => {
+  const errors = [];
+  const controller = createMusicController({
+    onError: (message) => errors.push(message),
+    execFileImpl(command, args, options, callback) {
+      callback(Object.assign(new Error('boom'), { code: 2 }), JSON.stringify({ message: 'private diagnostic detail' }), 'stack trace');
+    }
+  });
+  assert.deepEqual(await controller.searchPlaylists('lofi'), []);
+  assert.deepEqual(errors, ['网易云音乐暂时不可用']);
+});

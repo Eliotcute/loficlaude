@@ -12,6 +12,8 @@ const DEFAULT_EVENT_HISTORY_LIMIT = 2000;
 const DEFAULT_EVENT_HISTORY_MAX_BYTES = 1024 * 1024;
 const DEFAULT_MAX_CLIENT_BUFFER_BYTES = 1024 * 1024;
 const DEFAULT_MAX_WEBSOCKET_CLIENTS = 16;
+const DEFAULT_HANDOFF_TIMEOUT_MS = 30000;
+const BUSY_STATUSES = new Set([STATUS.THINKING, STATUS.TALKING, STATUS.WORKING]);
 
 function isLoopbackOrigin(request) {
   const origin = request?.headers?.origin;
@@ -46,6 +48,9 @@ function createBridgeServer({ config, tokenManager, pairingManager = null, sessi
   let nextEventId = 1;
   let claudeSession = null;
   let sessionStatus = STATUS.DISCONNECTED;
+  let terminalMode = false;
+  const retiredSessions = new WeakSet();
+  const idleWaiters = [];
   const roomState = { scene: 'lofiNight', rain: { status: 'unknown' }, timer: { active: false }, companion: { state: 'resting' } };
   let closing = false;
   let orphanStopTimer = null;
@@ -149,18 +154,22 @@ function createBridgeServer({ config, tokenManager, pairingManager = null, sessi
     }
 
     let session;
+    const live = () => !retiredSessions.has(session);
     session = sessionFactory({
+      mode: terminalMode ? 'terminal' : 'print',
       onStatus: (value) => {
+        if (!live()) return;
         sessionStatus = value;
         broadcast({ type: SERVER_TYPES.STATUS, value });
         if (value === STATUS.DISCONNECTED && claudeSession === session) {
           claudeSession = null;
         }
+        if (!BUSY_STATUSES.has(value)) idleWaiters.splice(0).forEach((resolve) => resolve(true));
       },
-      onDelta: (text) => broadcast({ type: SERVER_TYPES.ASSISTANT_DELTA, text }),
-      onTool: (name) => broadcast({ type: SERVER_TYPES.TOOL_RUNNING, name }),
-      onUser: (text, source) => broadcast({ type: SERVER_TYPES.USER_MESSAGE, text, source }),
-      onError: (message) => broadcast({ type: SERVER_TYPES.ERROR, message }),
+      onDelta: (text) => live() && broadcast({ type: SERVER_TYPES.ASSISTANT_DELTA, text }),
+      onTool: (name) => live() && broadcast({ type: SERVER_TYPES.TOOL_RUNNING, name }),
+      onUser: (text, source) => live() && broadcast({ type: SERVER_TYPES.USER_MESSAGE, text, source }),
+      onError: (message) => live() && broadcast({ type: SERVER_TYPES.ERROR, message }),
       model: config.defaultModel,
       workspace: config.workspace
     });
@@ -173,6 +182,57 @@ function createBridgeServer({ config, tokenManager, pairingManager = null, sessi
     sessionStatus = STATUS.CONNECTED;
     broadcast({ type: SERVER_TYPES.STATUS, value: STATUS.CONNECTED });
     return claudeSession;
+  }
+
+  // Only one Claude process may write the conversation, so the current one is
+  // retired before the other side takes over; its late events are ignored.
+  function retireSession() {
+    const session = claudeSession;
+    claudeSession = null;
+    if (!session) return;
+    retiredSessions.add(session);
+    session.close();
+    const wasBusy = BUSY_STATUSES.has(sessionStatus);
+    sessionStatus = STATUS.CONNECTED;
+    if (wasBusy) broadcast({ type: SERVER_TYPES.STATUS, value: STATUS.CONNECTED });
+    idleWaiters.splice(0).forEach((resolve) => resolve(true));
+  }
+
+  function waitForIdle() {
+    if (!claudeSession || !BUSY_STATUSES.has(sessionStatus)) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      idleWaiters.push(resolve);
+      const timer = setTimeout(() => {
+        const index = idleWaiters.indexOf(resolve);
+        if (index >= 0) idleWaiters.splice(index, 1);
+        resolve(false);
+      }, config.handoffTimeout ?? DEFAULT_HANDOFF_TIMEOUT_MS);
+      timer.unref?.();
+    });
+  }
+
+  async function enterTerminal() {
+    if (closing || terminalMode) return false;
+    if (!(await waitForIdle()) || closing || terminalMode) return false;
+    retireSession();
+    terminalMode = true;
+    broadcastRoomState();
+    return true;
+  }
+
+  function leaveTerminal() {
+    if (!terminalMode) return;
+    retireSession();
+    terminalMode = false;
+    broadcastRoomState();
+  }
+
+  function roomSnapshot() {
+    return { ...roomState, music: music.getState(), claude: { status: sessionStatus, terminal: terminalMode } };
+  }
+
+  function broadcastRoomState() {
+    broadcastTransient({ type: 'room_state', value: roomSnapshot() });
   }
 
   function sendUserMessage(text, source = 'browser', context = null) {
@@ -320,7 +380,7 @@ function createBridgeServer({ config, tokenManager, pairingManager = null, sessi
           ensureClaudeSession();
         send(socket, { type: SERVER_TYPES.STATUS, value: sessionStatus });
         send(socket, { type: SERVER_TYPES.MUSIC_STATE, value: music.getState() });
-          send(socket, { type: 'room_state', value: { ...roomState, music: music.getState(), claude: { status: sessionStatus } } });
+          send(socket, { type: 'room_state', value: roomSnapshot() });
         } catch (error) {
           console.error(`Claude session unavailable: ${error.message}`);
           send(socket, { type: SERVER_TYPES.ERROR, message: 'Claude session unavailable' });
@@ -335,8 +395,8 @@ function createBridgeServer({ config, tokenManager, pairingManager = null, sessi
         Promise.resolve().then(() => action === 'play_playlist'
           ? music.playPlaylistById(data.playlist)
           : music.command(action, args)).then((accepted) => {
+          // The controller already broadcast the specific music_error for a rejection.
           send(socket, { type: 'music_intent', status: accepted ? 'completed' : 'failed', action });
-          if (!accepted) send(socket, { type: 'music_error', message: 'Music command was not accepted' });
         }).catch(() => {
           send(socket, { type: 'music_intent', status: 'failed', action });
           send(socket, { type: 'music_error', message: 'Music command was not accepted' });
@@ -345,7 +405,7 @@ function createBridgeServer({ config, tokenManager, pairingManager = null, sessi
       }
 
       if (data.type === 'room_snapshot_request') {
-        send(socket, { type: 'room_state', value: { ...roomState, music: music.getState(), claude: { status: sessionStatus } } });
+        send(socket, { type: 'room_state', value: roomSnapshot() });
         return;
       }
 
@@ -357,7 +417,7 @@ function createBridgeServer({ config, tokenManager, pairingManager = null, sessi
           send(socket, { type: 'error', message: 'Invalid room update' }); return;
         }
         Object.assign(roomState, { scene: v.scene, rain: { type: v.rain.type, status: v.rain.status, volume: v.rain.volume, muted: v.rain.muted }, timer: { active: v.timer.active, remainingSeconds: v.timer.remainingSeconds }, companion: { state: v.companion.state, form: v.companion.form }, updatedAt: Date.now() });
-        broadcastTransient({ type: 'room_state', value: { ...roomState, music: music.getState(), claude: { status: sessionStatus } } });
+        broadcastRoomState();
         return;
       }
 
@@ -427,7 +487,7 @@ function createBridgeServer({ config, tokenManager, pairingManager = null, sessi
     pairedClients.clear();
   }
 
-  return Object.assign(wss, { broadcast, close, sendUserMessage, revokePairedClients });
+  return Object.assign(wss, { broadcast, close, sendUserMessage, revokePairedClients, enterTerminal, leaveTerminal });
 }
 
 module.exports = {
