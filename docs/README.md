@@ -13,10 +13,7 @@
 
 ## 归档
 
-- `archive/prd/`：已被替代的 PRD 和历史方案，仅供追溯。
-- `archive/HANDOFF_v1.0_2026-05-24.md`：V1.0 交接快照。
-- `archive/tasks/`、`archive/specs/`：历史任务和工程规格。
-- `archive/misc/SESSION_LOG.md` 及 `archive/` 下其他材料：历史过程记录，不作为当前状态源。
-- `archive/misc/RELEASE_AUDIT.md`：顶部为当前决策，下方原始评分与行号是历史审计证据。
+- `src/canvas/claudepix_presets/`：当前运行时使用的像素 Claude 动画预设，不属于历史归档。
+- 本地 `archive/`：已被替代的 PRD、任务记录和原型，仅供本机追溯，不纳入 Git 版本控制。
 
 归档文档不作为当前实现依据，除非当前 PRD 明确引用。

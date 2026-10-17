@@ -1,127 +1,109 @@
 # LoFiClaude
 
-LoFiClaude is a local ambient room with a pixel Claude companion, lofi playback, rain audio, and a WebSocket bridge to a local Claude CLI session.
+一个本地优先的 AI 桌面房间：像素 Claude 陪你工作，播放 lofi 和雨声，并通过本地 Bridge 连接 Claude CLI。
 
-![LoFiClaude room](docs/loficlaude-room.png)
+![LoFiClaude 房间截图](docs/loficlaude-room.png)
 
-The room is intentionally local-first: start with the companion and ambient audio, then connect the Bridge when you want Claude CLI streaming, shared terminal chat, or phone pairing.
+> 先打开房间和环境音，需要 Claude 对话、终端接力或手机控制时，再启动 Bridge。
 
-Current product and implementation documents are indexed in [`docs/README.md`](docs/README.md). The system diagram is in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+## 功能
 
-## What
+- Svelte 5 + Vite 单页 ambient room
+- 像素 Claude、场景切换、专注计时器和快捷键
+- YouTube lofi 与本地雨声，浏览器自动播放遵循用户手势限制
+- 本地 WebSocket Bridge，支持 Claude CLI 流式对话
+- 浏览器、终端和手机共享同一个 Claude 会话
+- 可选的网易云音乐本地播放与歌单搜索
+- 手机扫码配对；凭据保存在本机 CLI 配置中，不写入网页
 
-- Svelte 5 + Vite single-screen room
-- Local bridge in `bridge/` for authenticated Claude CLI streaming
-- Streaming text replies with local companion states
-- User-gesture-gated audio startup for browser autoplay compliance
+## 快速开始
 
-## Run room
+需要 Node.js 18+。
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open the Vite URL, then click `Start room`.
+打开 Vite 地址，点击 **Start room**。不启动 Bridge 也可以使用房间、环境音和本地陪伴功能。
 
-## Run bridge
+## 连接 Claude CLI
 
-Install the local command once from the project directory:
+在项目目录执行一次：
 
 ```bash
 npm install --prefix bridge
 npm link
 ```
 
-Then, from any terminal directory, start the Bridge with:
+启动 Bridge：
 
 ```bash
 loficlaude bridge
 ```
 
-### Talk from the terminal
-
-With the Bridge running, open any terminal and run:
+然后在另一个终端进入同一会话：
 
 ```bash
 loficlaude chat
 ```
 
-The terminal joins the same Claude session as the room and paired phone: browser messages appear as `[Browser] …`, terminal messages appear in the room, and both sides share context. The terminal is a Bridge client, not a second `claude --resume` process, so the conversation never forks. The session id lives in `~/.config/loficlaude/` and survives reboots; the Bridge uses the `sonnet` model alias unless `LOFICLAUDE_MODEL` is set.
+网页、终端和已配对手机会共享上下文，不会启动第二个独立会话。Bridge 默认使用 `sonnet`，可通过 `LOFICLAUDE_MODEL` 修改；设置 `LOFICLAUDE_RESET_SESSION=1` 才会新建会话。
 
-The command resolves the Bridge from the installed LoFiClaude project, so the terminal's current directory and the project's absolute path do not matter. The equivalent project-local command is `npm run bridge`.
+Bridge 只在本机监听：
 
-The bridge listens on `ws://localhost:9120` and exposes a loopback-only management port on `http://127.0.0.1:9121`. The room discovers the Bridge via `GET /token` on that port; the JSON body is `{ token }` only. The token is never placed in the room URL and is retained only in the current browser session. It is also printed once to the local terminal as a manual fallback. Start it with `LOFICLAUDE_RESET_SESSION=1 loficlaude bridge` when you intentionally want a new Claude conversation.
+- WebSocket：`ws://localhost:9120`
+- 管理接口：`http://127.0.0.1:9121`
 
-Phone pairing is opt-in: start the Bridge, open the room, Bridge settings → 连接手机. That binds the pairing port on the computer's Wi-Fi/LAN address, serves `public/mobile.html`, and shows a QR whose URL looks like `http://192.168.x.x:9121/mobile.html?token=...` (query token, not a Vite `/mobile.html` page). Phone and computer must be on the same Wi-Fi; guest-network isolation will fail. Use the iPhone Camera app → Open in Safari. WeChat or other in-app browsers often cannot reach the LAN socket.
+Bridge 通过一次性 token 认证。Claude CLI 以非交互文本模式启动，并关闭工具调用；它不能读取项目文件、编辑代码或执行 shell 命令。
 
-If the status stays on 正在连接电脑…, the QR IP is probably the wrong interface, or macOS is blocking incoming TCP 9121. The URL field under the QR is the address the phone must reach. Closing the last browser client does not stop the Bridge or Claude; after 3 seconds it does stop the Bridge-started ncm-cli/mpv process group.
+## 手机配对
 
-Configure the optional local NetEase provider with one command:
+1. 启动 Bridge 和房间。
+2. 打开 Bridge 设置，选择 **连接手机**。
+3. 用 iPhone 相机或系统浏览器扫描二维码。
+
+电脑和手机需要在同一个 Wi-Fi。访客网络隔离、错误的局域网网卡或 macOS 防火墙都可能导致连接失败。二维码地址使用 Bridge 的局域网 IP，不是 Vite 页面地址。
+
+## 网易云音乐（可选）
 
 ```bash
 loficlaude music setup
 ```
 
-This forwards to the official `ncm-cli configure` wizard. Credentials remain in the CLI's local configuration and are never bundled into the browser.
+按 `ncm-cli` 向导完成配置和登录。登录信息由 `ncm-cli` 保存在本机；项目不会读取、提交或打包这些凭据。连接 Bridge 后，播放器控制本机的 NetEase Music/mpv；未连接时使用浏览器 lofi 播放器。
 
-## Connect
+## 快捷键
 
-1. Start the room.
-2. Start the bridge server.
-3. The room automatically discovers the local Bridge and connects.
-4. If auto-discovery is unavailable, open Bridge settings and enter the one-time token printed by the Bridge.
+| 按键 | 操作 |
+| --- | --- |
+| `Space` | 播放 / 暂停 |
+| `←` / `→` | 上一首 / 下一首 |
+| `↑` / `↓` | 调整雨声音量 |
+| `M` | 静音雨声 |
+| `1`–`6` | 切换场景 |
+| `T` | 打开计时器 |
+| `H` | 显示快捷键提示 |
+| `Esc` | 关闭临时面板 |
 
-When connected, Claude streams responses through the bridge. Without the bridge, the room and local companion chat remain available.
+## 开发与验证
 
-### Bridge permission boundary
+```bash
+npm test
+npm run build
+npm run verify:build
+```
 
-The Bridge starts Claude CLI in the project root with non-interactive `-p` mode, explicit `--permission-mode dontAsk`, and `--tools ""`. This is a text-only conversation boundary: Claude cannot read project files, edit files, run shell commands, or invoke built-in tools through the Bridge. Non-interactive mode skips the workspace trust prompt, but no project tool is available to use. Treat the Bridge token as a local capability and only connect from a trusted browser on the same machine.
+浏览器检查需要先启动房间：
 
-## Shortcuts
+```bash
+npm run qa:browser
+```
 
-- `Space`: play or pause
-- `←` / `→`: previous or next track
-- `↑` / `↓`: rain volume
-- `M`: mute rain
-- `1` / `2` / `3` / `4` / `5` / `6`: switch scene
-- `T`: timer
-- `H`: shortcut hint
-- `Esc`: close transient UI
+测试使用隔离的 Chromium 和测试 Bridge，不会调用真实 Claude 或 `ncm-cli`。
 
-## Audio
+架构、产品文档和移动端配对说明见 [`docs/README.md`](docs/README.md)。历史 PRD、旧交接记录和原型资料保留在本地 `archive/`，不纳入 Git 版本控制；运行时动画预设已整理到 `src/canvas/claudepix_presets/`。
 
-YouTube lofi playback is enabled after a user gesture when using browser playback. Music and rain report independent states; a music failure never blocks rain startup.
+## 安全边界
 
-Browser audio starts only after a user gesture. `Start room` is the intended first gesture.
-
-The bundled `public/0.m4a` is the default rain source. It is a long AAC recording with the index at the front of the file, so the browser streams it instead of decoding the whole clip. Rainy Mood remains an optional remote source when configured. If the selected audio fails, `RainPlayer` keeps the room usable with its local fallback path. Rain intensity changes the effective gain and filter shape.
-
-When the local Bridge is connected, the player controls the local NetEase Music `mpv` session. Configure and log into `ncm-cli` first. A CLI failure is reported, not silently replaced with YouTube playback. Without a Bridge connection, the controls use YouTube.
-
-The Bridge lazily starts `ncm-cli tui` behind a hidden macOS `script` pseudo-terminal before the first NetEase playback command. This keeps the CLI's required player service alive without asking users to open a second terminal. The process group is stopped when the Bridge exits, and also 3 seconds after the last authenticated browser or paired client disconnects. Linux and other platforms report an explicit local-player-unavailable state instead of pretending playback started.
-
-### Conversation and music
-
-Music requests are parsed by conservative Bridge rules, not Claude tool calling. Claude receives the original text for conversation continuity but has no command execution tools. Only fixed, validated music actions reach `ncm-cli`.
-
-Search with `播放 lofi`. Multiple matches require a numbered selection (`播放第 2 个`); one match can start directly. Candidate lists belong to the requesting browser connection and expire on reconnect. The actual local player is shared, so playback changes are visible to every connected browser.
-
-The bubble keeps music feedback separate from Claude replies. Confirmed playlists are remembered locally using only their IDs and name; refresh restores a recent-playlist button but never starts playback. With an empty local player, the play button restores the recent playlist or searches for `lofi`. Browser audio is not initialized before the first gesture, and a connected local provider does not create a competing YouTube player.
-
-Current execution evidence and remaining checks live in `HANDOFF.md` and `TODO.md`. Older audit text and session logs are historical, not an active backlog. Local validation is `npm test`, `npm run build`, and `npm run verify:build`; remote CI is outside this product's current scope.
-
-`npm run qa:browser` runs the scene and music UI checks sequentially in isolated Chromium, saving screenshots in ignored `output/playwright/`. Start the local room first. Playwright is a devDependency; you can still override `PLAYWRIGHT_MODULE` and `QA_BASE_URL`. The music check uses a test Bridge and never invokes real Claude or ncm-cli; it is not a substitute for real listening and session acceptance. QR generation for phone pairing uses the `qrcode` runtime dependency.
-
-## Troubleshooting
-
-- Header shows `bridge disconnected`:
-  run `loficlaude bridge`, then reconnect.
-- Token rejected:
-  verify the token expected by the bridge server.
-- Bridge chat unavailable:
-  local companion chat still works; start `loficlaude bridge` and reconnect for Claude CLI streaming.
-- No rain audio:
-  set rain volume above 0, then retry Start room; the local Web Audio source requires a user gesture.
-- Bridge is not running:
-  ambient fallback text still works without browser API credentials; the Bridge remains an optional enhancement for Claude CLI streaming.
+仓库只包含源码、测试夹具和示例配置，不包含 API key、SSH 私钥、登录 cookie 或网易云凭据。Bridge token 仅用于本机连接；请只在可信的本地浏览器中使用。

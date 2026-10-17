@@ -29,6 +29,7 @@ output/playwright/
 # Environment
 .env
 .env.*
+.DS_Store
 
 # Project-generated outputs and local QA artifacts
 output/
@@ -38,3 +39,4 @@ output/
 
 # Unused local audio artifact
 public/rain-loop.m4a
+archive/

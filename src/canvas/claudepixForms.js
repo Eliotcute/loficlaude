@@ -4,8 +4,8 @@ const DEFAULT_PALETTE = Object.freeze({
   2: '#0f0f0f'
 });
 
-// Keep the companion drawable if an archived preset is malformed or unavailable
-// in a production bundle. The real archive data remains the normal source.
+// Keep the companion drawable if a preset is malformed or unavailable in a
+// production bundle.
 const FALLBACK_GRID = Object.freeze([
   [0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0],
   [0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0],
@@ -143,13 +143,13 @@ async function loadArchiveSources() {
   const isBrowser = typeof window !== 'undefined' && typeof document !== 'undefined';
 
   if (isBrowser) {
-    const archiveManifest = import.meta.glob('../../archive/misc/claudepix_presets/*.html', {
+    const presetManifest = import.meta.glob('./claudepix_presets/*.html', {
       eager: true,
       query: '?raw',
       import: 'default'
     });
 
-    for (const [path, source] of Object.entries(archiveManifest)) {
+    for (const [path, source] of Object.entries(presetManifest)) {
       const match = path.match(/\/([^/]+)\.html$/);
       if (match) {
         sources.set(match[1], source);
@@ -159,8 +159,8 @@ async function loadArchiveSources() {
     return sources;
   }
 
-  const { loadArchiveSourcesFromFs } = await import(/* @vite-ignore */ './claudepixArchiveNode.js');
-  return loadArchiveSourcesFromFs();
+  const { loadPresetSourcesFromFs } = await import(/* @vite-ignore */ './claudepixPresetNode.js');
+  return loadPresetSourcesFromFs();
 }
 
 const FORM_SOURCES = await loadArchiveSources();
@@ -238,7 +238,7 @@ function gridDifference(left, right) {
   return difference;
 }
 
-// The archive loops often start on a neutral standing frame. Previewing the
+// Preset loops often start on a neutral standing frame. Previewing the
 // most distinctive frame makes a menu selection visibly acknowledge itself.
 export function getFormSelectionFrame(formIndex = 0) {
   const form = getForm(formIndex);
